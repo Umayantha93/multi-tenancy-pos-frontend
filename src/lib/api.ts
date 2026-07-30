@@ -1,0 +1,54 @@
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+
+type ApiOptions = RequestInit & { authenticated?: boolean };
+
+export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
+  const token = typeof window === "undefined" ? null : localStorage.getItem("garage_token");
+  const headers = new Headers(options.headers);
+  if (!(options.body instanceof FormData)) headers.set("Content-Type", "application/json");
+  if (options.authenticated !== false && token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(`${API_URL}${path}`, { ...options, headers });
+  if (response.status === 401 && typeof window !== "undefined") {
+    clearSession();
+    window.location.href = "/login";
+  }
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: "Request failed." }));
+    const validation = error.errors ? Object.values(error.errors).flat().join(" ") : null;
+    throw new Error(validation || error.message || "Request failed.");
+  }
+  if (response.status === 204) return undefined as T;
+  return response.json() as Promise<T>;
+}
+
+export type FeatureKey = "admit_vehicle" | "billing" | "payroll" | "balance_sheet" | "parts_inventory" | "employees_management" | "reports";
+export type Tenant = { id: number; business_name: string; business_type: "garage" | "supermarket" | "shop"; status: "active" | "inactive"; plan?: string | null };
+export type User = { id: number; tenant_id: number | null; name: string; email: string; role: "super_admin" | "business_owner" | "staff"; status: "active" | "inactive"; tenant?: Tenant | null };
+
+export function storeSession(token: string, user: User, features: string[]) {
+  localStorage.setItem("garage_token", token);
+  localStorage.setItem("garage_user", JSON.stringify(user));
+  localStorage.setItem("garage_features", JSON.stringify(features));
+}
+
+export function clearSession() {
+  localStorage.removeItem("garage_token");
+  localStorage.removeItem("garage_user");
+  localStorage.removeItem("garage_features");
+}
+
+export function currentUser(): User | null {
+  if (typeof window === "undefined") return null;
+  const value = localStorage.getItem("garage_user");
+  return value ? JSON.parse(value) as User : null;
+}
+
+export function currentFeatures(): string[] {
+  if (typeof window === "undefined") return [];
+  const value = localStorage.getItem("garage_features");
+  return value ? JSON.parse(value) as string[] : [];
+}
+
+export function money(value: number | string) {
+  return new Intl.NumberFormat("en-LK", { style: "currency", currency: "LKR", maximumFractionDigits: 2 }).format(Number(value));
+}

@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #f3f0e8;
+  --ink: #20221f;
+  --muted: #6f746e;
+  --line: #d7d3c8;
+  --panel: #fbfaf6;
+  --yellow: #f5c842;
+  --teal: #167c73;
+  --danger: #b84837;
+}
+
+@theme inline {
+  --color-background: var(--paper);
+  --color-foreground: var(--ink);
+  --font-sans: var(--font-body);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background-color: var(--paper);
+  background-image: linear-gradient(rgba(32, 34, 31, 0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(32, 34, 31, 0.035) 1px, transparent 1px);
+  background-size: 28px 28px;
+  color: var(--ink);
+  font-family: var(--font-body), sans-serif;
+}
+
+h1, h2, h3, .font-display { font-family: var(--font-display), sans-serif; letter-spacing: 0; }
+button, input, select, textarea { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.page-enter > * { animation: rise 420ms ease both; }
+.page-enter > *:nth-child(2) { animation-delay: 70ms; }
+.page-enter > *:nth-child(3) { animation-delay: 140ms; }
+.page-enter > *:nth-child(4) { animation-delay: 210ms; }
+
+@media print { .no-print { display: none !important; } body { background: white; } }
