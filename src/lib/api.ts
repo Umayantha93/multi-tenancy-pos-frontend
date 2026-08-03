@@ -22,7 +22,7 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
   return response.json() as Promise<T>;
 }
 
-export type FeatureKey = "admit_vehicle" | "billing" | "payroll" | "balance_sheet" | "parts_inventory" | "employees_management" | "reports";
+export type FeatureKey = "admit_vehicle" | "customers" | "billing" | "payroll" | "balance_sheet" | "parts_inventory" | "employees_management" | "attendance" | "reports";
 export type Tenant = {
   id: number;
   business_name: string;

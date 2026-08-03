@@ -6,22 +6,13 @@ import { Building2, Check, ChevronRight } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
 import { ErrorMessage, Panel, buttonClass, inputClass } from "@/components/ui";
 import { api, Tenant } from "@/lib/api";
-
-const modules = [
-  ["admit_vehicle", "Vehicle admission"],
-  ["billing", "Billing and job cards"],
-  ["parts_inventory", "Parts inventory"],
-  ["employees_management", "Employee management"],
-  ["payroll", "Payroll"],
-  ["balance_sheet", "Finance"],
-  ["reports", "Reports"],
-];
+import { MODULE_CATALOG, groupModules } from "@/lib/feature-modules";
 
 export default function NewTenantPage() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [features, setFeatures] = useState(modules.map(([key]) => key));
+  const [features, setFeatures] = useState(MODULE_CATALOG.map((module) => module.key));
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -119,23 +110,30 @@ export default function NewTenantPage() {
         <Panel className="h-fit p-5">
           <p className="text-xs font-bold uppercase text-[#167c73]">Enabled modules</p>
           <h2 className="mt-2 font-display text-3xl font-semibold uppercase">Shape the plan</h2>
-          <div className="mt-6 space-y-2">
-            {modules.map(([key, label]) => {
-              const enabled = features.includes(key);
-              return (
-                <button
-                  type="button"
-                  key={key}
-                  onClick={() => setFeatures((value) => enabled ? value.filter((item) => item !== key) : [...value, key])}
-                  className={`flex h-12 w-full items-center justify-between border px-3 text-left text-sm font-semibold ${enabled ? "border-[#167c73] bg-[#167c73]/7" : "border-[#d7d3c8] text-[#6f746e]"}`}
-                >
-                  <span>{label}</span>
-                  <span className={`grid size-6 place-items-center ${enabled ? "bg-[#167c73] text-white" : "bg-[#e7e4db]"}`}>
-                    {enabled && <Check size={15} />}
-                  </span>
-                </button>
-              );
-            })}
+          <div className="mt-6 space-y-5">
+            {groupModules(MODULE_CATALOG).map(({ group, features: modules }) => (
+              <div key={group}>
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-[#6f746e]">{group}</p>
+                <div className="space-y-2">
+                  {modules.map((module) => {
+                    const enabled = features.includes(module.key);
+                    return (
+                      <button
+                        type="button"
+                        key={module.key}
+                        onClick={() => setFeatures((value) => enabled ? value.filter((item) => item !== module.key) : [...value, module.key])}
+                        className={`flex h-12 w-full items-center justify-between border px-3 text-left text-sm font-semibold ${enabled ? "border-[#167c73] bg-[#167c73]/7" : "border-[#d7d3c8] text-[#6f746e]"}`}
+                      >
+                        <span>{module.name}</span>
+                        <span className={`grid size-6 place-items-center ${enabled ? "bg-[#167c73] text-white" : "bg-[#e7e4db]"}`}>
+                          {enabled && <Check size={15} />}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
           <button disabled={loading} className={`${buttonClass} mt-6 w-full justify-between`}>
             {loading ? "Creating tenant..." : "Create tenant and owner"}

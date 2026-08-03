@@ -7,8 +7,9 @@ import { Check, Power, Users } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
 import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
 import { api, mediaUrl, Tenant } from "@/lib/api";
+import { groupModules } from "@/lib/feature-modules";
 
-type Feature = { id: number; key: string; name: string };
+type Feature = { id: number; key: string; name: string; group?: string | null };
 type Detail = Tenant & {
   owner_name: string;
   owner_email: string;
@@ -162,24 +163,31 @@ export default function TenantDetailPage() {
           <Panel className="p-5">
             <p className="text-xs font-bold uppercase text-[#167c73]">Tenant feature plan</p>
             <h2 className="mt-1 font-display text-3xl font-semibold uppercase">Available modules</h2>
-            <p className="mt-2 text-sm text-[#6f746e]">Disabling a module immediately caps every staff permission beneath it.</p>
-            <div className="mt-6 grid gap-2 sm:grid-cols-2">
-              {featureData.available.map((feature) => {
-                const active = enabled.includes(feature.key);
-                return (
-                  <button
-                    type="button"
-                    key={feature.id}
-                    onClick={() => setEnabled((value) => active ? value.filter((key) => key !== feature.key) : [...value, feature.key])}
-                    className={`flex h-14 items-center justify-between border px-4 text-left text-sm font-semibold ${active ? "border-[#167c73] bg-[#167c73]/7" : "border-[#d7d3c8] text-[#6f746e]"}`}
-                  >
-                    <span>{feature.name}</span>
-                    <span className={`grid size-6 place-items-center ${active ? "bg-[#167c73] text-white" : "bg-[#e7e4db]"}`}>
-                      {active && <Check size={15} />}
-                    </span>
-                  </button>
-                );
-              })}
+            <p className="mt-2 text-sm text-[#6f746e]">Related modules are grouped for viewing. Disabling one removes it from that business sidebar immediately.</p>
+            <div className="mt-6 space-y-6">
+              {groupModules(featureData.available).map(({ group, features }) => (
+                <div key={group}>
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-[#6f746e]">{group}</p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {features.map((feature) => {
+                      const active = enabled.includes(feature.key);
+                      return (
+                        <button
+                          type="button"
+                          key={feature.id}
+                          onClick={() => setEnabled((value) => active ? value.filter((key) => key !== feature.key) : [...value, feature.key])}
+                          className={`flex min-h-14 items-center justify-between border px-4 py-2 text-left text-sm font-semibold ${active ? "border-[#167c73] bg-[#167c73]/7" : "border-[#d7d3c8] text-[#6f746e]"}`}
+                        >
+                          <span>{feature.name}</span>
+                          <span className={`grid size-6 place-items-center ${active ? "bg-[#167c73] text-white" : "bg-[#e7e4db]"}`}>
+                            {active && <Check size={15} />}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
             <button onClick={saveFeatures} disabled={saving} className={`${buttonClass} mt-6`}>
               {saving ? "Saving..." : "Save feature plan"}
