@@ -53,4 +53,28 @@ button, a { -webkit-tap-highlight-color: transparent; }
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+  .bill-items-table {
+    table-layout: fixed;
+    width: 100% !important;
+    min-width: 0 !important;
+    border-collapse: collapse;
+  }
+  .bill-items-table th,
+  .bill-items-table td {
+    vertical-align: top;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+  .bill-items-table th:nth-child(3),
+  .bill-items-table td:nth-child(3),
+  .bill-items-table th:nth-child(4),
+  .bill-items-table td:nth-child(4),
+  .bill-items-table th:nth-child(5),
+  .bill-items-table td:nth-child(5) {
+    text-align: right;
+  }
+  main {
+    padding: 0 !important;
+  }
 }

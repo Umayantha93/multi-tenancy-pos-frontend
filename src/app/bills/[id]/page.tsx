@@ -40,6 +40,7 @@ export default function BillDetailPage() {
   const [partQuery, setPartQuery] = useState("");
   const [selectedPartId, setSelectedPartId] = useState("");
   const [outsidePart, setOutsidePart] = useState(false);
+  const [customerPart, setCustomerPart] = useState(false);
 
   const logoUrl = mediaUrl(tenant?.logo_url || tenant?.logo);
   const contactEmail = tenant?.contact_email || tenant?.owner_email || "";
@@ -76,6 +77,7 @@ export default function BillDetailPage() {
   const selectedPart = parts.find((part) => String(part.id) === selectedPartId);
   const showQuantity = type === "part";
   const showCost = type !== "part" || outsidePart;
+  const useStockSearch = type === "part" && !outsidePart && !customerPart;
 
   async function addItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -87,13 +89,18 @@ export default function BillDetailPage() {
     };
 
     if (type === "part") {
-      if (outsidePart) {
+      if (customerPart) {
+        payload.type = "customer_part";
+        payload.description = String(formData.get("description") || "");
+        payload.quantity = String(formData.get("quantity") || "1");
+        payload.unit_price = "0";
+      } else if (outsidePart) {
         payload.description = String(formData.get("description") || "");
         payload.unit_price = String(formData.get("unit_price") || "");
         payload.quantity = String(formData.get("quantity") || "1");
       } else {
         if (!selectedPartId) {
-          setError("Select a part from stock, or tick Not inventory.");
+          setError("Select a part from stock, or choose Bought outside / Customer supplied.");
           return;
         }
         payload.part_id = selectedPartId;
@@ -112,6 +119,7 @@ export default function BillDetailPage() {
       setPartQuery("");
       setSelectedPartId("");
       setOutsidePart(false);
+      setCustomerPart(false);
       load();
       api<{ data: Part[] }>("/parts?per_page=100").then((result) => setParts(result.data)).catch(() => undefined);
     } catch (caught) {
@@ -189,7 +197,7 @@ export default function BillDetailPage() {
         </div>
       </Panel>
 
-      <div className="grid gap-5 xl:grid-cols-[1.55fr_0.75fr]">
+      <div className="grid gap-5 xl:grid-cols-[1.55fr_0.75fr] print:block print:space-y-5">
         <div className="space-y-5">
           <Panel>
             <div className="grid gap-4 p-5 sm:grid-cols-3">
@@ -216,33 +224,63 @@ export default function BillDetailPage() {
             <div className="border-b border-[#d7d3c8] px-5 py-4">
               <h2 className="font-display text-2xl font-semibold uppercase">Bill items</h2>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[620px] text-left text-sm">
+            <div className="overflow-x-auto print:overflow-visible">
+              <table className="bill-items-table w-full table-fixed text-left text-sm">
+                <colgroup>
+                  <col className="w-[36%]" />
+                  <col className="w-[14%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[18%]" />
+                  <col className="w-[18%]" />
+                  <col className="no-print w-10" />
+                </colgroup>
                 <thead className="bg-[#eeece5] text-[10px] uppercase text-[#6f746e]">
                   <tr>
-                    <th className="px-5 py-3">Description</th>
-                    <th>Type</th>
-                    <th>Qty</th>
-                    <th>Rate</th>
-                    <th>Total</th>
-                    <th className="no-print" />
+                    <th className="px-4 py-3">Description</th>
+                    <th className="px-3 py-3">Type</th>
+                    <th className="px-3 py-3 text-right">Qty</th>
+                    <th className="px-3 py-3 text-right">Rate</th>
+                    <th className="px-4 py-3 text-right">Total</th>
+                    <th className="no-print px-2 py-3" />
                   </tr>
                 </thead>
                 <tbody>
-                  {bill.items.map((item) => (
-                    <tr key={item.id} className="border-t border-[#e2ded4]">
-                      <td className="px-5 py-4 font-semibold">{item.description}</td>
-                      <td className="uppercase text-[#6f746e]">{item.type}</td>
-                      <td>{item.type === "part" ? item.quantity : "—"}</td>
-                      <td>{money(item.unit_price)}</td>
-                      <td>{money(item.line_total)}</td>
-                      <td className="no-print">
-                        <button onClick={() => remove(item.id)} className="text-[#b84837]" title="Remove item">
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {bill.items.map((item) => {
+                    const fromCustomer = item.type === "customer_part";
+                    const isPartLine = item.type === "part" || fromCustomer;
+                    return (
+                      <tr key={item.id} className="border-t border-[#e2ded4] align-top">
+                        <td className="px-4 py-3 font-semibold break-words whitespace-normal">{item.description}</td>
+                        <td className="px-3 py-3 uppercase text-[#6f746e] break-words whitespace-normal">
+                          {fromCustomer ? "customer part" : item.type}
+                        </td>
+                        <td className="px-3 py-3 text-right tabular-nums">
+                          {isPartLine ? Number(item.quantity) : "—"}
+                        </td>
+                        <td className="px-3 py-3 text-right break-words whitespace-normal">
+                          {fromCustomer ? (
+                            <span className="font-semibold text-[#167c73]">—</span>
+                          ) : (
+                            <span className="tabular-nums">{money(item.unit_price)}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right break-words whitespace-normal">
+                          {fromCustomer ? (
+                            <span className="inline-block max-w-full font-semibold leading-snug text-[#167c73]">
+                              Received from customer
+                            </span>
+                          ) : (
+                            <span className="tabular-nums">{money(item.line_total)}</span>
+                          )}
+                        </td>
+                        <td className="no-print px-2 py-3">
+                          <button onClick={() => remove(item.id)} className="text-[#b84837]" title="Remove item">
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
               {bill.items.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No charges yet.</p>}
@@ -266,15 +304,15 @@ export default function BillDetailPage() {
           )}
         </div>
 
-        <div className="space-y-5">
+        <div className="mt-5 space-y-5 print:mt-5">
           <Panel className="p-5">
             <p className="text-xs font-bold uppercase text-[#6f746e]">Bill summary</p>
             <div className="mt-5 space-y-3 text-sm">
-              <div className="flex justify-between"><span>Charges</span><strong>{money(bill.subtotal)}</strong></div>
-              <div className="flex justify-between"><span>Deductions</span><strong>- {money(bill.total_deductions)}</strong></div>
-              <div className="flex justify-between"><span>Paid</span><strong>- {money(bill.amount_paid)}</strong></div>
-              <div className="flex justify-between border-t-2 border-[#20221f] pt-4 font-display text-2xl uppercase">
-                <span>Due</span><strong>{money(bill.balance_due)}</strong>
+              <div className="flex justify-between gap-6"><span>Charges</span><strong className="tabular-nums">{money(bill.subtotal)}</strong></div>
+              <div className="flex justify-between gap-6"><span>Deductions</span><strong className="tabular-nums">- {money(bill.total_deductions)}</strong></div>
+              <div className="flex justify-between gap-6"><span>Paid</span><strong className="tabular-nums">- {money(bill.amount_paid)}</strong></div>
+              <div className="flex justify-between gap-6 border-t-2 border-[#20221f] pt-4 font-display text-2xl uppercase">
+                <span>Due</span><strong className="tabular-nums">{money(bill.balance_due)}</strong>
               </div>
             </div>
           </Panel>
@@ -301,6 +339,7 @@ export default function BillDetailPage() {
                       setSelectedPartId("");
                       setPartQuery("");
                       setOutsidePart(false);
+                      setCustomerPart(false);
                     }}
                     className={`${inputClass} mt-2`}
                   >
@@ -312,24 +351,44 @@ export default function BillDetailPage() {
 
                 {type === "part" ? (
                   <>
-                    <label className="flex cursor-pointer items-center gap-3 border border-[#d7d3c8] bg-[#fbfaf6] px-3 py-3">
-                      <input
-                        type="checkbox"
-                        checked={outsidePart}
-                        onChange={(event) => {
-                          const checked = event.target.checked;
-                          setOutsidePart(checked);
-                          if (checked) {
-                            setSelectedPartId("");
-                            setPartQuery("");
-                          }
-                        }}
-                        className="size-4 accent-[#167c73]"
-                      />
-                      <span className="text-xs font-bold uppercase">Not inventory</span>
-                    </label>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <label className="flex cursor-pointer items-center gap-3 border border-[#d7d3c8] bg-[#fbfaf6] px-3 py-3">
+                        <input
+                          type="checkbox"
+                          checked={outsidePart}
+                          onChange={(event) => {
+                            const checked = event.target.checked;
+                            setOutsidePart(checked);
+                            if (checked) {
+                              setCustomerPart(false);
+                              setSelectedPartId("");
+                              setPartQuery("");
+                            }
+                          }}
+                          className="size-4 accent-[#167c73]"
+                        />
+                        <span className="text-xs font-bold uppercase">Bought outside</span>
+                      </label>
+                      <label className="flex cursor-pointer items-center gap-3 border border-[#d7d3c8] bg-[#fbfaf6] px-3 py-3">
+                        <input
+                          type="checkbox"
+                          checked={customerPart}
+                          onChange={(event) => {
+                            const checked = event.target.checked;
+                            setCustomerPart(checked);
+                            if (checked) {
+                              setOutsidePart(false);
+                              setSelectedPartId("");
+                              setPartQuery("");
+                            }
+                          }}
+                          className="size-4 accent-[#167c73]"
+                        />
+                        <span className="text-xs font-bold uppercase">Customer supplied</span>
+                      </label>
+                    </div>
 
-                    {!outsidePart ? (
+                    {useStockSearch ? (
                       <>
                         <label className="block text-xs font-bold uppercase">
                           Search parts
@@ -364,17 +423,22 @@ export default function BillDetailPage() {
                           <p className="text-xs text-[#167c73]">Selected: {selectedPart.name}</p>
                         )}
                       </>
-                    ) : (
+                    ) : outsidePart ? (
                       <>
                         <label className="block text-xs font-bold uppercase">
                           Part description
-                          <input name="description" required className={`${inputClass} mt-2`} placeholder="e.g. Bought oil filter outside" />
+                          <input name="description" required className={`${inputClass} mt-2`} placeholder="e.g. Oil filter bought outside" />
                         </label>
                         <label className="block text-xs font-bold uppercase">
                           Cost
                           <input name="unit_price" type="number" min="0" step="0.01" required className={`${inputClass} mt-2`} />
                         </label>
                       </>
+                    ) : (
+                      <label className="block text-xs font-bold uppercase">
+                        Part description
+                        <input name="description" required className={`${inputClass} mt-2`} placeholder="e.g. Customer brought brake pads" />
+                      </label>
                     )}
                   </>
                 ) : (
@@ -392,7 +456,7 @@ export default function BillDetailPage() {
                   </>
                 )}
 
-                {showQuantity && (selectedPartId || outsidePart) && (
+                {showQuantity && (selectedPartId || outsidePart || customerPart) && (
                   <label className="block text-xs font-bold uppercase">
                     Quantity
                     <input name="quantity" type="number" min="1" step="1" defaultValue="1" required className={`${inputClass} mt-2`} />
