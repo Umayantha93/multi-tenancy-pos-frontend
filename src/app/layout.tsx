@@ -14,8 +14,8 @@ const displayFont = Barlow_Condensed({
 });
 
 export const metadata: Metadata = {
-  title: "Bay 06 | Garage Operations",
-  description: "Garage POS, workshop, inventory, payroll and finance operations.",
+  title: "Bay 06 | Business Operations",
+  description: "Multi-tenant POS for garages, cottages, shops, and supermarkets — billing, inventory, payroll, and finance.",
 };
 
 export default function RootLayout({

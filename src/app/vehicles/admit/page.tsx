@@ -1,16 +1,187 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardCheck, Save } from "lucide-react";
+import { ClipboardCheck, Plus, Save, Search } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, Panel } from "@/components/ui";
 import { api } from "@/lib/api";
 
-const fields = [["customer_name", "Customer name", "text", true], ["customer_phone", "Phone number", "tel", true], ["number_plate", "Number plate", "text", true], ["chassis_number", "Chassis number", "text", true], ["make", "Make", "text", false], ["model", "Model", "text", false], ["year", "Vehicle year", "number", false], ["odometer", "Odometer (km)", "number", false]] as const;
+type VehicleMatch = {
+  id: number;
+  number_plate: string;
+  chassis_number: string;
+  make?: string;
+  model?: string;
+  year?: number;
+  bills_count: number;
+  customer: { id: number; name: string; phone: string };
+};
+
+const fields = [
+  ["customer_name", "Customer name", "text", true],
+  ["customer_phone", "Phone number", "tel", true],
+  ["number_plate", "Number plate", "text", true],
+  ["chassis_number", "Chassis number", "text", true],
+  ["make", "Make", "text", false],
+  ["model", "Model", "text", false],
+  ["year", "Vehicle year", "number", false],
+  ["odometer", "Odometer (km)", "number", false],
+] as const;
 
 export default function AdmitVehiclePage() {
-  const router = useRouter(); const [error, setError] = useState(""); const [saving, setSaving] = useState(false);
-  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setSaving(true); setError(""); const data = Object.fromEntries(new FormData(event.currentTarget)); try { const bill = await api<{ id: number }>("/bills", { method: "POST", body: JSON.stringify(data) }); router.push(`/bills/${bill.id}`); } catch (caught) { setError(caught instanceof Error ? caught.message : "Admission failed."); setSaving(false); } }
-  return <AppShell title="Admit a vehicle" eyebrow="New job card"><div className="mx-auto max-w-5xl"><div className="mb-5 flex items-start gap-4 border-l-4 border-[#f5c842] bg-[#fbfaf6] p-4"><ClipboardCheck className="shrink-0 text-[#167c73]" /><div><p className="font-semibold">Admission opens a live job card</p><p className="text-sm text-[#6f746e]">Charges, parts and customer payments can be added immediately after saving.</p></div></div>{error && <div className="mb-5"><ErrorMessage message={error} /></div>}<form onSubmit={submit}><Panel><div className="border-b border-[#d7d3c8] px-5 py-4"><h2 className="font-display text-2xl font-semibold uppercase">Customer & vehicle</h2></div><div className="grid gap-5 p-5 sm:grid-cols-2">{fields.map(([name, label, type, required]) => <label key={name} className="text-sm font-semibold">{label}{required && <span className="text-[#b84837]"> *</span>}<input name={name} type={type} required={required} className={`${inputClass} mt-2`} /></label>)}<label className="text-sm font-semibold sm:col-span-2">Admission notes<textarea name="notes" rows={4} className="mt-2 w-full border border-[#c9c5b9] bg-white p-3 text-sm outline-none focus:border-[#167c73]" placeholder="Customer concerns, visible damage, requested work..." /></label></div><div className="flex justify-end border-t border-[#d7d3c8] p-5"><button disabled={saving} className={buttonClass}><Save size={18} />{saving ? "Opening job card..." : "Open job card"}</button></div></Panel></form></div></AppShell>;
+  const router = useRouter();
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [plateQuery, setPlateQuery] = useState("");
+  const [vehicles, setVehicles] = useState<VehicleMatch[]>([]);
+  const [lookingUp, setLookingUp] = useState(false);
+  const [creatingId, setCreatingId] = useState<number | null>(null);
+  const [formPlate, setFormPlate] = useState("");
+
+  useEffect(() => {
+    if (plateQuery.trim().length < 2) {
+      setVehicles([]);
+      return;
+    }
+    setLookingUp(true);
+    const timer = setTimeout(() => {
+      api<{ data: VehicleMatch[] }>(`/vehicles?search=${encodeURIComponent(plateQuery.trim())}&per_page=20`)
+        .then((result) => setVehicles(result.data))
+        .catch(() => setVehicles([]))
+        .finally(() => setLookingUp(false));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [plateQuery]);
+
+  async function openNewCard(vehicleId: number) {
+    setCreatingId(vehicleId);
+    setError("");
+    try {
+      const bill = await api<{ id: number }>("/bills/from-vehicle", {
+        method: "POST",
+        body: JSON.stringify({ vehicle_id: vehicleId }),
+      });
+      router.push(`/bills/${bill.id}`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not open job card.");
+      setCreatingId(null);
+    }
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    const data = Object.fromEntries(new FormData(event.currentTarget));
+    try {
+      const bill = await api<{ id: number }>("/bills", { method: "POST", body: JSON.stringify(data) });
+      router.push(`/bills/${bill.id}`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Admission failed.");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <AppShell title="Admit a vehicle" eyebrow="New job card">
+      <div className="mx-auto max-w-5xl space-y-5">
+        <div className="flex items-start gap-4 border-l-4 border-[#f5c842] bg-[#fbfaf6] p-4">
+          <ClipboardCheck className="shrink-0 text-[#167c73]" />
+          <div>
+            <p className="font-semibold">Search an existing plate first</p>
+            <p className="text-sm text-[#6f746e]">
+              If the vehicle already exists, open another job card. Otherwise fill the form below for a new admission.
+            </p>
+          </div>
+        </div>
+
+        <Panel className="p-5">
+          <h2 className="font-display text-2xl font-semibold uppercase">Search by number plate</h2>
+          <label className="relative mt-4 block max-w-xl">
+            <Search className="absolute left-3 top-3 text-[#6f746e]" size={18} />
+            <input
+              value={plateQuery}
+              onChange={(event) => setPlateQuery(event.target.value.toUpperCase())}
+              className={`${inputClass} pl-10`}
+              placeholder="e.g. CAB-1234"
+            />
+          </label>
+          {lookingUp && <p className="mt-3 text-sm text-[#6f746e]">Searching vehicles...</p>}
+          {vehicles.length > 0 && (
+            <div className="mt-4 divide-y divide-[#e2ded4] border border-[#d7d3c8] bg-white">
+              {vehicles.map((vehicle) => (
+                <div key={vehicle.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                  <div>
+                    <p className="font-semibold">{vehicle.number_plate}</p>
+                    <p className="text-sm text-[#6f746e]">
+                      {vehicle.customer.name} · {vehicle.customer.phone}
+                      {(vehicle.make || vehicle.model) ? ` · ${vehicle.make ?? ""} ${vehicle.model ?? ""}` : ""}
+                    </p>
+                    <p className="text-xs text-[#167c73]">
+                      {vehicle.bills_count} previous job card{vehicle.bills_count === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={creatingId === vehicle.id}
+                    onClick={() => openNewCard(vehicle.id)}
+                    className={buttonClass}
+                  >
+                    <Plus size={16} />{creatingId === vehicle.id ? "Opening..." : "New job card"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {!lookingUp && plateQuery.trim().length >= 2 && vehicles.length === 0 && (
+            <p className="mt-4 text-sm text-[#6f746e]">No match — use the new admission form below.</p>
+          )}
+        </Panel>
+
+        {error && <ErrorMessage message={error} />}
+
+        <form onSubmit={submit}>
+          <Panel>
+            <div className="border-b border-[#d7d3c8] px-5 py-4">
+              <h2 className="font-display text-2xl font-semibold uppercase">New customer & vehicle</h2>
+            </div>
+            <div className="grid gap-5 p-5 sm:grid-cols-2">
+              {fields.map(([name, label, type, required]) => (
+                <label key={name} className="text-sm font-semibold">
+                  {label}{required && <span className="text-[#b84837]"> *</span>}
+                  {name === "number_plate" ? (
+                    <input
+                      name={name}
+                      type={type}
+                      required={required}
+                      value={formPlate}
+                      onChange={(event) => setFormPlate(event.target.value.toUpperCase())}
+                      className={`${inputClass} mt-2`}
+                    />
+                  ) : (
+                    <input name={name} type={type} required={required} className={`${inputClass} mt-2`} />
+                  )}
+                </label>
+              ))}
+              <label className="text-sm font-semibold sm:col-span-2">
+                Admission notes
+                <textarea
+                  name="notes"
+                  rows={4}
+                  className="mt-2 w-full border border-[#c9c5b9] bg-white p-3 text-sm outline-none focus:border-[#167c73]"
+                  placeholder="Customer concerns, visible damage, requested work..."
+                />
+              </label>
+            </div>
+            <div className="flex justify-end border-t border-[#d7d3c8] p-5">
+              <button disabled={saving} className={buttonClass}>
+                <Save size={18} />{saving ? "Opening job card..." : "Open job card"}
+              </button>
+            </div>
+          </Panel>
+        </form>
+      </div>
+    </AppShell>
+  );
 }
