@@ -39,4 +39,42 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .page-enter > *:nth-child(3) { animation-delay: 140ms; }
 .page-enter > *:nth-child(4) { animation-delay: 210ms; }
 
-@media print { .no-print { display: none !important; } body { background: white; } }
+@media print {
+  .no-print { display: none !important; }
+  body {
+    background: white !important;
+    background-image: none !important;
+  }
+  .bill-letterhead {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .bill-letterhead img {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .bill-items-table {
+    table-layout: fixed;
+    width: 100% !important;
+    min-width: 0 !important;
+    border-collapse: collapse;
+  }
+  .bill-items-table th,
+  .bill-items-table td {
+    vertical-align: top;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+  .bill-items-table th:nth-child(3),
+  .bill-items-table td:nth-child(3),
+  .bill-items-table th:nth-child(4),
+  .bill-items-table td:nth-child(4),
+  .bill-items-table th:nth-child(5),
+  .bill-items-table td:nth-child(5) {
+    text-align: right;
+  }
+  main {
+    padding: 0 !important;
+  }
+}

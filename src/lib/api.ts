@@ -1,4 +1,5 @@
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+export const APP_ORIGIN = API_URL.replace(/\/api\/?$/, "");
 
 type ApiOptions = RequestInit & { authenticated?: boolean };
 
@@ -21,8 +22,20 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
   return response.json() as Promise<T>;
 }
 
-export type FeatureKey = "admit_vehicle" | "billing" | "payroll" | "balance_sheet" | "parts_inventory" | "employees_management" | "reports";
-export type Tenant = { id: number; business_name: string; business_type: "garage" | "supermarket" | "shop"; status: "active" | "inactive"; plan?: string | null };
+export type FeatureKey = "admit_vehicle" | "customers" | "billing" | "payroll" | "balance_sheet" | "parts_inventory" | "employees_management" | "attendance" | "reports";
+export type Tenant = {
+  id: number;
+  business_name: string;
+  business_type: "garage" | "cottage" | "supermarket" | "shop";
+  status: "active" | "inactive";
+  plan?: string | null;
+  logo?: string | null;
+  logo_url?: string | null;
+  owner_email?: string | null;
+  owner_phone?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+};
 export type User = { id: number; tenant_id: number | null; name: string; email: string; role: "super_admin" | "business_owner" | "staff"; status: "active" | "inactive"; tenant?: Tenant | null };
 
 export function storeSession(token: string, user: User, features: string[]) {
@@ -51,4 +64,12 @@ export function currentFeatures(): string[] {
 
 export function money(value: number | string) {
   return new Intl.NumberFormat("en-LK", { style: "currency", currency: "LKR", maximumFractionDigits: 2 }).format(Number(value));
+}
+
+export function mediaUrl(path?: string | null) {
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path)) return path;
+  const cleaned = path.replace(/^\/+/, "");
+  if (cleaned.startsWith("storage/")) return `${APP_ORIGIN}/${cleaned}`;
+  return `${APP_ORIGIN}/storage/${cleaned}`;
 }
