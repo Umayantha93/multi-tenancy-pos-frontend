@@ -25,9 +25,23 @@ type Dashboard = {
 export default function DashboardPage() {
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState("");
-  useEffect(() => { api<Dashboard>("/dashboard").then(setData).catch((caught) => setError(caught.message)); }, []);
-  const features = data?.features ?? currentFeatures();
-  const profile = useMemo(() => profileFor(data?.business_type ?? currentUser()?.tenant?.business_type), [data?.business_type]);
+  // Session/localStorage and locale dates are client-only — keep first paint matching SSR.
+  const [sessionFeatures, setSessionFeatures] = useState<string[]>([]);
+  const [sessionBusinessType, setSessionBusinessType] = useState<string | undefined>();
+  const [eyebrow, setEyebrow] = useState("");
+
+  useEffect(() => {
+    setSessionFeatures(currentFeatures());
+    setSessionBusinessType(currentUser()?.tenant?.business_type);
+    setEyebrow(new Intl.DateTimeFormat("en-LK", { dateStyle: "full" }).format(new Date()));
+    api<Dashboard>("/dashboard").then(setData).catch((caught) => setError(caught.message));
+  }, []);
+
+  const features = data?.features ?? sessionFeatures;
+  const profile = useMemo(
+    () => profileFor(data?.business_type ?? sessionBusinessType),
+    [data?.business_type, sessionBusinessType],
+  );
   const can = (feature: string) => features.includes(feature);
   const metrics = data ? [
     can("billing") && ["Today's receipts", money(data.today_income ?? 0), Banknote, "#167c73"],
@@ -42,7 +56,7 @@ export default function DashboardPage() {
     </Link>
   ) : undefined;
 
-  return <AppShell title="Business overview" eyebrow={new Intl.DateTimeFormat("en-LK", { dateStyle: "full" }).format(new Date())} action={cta}>
+  return <AppShell title="Business overview" eyebrow={eyebrow || undefined} action={cta}>
     {error && <ErrorMessage message={error} />}
     {!data && !error ? <PageState message="Loading your business dashboard..." /> : data && <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
