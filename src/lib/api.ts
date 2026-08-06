@@ -22,19 +22,41 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
   return response.json() as Promise<T>;
 }
 
-export type FeatureKey = "admit_vehicle" | "customers" | "billing" | "payroll" | "balance_sheet" | "parts_inventory" | "employees_management" | "attendance" | "reports";
+export type FeatureKey =
+  | "admit_vehicle"
+  | "customers"
+  | "billing"
+  | "payroll"
+  | "balance_sheet"
+  | "parts_inventory"
+  | "employees_management"
+  | "attendance"
+  | "reports"
+  | "photo_bookings"
+  | "photo_packages"
+  | "retail_pos"
+  | "product_catalog"
+  | "cottage_rooms"
+  | "cottage_stays";
+
+export type BusinessType = "garage" | "photography" | "clothing" | "cottage";
+
+export type PhoneEntry = { label?: string; number: string };
+
 export type Tenant = {
   id: number;
   business_name: string;
-  business_type: "garage" | "cottage" | "supermarket" | "shop";
+  business_type: BusinessType;
   status: "active" | "inactive";
   plan?: string | null;
   logo?: string | null;
   logo_url?: string | null;
   owner_email?: string | null;
   owner_phone?: string | null;
+  owner_phones?: PhoneEntry[] | null;
   contact_email?: string | null;
   contact_phone?: string | null;
+  contact_phones?: PhoneEntry[] | null;
 };
 export type User = { id: number; tenant_id: number | null; name: string; email: string; role: "super_admin" | "business_owner" | "staff"; status: "active" | "inactive"; tenant?: Tenant | null };
 

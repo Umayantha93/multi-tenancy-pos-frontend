@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, ClipboardPlus, Search } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, inputClass } from "@/components/ui";
-import { api, money } from "@/lib/api";
+import { api, currentUser, money } from "@/lib/api";
+import { profileFor } from "@/lib/business-profiles";
 
 type Bill = {
   id: number;
@@ -14,8 +15,8 @@ type Bill = {
   status: string;
   subtotal: string;
   balance_due: string;
-  customer: { name: string; phone: string };
-  vehicle: { number_plate: string; make?: string; model?: string };
+  customer: { name: string; phone: string } | null;
+  vehicle: { number_plate: string; make?: string; model?: string } | null;
 };
 
 export default function BillsPage() {
@@ -23,6 +24,7 @@ export default function BillsPage() {
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const profile = useMemo(() => profileFor(currentUser()?.tenant?.business_type), []);
 
   useEffect(() => {
     setLoading(true);
@@ -37,11 +39,11 @@ export default function BillsPage() {
 
   return (
     <AppShell
-      title="Job cards"
+      title={profile.billingLabel}
       eyebrow="Open bills & queue"
       action={
-        <Link href="/vehicles/admit" className="flex h-10 items-center gap-2 bg-[#f5c842] px-3 text-sm font-semibold">
-          <ClipboardPlus size={18} /><span className="hidden sm:inline">New admission</span>
+        <Link href={profile.primaryCta.href} className="flex h-10 items-center gap-2 bg-[#f5c842] px-3 text-sm font-semibold">
+          <ClipboardPlus size={18} /><span className="hidden sm:inline">{profile.primaryCta.label}</span>
         </Link>
       }
     >
@@ -52,59 +54,48 @@ export default function BillsPage() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className={`${inputClass} pl-10`}
-            placeholder="Search job, plate or customer"
+            placeholder={`Search ${profile.billingSingular.toLowerCase()} or customer`}
           />
         </label>
       </div>
       {error ? <ErrorMessage message={error} /> : loading ? (
-        <PageState message="Loading job cards..." />
+        <PageState message={`Loading ${profile.billingLabel.toLowerCase()}...`} />
       ) : (
-        <Panel className="overflow-hidden">
+        <Panel>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-sm">
-              <thead className="bg-[#242723] text-[10px] uppercase text-white/60">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="bg-[#eeece5] text-[10px] uppercase text-[#6f746e]">
                 <tr>
-                  <th className="px-5 py-3">Job card</th>
-                  <th>Vehicle</th>
+                  <th className="px-5 py-3">Ref</th>
+                  <th>Date</th>
                   <th>Customer</th>
+                  <th>Detail</th>
                   <th>Status</th>
-                  <th>Subtotal</th>
-                  <th>Balance</th>
+                  <th className="pr-5 text-right">Due</th>
                   <th />
                 </tr>
               </thead>
               <tbody>
                 {bills.map((bill) => (
-                  <tr key={bill.id} className="border-t border-[#e2ded4] hover:bg-[#f5c842]/8">
-                    <td className="px-5 py-4">
-                      <p className="font-semibold">{bill.bill_number}</p>
-                      <p className="text-xs text-[#6f746e]">{bill.admission_date}</p>
-                    </td>
+                  <tr key={bill.id} className="border-t border-[#e2ded4]">
+                    <td className="px-5 py-4 font-semibold">{bill.bill_number}</td>
+                    <td>{bill.admission_date}</td>
+                    <td>{bill.customer?.name ?? "Walk-in"}</td>
+                    <td>{bill.vehicle?.number_plate ?? "—"}</td>
                     <td>
-                      <strong>{bill.vehicle.number_plate}</strong>
-                      <p className="text-xs text-[#6f746e]">{bill.vehicle.make} {bill.vehicle.model}</p>
-                    </td>
-                    <td>
-                      {bill.customer.name}
-                      <p className="text-xs text-[#6f746e]">{bill.customer.phone}</p>
-                    </td>
-                    <td>
-                      <span className="bg-[#f5c842]/25 px-2 py-1 text-[10px] font-bold uppercase">
+                      <span className={`px-2 py-1 text-[10px] font-bold uppercase ${bill.status === "paid" ? "bg-[#167c73]/10 text-[#167c73]" : "bg-[#f5c842]/25 text-[#735a00]"}`}>
                         {bill.status.replace("_", " ")}
                       </span>
                     </td>
-                    <td>{money(bill.subtotal)}</td>
-                    <td className="font-semibold">{money(bill.balance_due)}</td>
-                    <td>
-                      <Link href={`/bills/${bill.id}`} aria-label={`Open ${bill.bill_number}`} className="text-[#167c73]">
-                        <ArrowRight size={19} />
-                      </Link>
+                    <td className="pr-5 text-right font-semibold">{money(bill.balance_due)}</td>
+                    <td className="pr-4">
+                      <Link href={`/bills/${bill.id}`} className="text-[#167c73]"><ArrowRight size={18} /></Link>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {bills.length === 0 && <p className="p-10 text-center text-sm text-[#6f746e]">No matching job cards.</p>}
+            {bills.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No {profile.billingLabel.toLowerCase()} yet.</p>}
           </div>
         </Panel>
       )}

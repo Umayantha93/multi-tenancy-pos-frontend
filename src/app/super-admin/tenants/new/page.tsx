@@ -1,19 +1,30 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Check, ChevronRight } from "lucide-react";
+import { Building2, Check, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
 import { ErrorMessage, Panel, buttonClass, inputClass } from "@/components/ui";
-import { api, Tenant } from "@/lib/api";
-import { MODULE_CATALOG, groupModules } from "@/lib/feature-modules";
+import { api, BusinessType, Tenant } from "@/lib/api";
+import { BUSINESS_TYPE_OPTIONS, profileFor } from "@/lib/business-profiles";
+import { groupModules } from "@/lib/feature-modules";
+
+type PhoneRow = { label: string; number: string };
 
 export default function NewTenantPage() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [features, setFeatures] = useState(MODULE_CATALOG.map((module) => module.key));
+  const [businessType, setBusinessType] = useState<BusinessType>("garage");
+  const profile = useMemo(() => profileFor(businessType), [businessType]);
+  const [features, setFeatures] = useState(profile.defaultFeatures);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [ownerPhones, setOwnerPhones] = useState<PhoneRow[]>([{ label: "Primary", number: "" }]);
+  const [contactPhones, setContactPhones] = useState<PhoneRow[]>([{ label: "Business", number: "" }]);
+
+  useEffect(() => {
+    setFeatures(profile.defaultFeatures);
+  }, [profile]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -21,7 +32,13 @@ export default function NewTenantPage() {
     setError("");
     const form = event.currentTarget;
     const formData = new FormData(form);
+    formData.set("business_type", businessType);
     formData.set("features", JSON.stringify(features));
+    formData.set("owner_phones", JSON.stringify(ownerPhones.filter((p) => p.number.trim())));
+    formData.set("contact_phones", JSON.stringify(contactPhones.filter((p) => p.number.trim())));
+    formData.set("owner_phone", ownerPhones.find((p) => p.number.trim())?.number ?? "");
+    const primaryContact = contactPhones.find((p) => p.number.trim())?.number;
+    if (primaryContact) formData.set("contact_phone", primaryContact);
     try {
       const tenant = await api<Tenant>("/super-admin/tenants", { method: "POST", body: formData });
       router.push(`/super-admin/tenants/${tenant.id}`);
@@ -51,11 +68,14 @@ export default function NewTenantPage() {
               </label>
               <label className="text-sm font-semibold">
                 Business type
-                <select name="business_type" className={`mt-2 ${inputClass}`}>
-                  <option value="garage">Garage</option>
-                  <option value="cottage">Cottage</option>
-                  <option value="shop">Shop</option>
-                  <option value="supermarket">Supermarket</option>
+                <select
+                  value={businessType}
+                  onChange={(event) => setBusinessType(event.target.value as BusinessType)}
+                  className={`mt-2 ${inputClass}`}
+                >
+                  {BUSINESS_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
                 </select>
               </label>
               <label className="text-sm font-semibold">
@@ -79,11 +99,45 @@ export default function NewTenantPage() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={logoPreview} alt="" className="h-20 w-auto object-contain sm:col-span-2" />
               )}
-              <label className="text-sm font-semibold">
-                Business mobile
-                <input name="contact_phone" placeholder="Shown on printed bills" className={`mt-2 ${inputClass}`} />
-              </label>
-              <label className="text-sm font-semibold">
+
+              <div className="sm:col-span-2">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-sm font-semibold">Business phones</p>
+                  <button
+                    type="button"
+                    disabled={contactPhones.length >= 5}
+                    onClick={() => setContactPhones((rows) => [...rows, { label: `Phone ${rows.length + 1}`, number: "" }])}
+                    className="flex items-center gap-1 text-xs font-bold uppercase text-[#167c73]"
+                  >
+                    <Plus size={14} /> Add phone
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {contactPhones.map((row, index) => (
+                    <div key={`contact-${index}`} className="flex gap-2">
+                      <input
+                        value={row.label}
+                        onChange={(event) => setContactPhones((rows) => rows.map((item, i) => i === index ? { ...item, label: event.target.value } : item))}
+                        placeholder="Label"
+                        className={`${inputClass} max-w-[140px]`}
+                      />
+                      <input
+                        value={row.number}
+                        onChange={(event) => setContactPhones((rows) => rows.map((item, i) => i === index ? { ...item, number: event.target.value } : item))}
+                        placeholder="Shown on printed bills"
+                        className={inputClass}
+                      />
+                      {contactPhones.length > 1 && (
+                        <button type="button" aria-label="Remove phone" onClick={() => setContactPhones((rows) => rows.filter((_, i) => i !== index))} className="grid size-11 place-items-center border border-[#d7d3c8] text-[#b84837]">
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <label className="text-sm font-semibold sm:col-span-2">
                 Business email
                 <input name="contact_email" type="email" placeholder="Shown on printed bills" className={`mt-2 ${inputClass}`} />
               </label>
@@ -92,14 +146,49 @@ export default function NewTenantPage() {
                 <input name="owner_name" required className={`mt-2 ${inputClass}`} />
               </label>
               <label className="text-sm font-semibold">
-                Owner phone
-                <input name="owner_phone" required className={`mt-2 ${inputClass}`} />
-              </label>
-              <label className="text-sm font-semibold">
                 Owner email
                 <input name="owner_email" type="email" required className={`mt-2 ${inputClass}`} />
               </label>
-              <label className="text-sm font-semibold">
+
+              <div className="sm:col-span-2">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-sm font-semibold">Owner phones</p>
+                  <button
+                    type="button"
+                    disabled={ownerPhones.length >= 5}
+                    onClick={() => setOwnerPhones((rows) => [...rows, { label: `Phone ${rows.length + 1}`, number: "" }])}
+                    className="flex items-center gap-1 text-xs font-bold uppercase text-[#167c73]"
+                  >
+                    <Plus size={14} /> Add phone
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {ownerPhones.map((row, index) => (
+                    <div key={`owner-${index}`} className="flex gap-2">
+                      <input
+                        value={row.label}
+                        onChange={(event) => setOwnerPhones((rows) => rows.map((item, i) => i === index ? { ...item, label: event.target.value } : item))}
+                        placeholder="Label"
+                        className={`${inputClass} max-w-[140px]`}
+                      />
+                      <input
+                        required={index === 0}
+                        value={row.number}
+                        onChange={(event) => setOwnerPhones((rows) => rows.map((item, i) => i === index ? { ...item, number: event.target.value } : item))}
+                        placeholder="Owner mobile"
+                        className={inputClass}
+                      />
+                      {ownerPhones.length > 1 && (
+                        <button type="button" aria-label="Remove phone" onClick={() => setOwnerPhones((rows) => rows.filter((_, i) => i !== index))} className="grid size-11 place-items-center border border-[#d7d3c8] text-[#b84837]">
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <label className="text-sm font-semibold sm:col-span-2">
                 Temporary password
                 <input name="password" type="password" minLength={8} required className={`mt-2 ${inputClass}`} />
               </label>
@@ -108,10 +197,11 @@ export default function NewTenantPage() {
           {error && <ErrorMessage message={error} />}
         </div>
         <Panel className="h-fit p-5">
-          <p className="text-xs font-bold uppercase text-[#167c73]">Enabled modules</p>
+          <p className="text-xs font-bold uppercase text-[#167c73]">{profile.label} plan</p>
           <h2 className="mt-2 font-display text-3xl font-semibold uppercase">Shape the plan</h2>
+          <p className="mt-2 text-sm text-[#6f746e]">Modules switch when you change business type — only what fits {profile.label.toLowerCase()}.</p>
           <div className="mt-6 space-y-5">
-            {groupModules(MODULE_CATALOG).map(({ group, features: modules }) => (
+            {groupModules(profile.moduleCatalog).map(({ group, features: modules }) => (
               <div key={group}>
                 <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-[#6f746e]">{group}</p>
                 <div className="space-y-2">

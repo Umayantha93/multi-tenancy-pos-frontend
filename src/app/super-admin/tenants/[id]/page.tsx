@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
-import { Check, Power, Users } from "lucide-react";
+import { Check, Plus, Power, Trash2, Users } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
 import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
-import { api, mediaUrl, Tenant } from "@/lib/api";
+import { api, mediaUrl, PhoneEntry, Tenant } from "@/lib/api";
+import { profileFor } from "@/lib/business-profiles";
 import { groupModules } from "@/lib/feature-modules";
 
 type Feature = { id: number; key: string; name: string; group?: string | null };
@@ -19,13 +20,14 @@ type Detail = Tenant & {
   users: Array<{ id: number; name: string; email: string; role: string; status: string }>;
   features: Feature[];
 };
-type FeatureResponse = { available: Feature[]; enabled: string[] };
+type FeatureResponse = { available: Feature[]; enabled: string[]; business_type?: string };
 
 export default function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [tenant, setTenant] = useState<Detail | null>(null);
   const [featureData, setFeatureData] = useState<FeatureResponse | null>(null);
   const [enabled, setEnabled] = useState<string[]>([]);
+  const [contactPhones, setContactPhones] = useState<PhoneEntry[]>([{ label: "Business", number: "" }]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [logoSaving, setLogoSaving] = useState(false);
@@ -39,6 +41,10 @@ export default function TenantDetailPage() {
         setTenant(detail);
         setFeatureData(features);
         setEnabled(features.enabled);
+        const phones = detail.contact_phones?.length
+          ? detail.contact_phones
+          : [{ label: "Business", number: detail.contact_phone || detail.owner_phone || "" }];
+        setContactPhones(phones);
       })
       .catch((caught) => setError(caught.message));
   }
@@ -80,8 +86,13 @@ export default function TenantDetailPage() {
     setLogoSaving(true);
     setError("");
     const form = event.currentTarget;
+    const formData = new FormData(form);
+    formData.set("contact_phones", JSON.stringify(contactPhones.filter((p) => p.number.trim())));
+    if (contactPhones.find((p) => p.number.trim())) {
+      formData.set("contact_phone", contactPhones.find((p) => p.number.trim())!.number);
+    }
     try {
-      const updated = await api<Detail>(`/super-admin/tenants/${id}`, { method: "POST", body: new FormData(form) });
+      const updated = await api<Detail>(`/super-admin/tenants/${id}`, { method: "POST", body: formData });
       setTenant((current) => current ? { ...current, ...updated } : updated);
       form.reset();
     } catch (caught) {
@@ -92,6 +103,7 @@ export default function TenantDetailPage() {
   }
 
   const logo = mediaUrl(tenant?.logo_url || tenant?.logo);
+  const profile = profileFor(tenant?.business_type);
 
   return (
     <PlatformShell
@@ -120,7 +132,7 @@ export default function TenantDetailPage() {
                     <img src={logo} alt="" className="h-14 w-14 object-contain border border-[#d7d3c8] bg-white p-1" />
                   ) : null}
                   <div>
-                    <p className="text-xs font-bold uppercase text-[#167c73]">{tenant.business_type}</p>
+                    <p className="text-xs font-bold uppercase text-[#167c73]">{profile.label}</p>
                     <h2 className="mt-1 font-display text-3xl font-semibold uppercase">{tenant.business_name}</h2>
                   </div>
                 </div>
@@ -143,10 +155,42 @@ export default function TenantDetailPage() {
               <h2 className="font-display text-2xl font-semibold uppercase">Bill branding</h2>
               <p className="mt-2 text-sm text-[#6f746e]">Logo and contact details appear at the top of every printed bill.</p>
               <form onSubmit={uploadLogo} className="mt-4 space-y-4">
-                <label className="block text-xs font-bold uppercase">
-                  Business mobile
-                  <input name="contact_phone" defaultValue={tenant.contact_phone || tenant.owner_phone || ""} className={`${inputClass} mt-2`} />
-                </label>
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-xs font-bold uppercase">Business phones</p>
+                    <button
+                      type="button"
+                      disabled={contactPhones.length >= 5}
+                      onClick={() => setContactPhones((rows) => [...rows, { label: `Phone ${rows.length + 1}`, number: "" }])}
+                      className="flex items-center gap-1 text-xs font-bold uppercase text-[#167c73]"
+                    >
+                      <Plus size={14} /> Add
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {contactPhones.map((row, index) => (
+                      <div key={index} className="flex gap-2">
+                        <input
+                          value={row.label ?? ""}
+                          onChange={(event) => setContactPhones((rows) => rows.map((item, i) => i === index ? { ...item, label: event.target.value } : item))}
+                          placeholder="Label"
+                          className={`${inputClass} max-w-[120px]`}
+                        />
+                        <input
+                          value={row.number}
+                          onChange={(event) => setContactPhones((rows) => rows.map((item, i) => i === index ? { ...item, number: event.target.value } : item))}
+                          placeholder="Phone"
+                          className={inputClass}
+                        />
+                        {contactPhones.length > 1 && (
+                          <button type="button" onClick={() => setContactPhones((rows) => rows.filter((_, i) => i !== index))} className="grid size-11 place-items-center border border-[#d7d3c8] text-[#b84837]" aria-label="Remove">
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
                 <label className="block text-xs font-bold uppercase">
                   Business email
                   <input name="contact_email" type="email" defaultValue={tenant.contact_email || tenant.owner_email || ""} className={`${inputClass} mt-2`} />
@@ -161,9 +205,9 @@ export default function TenantDetailPage() {
           </div>
 
           <Panel className="p-5">
-            <p className="text-xs font-bold uppercase text-[#167c73]">Tenant feature plan</p>
+            <p className="text-xs font-bold uppercase text-[#167c73]">{profile.label} feature plan</p>
             <h2 className="mt-1 font-display text-3xl font-semibold uppercase">Available modules</h2>
-            <p className="mt-2 text-sm text-[#6f746e]">Related modules are grouped for viewing. Disabling one removes it from that business sidebar immediately.</p>
+            <p className="mt-2 text-sm text-[#6f746e]">Only modules that fit this business type are shown. Disabling one removes it from that business sidebar immediately.</p>
             <div className="mt-6 space-y-6">
               {groupModules(featureData.available).map(({ group, features }) => (
                 <div key={group}>

@@ -73,10 +73,10 @@ export default function LoginPage() {
         <div className="relative max-w-xl">
           <p className="mb-4 font-display text-lg uppercase text-[#f5c842]">One platform. Many businesses.</p>
           <h1 className="font-display text-7xl font-semibold uppercase leading-[0.88]">
-            Garages.<br />Cottages.<br />Shops.
+            Garages.<br />Studios.<br />Shops.<br />Cottages.
           </h1>
           <p className="mt-6 max-w-md text-sm leading-6 text-white/55">
-            Billing, inventory, team, and finance — tailored to each tenant, under one sign-in.
+            Billing, inventory, team, and finance — shaped to each business type, under one sign-in.
           </p>
           <div className="mt-10 flex flex-wrap gap-x-8 gap-y-3 border-t border-white/20 pt-6 text-sm text-white/60">
             <span>POS & billing</span>

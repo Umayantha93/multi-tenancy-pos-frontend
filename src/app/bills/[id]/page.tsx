@@ -6,6 +6,7 @@ import { CreditCard, Plus, Printer, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { api, currentUser, mediaUrl, money, storeSession, Tenant, User } from "@/lib/api";
+import { profileFor } from "@/lib/business-profiles";
 
 type Part = { id: number; name: string; price: string; stock_qty: number; sku?: string; brand?: string };
 type Bill = {
@@ -16,8 +17,8 @@ type Bill = {
   total_deductions: string;
   amount_paid: string;
   balance_due: string;
-  customer: { name: string; phone: string };
-  vehicle: { number_plate: string; chassis_number: string; make?: string; model?: string };
+  customer: { name: string; phone: string } | null;
+  vehicle: { number_plate: string; chassis_number: string; make?: string; model?: string } | null;
   items: Array<{ id: number; type: string; description: string; quantity: string; unit_price: string; line_total: string }>;
   payments: Array<{ id: number; amount: string; method: string; paid_at: string }>;
 };
@@ -44,7 +45,10 @@ export default function BillDetailPage() {
 
   const logoUrl = mediaUrl(tenant?.logo_url || tenant?.logo);
   const contactEmail = tenant?.contact_email || tenant?.owner_email || "";
-  const contactPhone = tenant?.contact_phone || tenant?.owner_phone || "";
+  const contactPhones = (tenant?.contact_phones?.length
+    ? tenant.contact_phones.map((p) => p.number)
+    : [tenant?.contact_phone || tenant?.owner_phone].filter(Boolean)) as string[];
+  const profile = profileFor(tenant?.business_type);
 
   const load = useCallback(() => {
     api<Bill>(`/bills/${id}`).then(setBill).catch((caught) => setError(caught.message));
@@ -148,8 +152,8 @@ export default function BillDetailPage() {
 
   if (!bill) {
     return (
-      <AppShell title="Job card" eyebrow="Billing">
-        {error ? <ErrorMessage message={error} /> : <PageState message="Opening job card..." />}
+      <AppShell title={profile.billingSingular} eyebrow="Billing">
+        {error ? <ErrorMessage message={error} /> : <PageState message={`Opening ${profile.billingSingular.toLowerCase()}...`} />}
       </AppShell>
     );
   }
@@ -157,7 +161,7 @@ export default function BillDetailPage() {
   return (
     <AppShell
       title={bill.bill_number}
-      eyebrow={`${bill.vehicle.number_plate} · ${bill.status.replace("_", " ")}`}
+      eyebrow={`${bill.vehicle?.number_plate ?? bill.customer?.name ?? profile.billingSingular} · ${bill.status.replace("_", " ")}`}
       action={
         <button onClick={() => window.print()} className="no-print grid size-10 place-items-center border border-[#c9c5b9]" title="Print bill">
           <Printer size={19} />
@@ -185,13 +189,15 @@ export default function BillDetailPage() {
               </p>
               <p className="mt-2 text-sm text-[#6f746e]">{bill.bill_number}</p>
               <div className="mt-3 space-y-1 text-sm">
-                {contactPhone && <p><span className="text-[#6f746e]">Mobile:</span> {contactPhone}</p>}
+                {contactPhones.map((phone) => (
+                  <p key={phone}><span className="text-[#6f746e]">Mobile:</span> {phone}</p>
+                ))}
                 {contactEmail && <p><span className="text-[#6f746e]">Email:</span> {contactEmail}</p>}
               </div>
             </div>
           </div>
           <div className="text-right text-xs uppercase text-[#6f746e]">
-            <p className="font-bold text-[#167c73]">Tax invoice / job bill</p>
+            <p className="font-bold text-[#167c73]">Tax invoice / {profile.billingSingular.toLowerCase()}</p>
             <p className="mt-1 normal-case">{new Date().toLocaleString("en-LK")}</p>
           </div>
         </div>
@@ -203,18 +209,27 @@ export default function BillDetailPage() {
             <div className="grid gap-4 p-5 sm:grid-cols-3">
               <div>
                 <p className="text-[10px] font-bold uppercase text-[#6f746e]">Customer</p>
-                <p className="mt-1 font-semibold">{bill.customer.name}</p>
-                <p className="text-sm text-[#6f746e]">{bill.customer.phone}</p>
+                <p className="mt-1 font-semibold">{bill.customer?.name ?? "Walk-in"}</p>
+                <p className="text-sm text-[#6f746e]">{bill.customer?.phone}</p>
               </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase text-[#6f746e]">Vehicle</p>
-                <p className="mt-1 font-semibold">{bill.vehicle.number_plate}</p>
-                <p className="text-sm text-[#6f746e]">{bill.vehicle.make} {bill.vehicle.model}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase text-[#6f746e]">Chassis</p>
-                <p className="mt-1 break-all text-sm">{bill.vehicle.chassis_number}</p>
-              </div>
+              {bill.vehicle ? (
+                <>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-[#6f746e]">Vehicle</p>
+                    <p className="mt-1 font-semibold">{bill.vehicle.number_plate}</p>
+                    <p className="text-sm text-[#6f746e]">{bill.vehicle.make} {bill.vehicle.model}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-[#6f746e]">Chassis</p>
+                    <p className="mt-1 break-all text-sm">{bill.vehicle.chassis_number}</p>
+                  </div>
+                </>
+              ) : (
+                <div className="sm:col-span-2">
+                  <p className="text-[10px] font-bold uppercase text-[#6f746e]">Type</p>
+                  <p className="mt-1 font-semibold">{profile.label}</p>
+                </div>
+              )}
             </div>
           </Panel>
 

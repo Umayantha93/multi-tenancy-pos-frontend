@@ -2,22 +2,10 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ReactNode, useEffect, useState } from "react";
-import { Boxes, ChartNoAxesCombined, ClipboardList, Contact, Fingerprint, Gauge, LogOut, Menu, ReceiptText, ShieldCheck, Store, Users, X } from "lucide-react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
+import { LogOut, Menu, Store, X } from "lucide-react";
 import { api, clearSession, currentFeatures, currentUser, mediaUrl, storeSession, User } from "@/lib/api";
-
-const navigation = [
-  { href: "/dashboard", label: "Overview", icon: Gauge },
-  { href: "/vehicles/admit", label: "Admit vehicle", icon: ClipboardList, feature: "admit_vehicle" },
-  { href: "/customers", label: "Customers", icon: Contact, feature: "customers" },
-  { href: "/bills", label: "Job cards", icon: ReceiptText, feature: "billing" },
-  { href: "/parts", label: "Parts", icon: Boxes, feature: "parts_inventory" },
-  { href: "/employees", label: "Team", icon: Users, feature: "employees_management" },
-  { href: "/attendance", label: "Attendance", icon: Fingerprint, feature: "attendance" },
-  { href: "/payroll", label: "Payroll", icon: ChartNoAxesCombined, feature: "payroll" },
-  { href: "/balance-sheet", label: "Finance", icon: ChartNoAxesCombined, feature: "balance_sheet" },
-  { href: "/staff", label: "Staff access", icon: ShieldCheck, owner: true },
-];
+import { profileFor } from "@/lib/business-profiles";
 
 export function AppShell({ children, title, eyebrow, action }: { children: ReactNode; title: string; eyebrow?: string; action?: ReactNode }) {
   const pathname = usePathname();
@@ -25,6 +13,9 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
   const [user, setUser] = useState<User | null>(null);
   const [features, setFeatures] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
+
+  const profile = useMemo(() => profileFor(user?.tenant?.business_type), [user?.tenant?.business_type]);
+  const navigation = profile.navigation;
 
   useEffect(() => {
     if (!localStorage.getItem("garage_token")) {
@@ -56,7 +47,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
     if (user && ((required?.feature && !features.includes(required.feature)) || (required?.owner && user.role !== "business_owner"))) {
       router.replace("/dashboard");
     }
-  }, [features, pathname, router, user]);
+  }, [features, navigation, pathname, router, user]);
 
   async function logout() {
     try { await api("/auth/logout", { method: "POST" }); } catch { /* Clear local access even if the server is unavailable. */ }
@@ -78,7 +69,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
             )}
             <div className="min-w-0">
               <strong className="block truncate font-display text-xl uppercase">{user?.tenant?.business_name ?? "Business"}</strong>
-              <p className="text-[10px] uppercase text-white/40">{user?.tenant?.business_type ?? "Tenant"} operations</p>
+              <p className="text-[10px] uppercase text-white/40">{profile.operationsLabel}</p>
             </div>
           </Link>
           <button onClick={() => setOpen(false)} className="lg:hidden" aria-label="Close navigation"><X /></button>
