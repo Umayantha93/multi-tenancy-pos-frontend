@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { LogOut, Menu, Store, X } from "lucide-react";
-import { api, clearSession, currentFeatures, currentUser, mediaUrl, storeSession, User } from "@/lib/api";
+import { api, clearSession, currentFeatures, currentUser, mediaUrl, money, storeSession, User } from "@/lib/api";
 import { profileFor } from "@/lib/business-profiles";
 
 export function AppShell({ children, title, eyebrow, action }: { children: ReactNode; title: string; eyebrow?: string; action?: ReactNode }) {
@@ -16,6 +16,8 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
 
   const profile = useMemo(() => profileFor(user?.tenant?.business_type), [user?.tenant?.business_type]);
   const navigation = profile.navigation;
+  const showPaymentReminder = Boolean(user?.tenant?.payment_due_soon);
+  const paymentAmount = user?.tenant?.plan_amount;
 
   useEffect(() => {
     if (!localStorage.getItem("garage_token")) {
@@ -93,6 +95,12 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
       </aside>
       {open && <button aria-label="Close navigation overlay" onClick={() => setOpen(false)} className="no-print fixed inset-0 z-30 bg-black/45 lg:hidden" />}
       <main className="min-w-0">
+        {showPaymentReminder && (
+          <div className="no-print border-b border-[#f0c9a0] bg-[#fff4e5] px-4 py-3 text-sm text-[#735a00] sm:px-7">
+            <strong className="font-semibold">Monthly payment due.</strong>{" "}
+            Please pay {paymentAmount != null ? money(paymentAmount) : "your plan amount"} before month end.
+          </div>
+        )}
         <header className="no-print flex min-h-20 items-center justify-between border-b border-[#d7d3c8] bg-[#f3f0e8]/90 px-4 backdrop-blur sm:px-7"><div className="flex items-center gap-3"><button onClick={() => setOpen(true)} className="grid size-10 place-items-center border border-[#d7d3c8] lg:hidden" aria-label="Open navigation"><Menu size={20} /></button><div>{eyebrow && <p className="text-[10px] font-bold uppercase text-[#167c73]">{eyebrow}</p>}<h1 className="font-display text-3xl font-semibold uppercase leading-none sm:text-4xl">{title}</h1></div></div>{action}</header>
         <div className="page-enter p-4 sm:p-7">{children}</div>
       </main>

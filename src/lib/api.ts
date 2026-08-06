@@ -49,6 +49,9 @@ export type Tenant = {
   business_type: BusinessType;
   status: "active" | "inactive";
   plan?: string | null;
+  payment_plan?: "monthly" | "yearly" | null;
+  plan_amount?: number | string | null;
+  payment_due_soon?: boolean;
   logo?: string | null;
   logo_url?: string | null;
   owner_email?: string | null;

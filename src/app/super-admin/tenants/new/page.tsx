@@ -6,7 +6,7 @@ import { Building2, Check, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
 import { ErrorMessage, Panel, buttonClass, inputClass } from "@/components/ui";
 import { api, BusinessType, Tenant } from "@/lib/api";
-import { BUSINESS_TYPE_OPTIONS, profileFor } from "@/lib/business-profiles";
+import { BUSINESS_TYPE_OPTIONS, PAYMENT_PLAN_OPTIONS, PLAN_OPTIONS, defaultPlanFor, profileFor } from "@/lib/business-profiles";
 import { groupModules } from "@/lib/feature-modules";
 
 type PhoneRow = { label: string; number: string };
@@ -16,6 +16,9 @@ export default function NewTenantPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [businessType, setBusinessType] = useState<BusinessType>("garage");
+  const [plan, setPlan] = useState(defaultPlanFor("garage"));
+  const [paymentPlan, setPaymentPlan] = useState<"monthly" | "yearly">("monthly");
+  const [planAmount, setPlanAmount] = useState("");
   const profile = useMemo(() => profileFor(businessType), [businessType]);
   const [features, setFeatures] = useState(profile.defaultFeatures);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -24,7 +27,8 @@ export default function NewTenantPage() {
 
   useEffect(() => {
     setFeatures(profile.defaultFeatures);
-  }, [profile]);
+    setPlan(defaultPlanFor(businessType));
+  }, [profile, businessType]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -33,6 +37,9 @@ export default function NewTenantPage() {
     const form = event.currentTarget;
     const formData = new FormData(form);
     formData.set("business_type", businessType);
+    formData.set("plan", plan);
+    formData.set("payment_plan", paymentPlan);
+    formData.set("plan_amount", planAmount);
     formData.set("features", JSON.stringify(features));
     formData.set("owner_phones", JSON.stringify(ownerPhones.filter((p) => p.number.trim())));
     formData.set("contact_phones", JSON.stringify(contactPhones.filter((p) => p.number.trim())));
@@ -80,7 +87,41 @@ export default function NewTenantPage() {
               </label>
               <label className="text-sm font-semibold">
                 Plan
-                <input name="plan" placeholder="Growth, custom..." className={`mt-2 ${inputClass}`} />
+                <select
+                  name="plan"
+                  value={plan}
+                  onChange={(event) => setPlan(event.target.value)}
+                  className={`mt-2 ${inputClass}`}
+                >
+                  {PLAN_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm font-semibold">
+                Payment plan
+                <select
+                  value={paymentPlan}
+                  onChange={(event) => setPaymentPlan(event.target.value as "monthly" | "yearly")}
+                  className={`mt-2 ${inputClass}`}
+                >
+                  {PAYMENT_PLAN_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm font-semibold">
+                Amount (LKR)
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  required
+                  value={planAmount}
+                  onChange={(event) => setPlanAmount(event.target.value)}
+                  placeholder={paymentPlan === "monthly" ? "Monthly fee" : "Yearly fee"}
+                  className={`mt-2 ${inputClass}`}
+                />
               </label>
               <label className="text-sm font-semibold sm:col-span-2">
                 Business logo

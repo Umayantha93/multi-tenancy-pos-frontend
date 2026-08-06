@@ -25,6 +25,13 @@ export type NavItem = {
   owner?: boolean;
 };
 
+export type BillItemTypeOption = {
+  value: string;
+  label: string;
+  kind: "charge" | "stock" | "discount";
+  allowQty?: boolean;
+};
+
 export type BusinessProfile = {
   type: BusinessType;
   label: string;
@@ -39,6 +46,7 @@ export type BusinessProfile = {
   defaultFeatures: FeatureKey[];
   moduleCatalog: Array<{ key: FeatureKey; name: string; group: string }>;
   navigation: NavItem[];
+  billItemTypes: BillItemTypeOption[];
 };
 
 const sharedPeopleFinance: Array<{ key: FeatureKey; name: string; group: string }> = [
@@ -63,7 +71,7 @@ const sharedNavTail: NavItem[] = [
 export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
   garage: {
     type: "garage",
-    label: "Garage",
+    label: "Garages",
     operationsLabel: "Garage operations",
     billingLabel: "Job cards",
     billingSingular: "Job card",
@@ -93,10 +101,16 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/parts", label: "Parts", icon: Boxes, feature: "parts_inventory" },
       ...sharedNavTail,
     ],
+    billItemTypes: [
+      { value: "labor", label: "Labor", kind: "charge" },
+      { value: "charge", label: "Service / charge", kind: "charge" },
+      { value: "part", label: "Inventory part", kind: "stock" },
+      { value: "discount", label: "Discount", kind: "discount" },
+    ],
   },
   photography: {
     type: "photography",
-    label: "Photography",
+    label: "Studios",
     operationsLabel: "Studio operations",
     billingLabel: "Orders",
     billingSingular: "Order",
@@ -126,11 +140,18 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/bills", label: "Orders", icon: ReceiptText, feature: "billing" },
       ...sharedNavTail,
     ],
+    billItemTypes: [
+      { value: "session", label: "Session / shoot", kind: "charge" },
+      { value: "package", label: "Package", kind: "charge" },
+      { value: "print", label: "Prints / products", kind: "charge", allowQty: true },
+      { value: "addon", label: "Add-on", kind: "charge" },
+      { value: "discount", label: "Discount", kind: "discount" },
+    ],
   },
   clothing: {
     type: "clothing",
-    label: "Clothing",
-    operationsLabel: "Boutique operations",
+    label: "Garments",
+    operationsLabel: "Garment operations",
     billingLabel: "Sales",
     billingSingular: "Sale",
     openBillsLabel: "Open sales",
@@ -158,6 +179,12 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/catalog", label: "Catalog", icon: Package, feature: "product_catalog" },
       { href: "/bills", label: "Sales", icon: ReceiptText, feature: "billing" },
       ...sharedNavTail,
+    ],
+    billItemTypes: [
+      { value: "product", label: "Garment item", kind: "charge", allowQty: true },
+      { value: "alteration", label: "Alteration", kind: "charge" },
+      { value: "charge", label: "Other charge", kind: "charge" },
+      { value: "discount", label: "Discount", kind: "discount" },
     ],
   },
   cottage: {
@@ -192,19 +219,66 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/bills", label: "Billing", icon: ReceiptText, feature: "billing" },
       ...sharedNavTail,
     ],
+    billItemTypes: [
+      { value: "room", label: "Room night", kind: "charge", allowQty: true },
+      { value: "amenity", label: "Amenity / extras", kind: "charge" },
+      { value: "meal", label: "Meals", kind: "charge", allowQty: true },
+      { value: "discount", label: "Discount", kind: "discount" },
+    ],
   },
 };
 
 export const BUSINESS_TYPE_OPTIONS: Array<{ value: BusinessType; label: string }> = [
-  { value: "garage", label: "Garage" },
-  { value: "photography", label: "Photography" },
-  { value: "clothing", label: "Clothing" },
+  { value: "garage", label: "Garages" },
+  { value: "photography", label: "Studios" },
+  { value: "clothing", label: "Garments" },
   { value: "cottage", label: "Cottages" },
 ];
+
+/** Display-only labels stored on tenants.plan — does not gate features. */
+export const PLAN_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "garage-pro", label: "Garage Pro" },
+  { value: "studio-pro", label: "Studio Pro" },
+  { value: "retail-pro", label: "Retail Pro" },
+  { value: "stay-pro", label: "Stay Pro" },
+  { value: "Growth", label: "Growth" },
+  { value: "Trial", label: "Trial" },
+  { value: "Custom", label: "Custom" },
+];
+
+export const PAYMENT_PLAN_OPTIONS: Array<{ value: "monthly" | "yearly"; label: string }> = [
+  { value: "monthly", label: "Monthly" },
+  { value: "yearly", label: "Yearly" },
+];
+
+export function defaultPlanFor(type: BusinessType): string {
+  return matchPlan(type);
+}
+
+function matchPlan(type: BusinessType): string {
+  switch (type) {
+    case "photography":
+      return "studio-pro";
+    case "clothing":
+      return "retail-pro";
+    case "cottage":
+      return "stay-pro";
+    default:
+      return "garage-pro";
+  }
+}
 
 export function profileFor(type?: string | null): BusinessProfile {
   if (type && type in BUSINESS_PROFILES) {
     return BUSINESS_PROFILES[type as BusinessType];
   }
   return BUSINESS_PROFILES.garage;
+}
+
+export function billItemLabel(type: string, profile?: BusinessProfile | null): string {
+  const match = profile?.billItemTypes.find((item) => item.value === type);
+  if (match) return match.label;
+  if (type === "customer_part") return "Customer part";
+  if (type === "service") return "Service";
+  return type.replaceAll("_", " ");
 }
