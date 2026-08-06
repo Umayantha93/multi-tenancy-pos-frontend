@@ -136,41 +136,43 @@ export default function PartsPage() {
       {parts.length === 0 && !error ? (
         <PageState message="No parts in the catalog yet." />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {parts.map((part) => {
             const image = mediaUrl(part.image_urls?.[0] || part.images?.[0]);
             return (
-              <Panel key={part.id} className="overflow-hidden">
-                <button type="button" onClick={() => openEdit(part)} className="block w-full text-left">
-                  <div className="grid aspect-[16/7] place-items-center bg-[#e8e5dc]">
+              <Panel key={part.id} className="flex h-full flex-col overflow-hidden">
+                <button type="button" onClick={() => openEdit(part)} className="block w-full flex-1 text-left">
+                  <div className="relative aspect-[16/10] w-full overflow-hidden bg-[#e8e5dc]">
                     {image ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={image} alt="" className="h-full w-full object-cover" />
+                      <img src={image} alt="" className="absolute inset-0 size-full object-contain" />
                     ) : (
-                      <Boxes size={42} className="text-[#a7aaa4]" />
+                      <div className="absolute inset-0 grid place-items-center">
+                        <Boxes size={28} className="text-[#a7aaa4]" />
+                      </div>
                     )}
                   </div>
-                  <div className="p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
+                  <div className="p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
                         <p className="text-[10px] font-bold uppercase text-[#167c73]">{part.brand} · {part.type}</p>
-                        <h2 className="mt-1 font-display text-2xl font-semibold uppercase leading-none">{part.name}</h2>
+                        <h2 className="mt-1 truncate font-display text-lg font-semibold uppercase leading-none">{part.name}</h2>
                       </div>
-                      <span className={`shrink-0 px-2 py-1 text-[10px] font-bold ${part.stock_qty <= 5 ? "bg-[#b84837]/10 text-[#b84837]" : "bg-[#167c73]/10 text-[#167c73]"}`}>
+                      <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-bold ${part.stock_qty <= 5 ? "bg-[#b84837]/10 text-[#b84837]" : "bg-[#167c73]/10 text-[#167c73]"}`}>
                         {part.stock_qty} in stock
                       </span>
                     </div>
-                    <p className="mt-3 text-sm text-[#6f746e]">{part.model || "Universal"} {part.year || ""}</p>
-                    <p className="mt-4 font-display text-2xl font-semibold">{money(part.price)}</p>
+                    <p className="mt-2 truncate text-xs text-[#6f746e]">{part.model || "Universal"} {part.year || ""}</p>
+                    <p className="mt-2 font-display text-lg font-semibold">{money(part.price)}</p>
                   </div>
                 </button>
                 {admin && (
-                  <div className="flex border-t border-[#d7d3c8]">
-                    <button type="button" onClick={() => openEdit(part)} className="flex flex-1 items-center justify-center gap-2 py-3 text-xs font-bold uppercase hover:bg-[#eeece5]">
-                      <Pencil size={14} /> Edit
+                  <div className="mt-auto flex border-t border-[#d7d3c8]">
+                    <button type="button" onClick={() => openEdit(part)} className="flex flex-1 items-center justify-center gap-1.5 py-2 text-[10px] font-bold uppercase hover:bg-[#eeece5]">
+                      <Pencil size={12} /> Edit
                     </button>
-                    <button type="button" onClick={() => openRestock(part)} className="flex flex-1 items-center justify-center gap-2 border-l border-[#d7d3c8] py-3 text-xs font-bold uppercase text-[#167c73] hover:bg-[#eeece5]">
-                      <PackagePlus size={14} /> Restock
+                    <button type="button" onClick={() => openRestock(part)} className="flex flex-1 items-center justify-center gap-1.5 border-l border-[#d7d3c8] py-2 text-[10px] font-bold uppercase text-[#167c73] hover:bg-[#eeece5]">
+                      <PackagePlus size={12} /> Restock
                     </button>
                   </div>
                 )}

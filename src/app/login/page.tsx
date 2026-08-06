@@ -73,10 +73,10 @@ export default function LoginPage() {
         <div className="relative max-w-xl">
           <p className="mb-4 font-display text-lg uppercase text-[#f5c842]">One platform. Many businesses.</p>
           <h1 className="font-display text-7xl font-semibold uppercase leading-[0.88]">
-            Garages.<br />Cottages.<br />Shops.
+            Garages.<br />Studios.<br />Garments.<br />Cottages.
           </h1>
           <p className="mt-6 max-w-md text-sm leading-6 text-white/55">
-            Billing, inventory, team, and finance — tailored to each tenant, under one sign-in.
+            Billing, inventory, team, and finance — shaped to each business type, under one sign-in.
           </p>
           <div className="mt-10 flex flex-wrap gap-x-8 gap-y-3 border-t border-white/20 pt-6 text-sm text-white/60">
             <span>POS & billing</span>
@@ -109,7 +109,7 @@ export default function LoginPage() {
           <p className="mt-4 text-sm text-[#6f746e]">
             {businessLabel
               ? `Continue to ${businessLabel}.`
-              : "Use your business account — garage, cottage, shop, or supermarket."}
+              : "Use your business account — garage, studio, garments, or cottage."}
           </p>
 
           <div className="mt-9 space-y-5">
@@ -153,8 +153,8 @@ export default function LoginPage() {
             <ArrowRight size={19} />
           </button>
 
-          <div className="mt-8 grid grid-cols-3 gap-2 border-t border-[#e2ded4] pt-6 text-center">
-            {["Garage", "Cottage", "Shop"].map((label) => (
+          <div className="mt-8 grid grid-cols-2 gap-2 border-t border-[#e2ded4] pt-6 text-center sm:grid-cols-4">
+            {["Garages", "Studios", "Garments", "Cottages"].map((label) => (
               <div key={label} className="border border-[#d7d3c8] bg-[#fbfaf6] px-2 py-3">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-[#6f746e]">{label}</p>
               </div>

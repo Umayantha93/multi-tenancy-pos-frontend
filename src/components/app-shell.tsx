@@ -2,22 +2,10 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ReactNode, useEffect, useState } from "react";
-import { Boxes, ChartNoAxesCombined, ClipboardList, Contact, Fingerprint, Gauge, LogOut, Menu, ReceiptText, ShieldCheck, Store, Users, X } from "lucide-react";
-import { api, clearSession, currentFeatures, currentUser, mediaUrl, storeSession, User } from "@/lib/api";
-
-const navigation = [
-  { href: "/dashboard", label: "Overview", icon: Gauge },
-  { href: "/vehicles/admit", label: "Admit vehicle", icon: ClipboardList, feature: "admit_vehicle" },
-  { href: "/customers", label: "Customers", icon: Contact, feature: "customers" },
-  { href: "/bills", label: "Job cards", icon: ReceiptText, feature: "billing" },
-  { href: "/parts", label: "Parts", icon: Boxes, feature: "parts_inventory" },
-  { href: "/employees", label: "Team", icon: Users, feature: "employees_management" },
-  { href: "/attendance", label: "Attendance", icon: Fingerprint, feature: "attendance" },
-  { href: "/payroll", label: "Payroll", icon: ChartNoAxesCombined, feature: "payroll" },
-  { href: "/balance-sheet", label: "Finance", icon: ChartNoAxesCombined, feature: "balance_sheet" },
-  { href: "/staff", label: "Staff access", icon: ShieldCheck, owner: true },
-];
+import { ReactNode, useEffect, useMemo, useState } from "react";
+import { LogOut, Menu, Store, X } from "lucide-react";
+import { api, clearSession, currentFeatures, currentUser, mediaUrl, money, storeSession, User } from "@/lib/api";
+import { profileFor } from "@/lib/business-profiles";
 
 export function AppShell({ children, title, eyebrow, action }: { children: ReactNode; title: string; eyebrow?: string; action?: ReactNode }) {
   const pathname = usePathname();
@@ -25,6 +13,11 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
   const [user, setUser] = useState<User | null>(null);
   const [features, setFeatures] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
+
+  const profile = useMemo(() => profileFor(user?.tenant?.business_type), [user?.tenant?.business_type]);
+  const navigation = profile.navigation;
+  const showPaymentReminder = Boolean(user?.tenant?.payment_due_soon);
+  const paymentAmount = user?.tenant?.plan_amount;
 
   useEffect(() => {
     if (!localStorage.getItem("garage_token")) {
@@ -56,7 +49,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
     if (user && ((required?.feature && !features.includes(required.feature)) || (required?.owner && user.role !== "business_owner"))) {
       router.replace("/dashboard");
     }
-  }, [features, pathname, router, user]);
+  }, [features, navigation, pathname, router, user]);
 
   async function logout() {
     try { await api("/auth/logout", { method: "POST" }); } catch { /* Clear local access even if the server is unavailable. */ }
@@ -78,7 +71,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
             )}
             <div className="min-w-0">
               <strong className="block truncate font-display text-xl uppercase">{user?.tenant?.business_name ?? "Business"}</strong>
-              <p className="text-[10px] uppercase text-white/40">{user?.tenant?.business_type ?? "Tenant"} operations</p>
+              <p className="text-[10px] uppercase text-white/40">{profile.operationsLabel}</p>
             </div>
           </Link>
           <button onClick={() => setOpen(false)} className="lg:hidden" aria-label="Close navigation"><X /></button>
@@ -102,6 +95,12 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
       </aside>
       {open && <button aria-label="Close navigation overlay" onClick={() => setOpen(false)} className="no-print fixed inset-0 z-30 bg-black/45 lg:hidden" />}
       <main className="min-w-0">
+        {showPaymentReminder && (
+          <div className="no-print border-b border-[#f0c9a0] bg-[#fff4e5] px-4 py-3 text-sm text-[#735a00] sm:px-7">
+            <strong className="font-semibold">Monthly payment due.</strong>{" "}
+            Please pay {paymentAmount != null ? money(paymentAmount) : "your plan amount"} before month end.
+          </div>
+        )}
         <header className="no-print flex min-h-20 items-center justify-between border-b border-[#d7d3c8] bg-[#f3f0e8]/90 px-4 backdrop-blur sm:px-7"><div className="flex items-center gap-3"><button onClick={() => setOpen(true)} className="grid size-10 place-items-center border border-[#d7d3c8] lg:hidden" aria-label="Open navigation"><Menu size={20} /></button><div>{eyebrow && <p className="text-[10px] font-bold uppercase text-[#167c73]">{eyebrow}</p>}<h1 className="font-display text-3xl font-semibold uppercase leading-none sm:text-4xl">{title}</h1></div></div>{action}</header>
         <div className="page-enter p-4 sm:p-7">{children}</div>
       </main>

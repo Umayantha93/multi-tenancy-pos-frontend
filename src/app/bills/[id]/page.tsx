@@ -6,6 +6,7 @@ import { CreditCard, Plus, Printer, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { api, currentUser, mediaUrl, money, storeSession, Tenant, User } from "@/lib/api";
+import { billItemLabel, profileFor } from "@/lib/business-profiles";
 
 type Part = { id: number; name: string; price: string; stock_qty: number; sku?: string; brand?: string };
 type Bill = {
@@ -16,18 +17,12 @@ type Bill = {
   total_deductions: string;
   amount_paid: string;
   balance_due: string;
-  customer: { name: string; phone: string };
-  vehicle: { number_plate: string; chassis_number: string; make?: string; model?: string };
+  customer_balance?: string | number;
+  customer: { name: string; phone: string } | null;
+  vehicle: { number_plate: string; chassis_number: string; make?: string; model?: string } | null;
   items: Array<{ id: number; type: string; description: string; quantity: string; unit_price: string; line_total: string }>;
   payments: Array<{ id: number; amount: string; method: string; paid_at: string }>;
 };
-
-const itemTypes = [
-  { value: "labor", label: "Labor" },
-  { value: "charge", label: "Service / charge" },
-  { value: "part", label: "Inventory part" },
-  { value: "discount", label: "Discount" },
-] as const;
 
 export default function BillDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -36,15 +31,38 @@ export default function BillDetailPage() {
   const [tenant, setTenant] = useState<Tenant | null>(currentUser()?.tenant ?? null);
   const [error, setError] = useState("");
   const [mode, setMode] = useState<"item" | "payment">("item");
-  const [type, setType] = useState<string>("labor");
+  const [type, setType] = useState<string>("");
   const [partQuery, setPartQuery] = useState("");
   const [selectedPartId, setSelectedPartId] = useState("");
   const [outsidePart, setOutsidePart] = useState(false);
   const [customerPart, setCustomerPart] = useState(false);
+  const [formKey, setFormKey] = useState(0);
 
   const logoUrl = mediaUrl(tenant?.logo_url || tenant?.logo);
   const contactEmail = tenant?.contact_email || tenant?.owner_email || "";
-  const contactPhone = tenant?.contact_phone || tenant?.owner_phone || "";
+  const contactPhones = (tenant?.contact_phones?.length
+    ? tenant.contact_phones.map((p) => p.number)
+    : [tenant?.contact_phone || tenant?.owner_phone].filter(Boolean)) as string[];
+  const profile = profileFor(tenant?.business_type);
+  const itemTypes = profile.billItemTypes;
+  const selectedType = itemTypes.find((option) => option.value === type) ?? itemTypes[0];
+  const activeType = type || selectedType?.value || "charge";
+
+  useEffect(() => {
+    if (!itemTypes.length) return;
+    if (!type || !itemTypes.some((option) => option.value === type)) {
+      setType(itemTypes[0].value);
+    }
+  }, [itemTypes, type]);
+
+  function resetItemForm(nextType?: string) {
+    setType(nextType || itemTypes[0]?.value || "");
+    setPartQuery("");
+    setSelectedPartId("");
+    setOutsidePart(false);
+    setCustomerPart(false);
+    setFormKey((value) => value + 1);
+  }
 
   const load = useCallback(() => {
     api<Bill>(`/bills/${id}`).then(setBill).catch((caught) => setError(caught.message));
@@ -75,20 +93,22 @@ export default function BillDetailPage() {
   }, [partQuery, parts]);
 
   const selectedPart = parts.find((part) => String(part.id) === selectedPartId);
-  const showQuantity = type === "part";
-  const showCost = type !== "part" || outsidePart;
-  const useStockSearch = type === "part" && !outsidePart && !customerPart;
+  const isStockType = selectedType?.kind === "stock";
+  const showQuantity = isStockType || Boolean(selectedType?.allowQty);
+  const showCost = !isStockType || outsidePart;
+  const useStockSearch = isStockType && !outsidePart && !customerPart;
 
   async function addItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     const form = event.currentTarget;
     const formData = new FormData(form);
+    const lineType = activeType;
     const payload: Record<string, string> = {
-      type: String(formData.get("type") || type),
+      type: String(formData.get("type") || lineType),
     };
 
-    if (type === "part") {
+    if (isStockType) {
       if (customerPart) {
         payload.type = "customer_part";
         payload.description = String(formData.get("description") || "");
@@ -109,17 +129,12 @@ export default function BillDetailPage() {
     } else {
       payload.description = String(formData.get("description") || "");
       payload.unit_price = String(formData.get("unit_price") || "");
-      payload.quantity = "1";
+      payload.quantity = showQuantity ? String(formData.get("quantity") || "1") : "1";
     }
 
     try {
       await api(`/bills/${id}/items`, { method: "POST", body: JSON.stringify(payload) });
-      form.reset();
-      setType("labor");
-      setPartQuery("");
-      setSelectedPartId("");
-      setOutsidePart(false);
-      setCustomerPart(false);
+      resetItemForm(itemTypes[0]?.value);
       load();
       api<{ data: Part[] }>("/parts?per_page=100").then((result) => setParts(result.data)).catch(() => undefined);
     } catch (caught) {
@@ -148,8 +163,8 @@ export default function BillDetailPage() {
 
   if (!bill) {
     return (
-      <AppShell title="Job card" eyebrow="Billing">
-        {error ? <ErrorMessage message={error} /> : <PageState message="Opening job card..." />}
+      <AppShell title={profile.billingSingular} eyebrow="Billing">
+        {error ? <ErrorMessage message={error} /> : <PageState message={`Opening ${profile.billingSingular.toLowerCase()}...`} />}
       </AppShell>
     );
   }
@@ -157,7 +172,7 @@ export default function BillDetailPage() {
   return (
     <AppShell
       title={bill.bill_number}
-      eyebrow={`${bill.vehicle.number_plate} · ${bill.status.replace("_", " ")}`}
+      eyebrow={`${bill.vehicle?.number_plate ?? bill.customer?.name ?? profile.billingSingular} · ${bill.status.replace("_", " ")}`}
       action={
         <button onClick={() => window.print()} className="no-print grid size-10 place-items-center border border-[#c9c5b9]" title="Print bill">
           <Printer size={19} />
@@ -185,13 +200,15 @@ export default function BillDetailPage() {
               </p>
               <p className="mt-2 text-sm text-[#6f746e]">{bill.bill_number}</p>
               <div className="mt-3 space-y-1 text-sm">
-                {contactPhone && <p><span className="text-[#6f746e]">Mobile:</span> {contactPhone}</p>}
+                {contactPhones.map((phone) => (
+                  <p key={phone}><span className="text-[#6f746e]">Mobile:</span> {phone}</p>
+                ))}
                 {contactEmail && <p><span className="text-[#6f746e]">Email:</span> {contactEmail}</p>}
               </div>
             </div>
           </div>
           <div className="text-right text-xs uppercase text-[#6f746e]">
-            <p className="font-bold text-[#167c73]">Tax invoice / job bill</p>
+            <p className="font-bold text-[#167c73]">Tax invoice / {profile.billingSingular.toLowerCase()}</p>
             <p className="mt-1 normal-case">{new Date().toLocaleString("en-LK")}</p>
           </div>
         </div>
@@ -203,18 +220,27 @@ export default function BillDetailPage() {
             <div className="grid gap-4 p-5 sm:grid-cols-3">
               <div>
                 <p className="text-[10px] font-bold uppercase text-[#6f746e]">Customer</p>
-                <p className="mt-1 font-semibold">{bill.customer.name}</p>
-                <p className="text-sm text-[#6f746e]">{bill.customer.phone}</p>
+                <p className="mt-1 font-semibold">{bill.customer?.name ?? "Walk-in"}</p>
+                <p className="text-sm text-[#6f746e]">{bill.customer?.phone}</p>
               </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase text-[#6f746e]">Vehicle</p>
-                <p className="mt-1 font-semibold">{bill.vehicle.number_plate}</p>
-                <p className="text-sm text-[#6f746e]">{bill.vehicle.make} {bill.vehicle.model}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase text-[#6f746e]">Chassis</p>
-                <p className="mt-1 break-all text-sm">{bill.vehicle.chassis_number}</p>
-              </div>
+              {bill.vehicle ? (
+                <>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-[#6f746e]">Vehicle</p>
+                    <p className="mt-1 font-semibold">{bill.vehicle.number_plate}</p>
+                    <p className="text-sm text-[#6f746e]">{bill.vehicle.make} {bill.vehicle.model}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-[#6f746e]">Chassis</p>
+                    <p className="mt-1 break-all text-sm">{bill.vehicle.chassis_number}</p>
+                  </div>
+                </>
+              ) : (
+                <div className="sm:col-span-2">
+                  <p className="text-[10px] font-bold uppercase text-[#6f746e]">Type</p>
+                  <p className="mt-1 font-semibold">{profile.label}</p>
+                </div>
+              )}
             </div>
           </Panel>
 
@@ -248,14 +274,15 @@ export default function BillDetailPage() {
                   {bill.items.map((item) => {
                     const fromCustomer = item.type === "customer_part";
                     const isPartLine = item.type === "part" || fromCustomer;
+                    const showQty = isPartLine || Number(item.quantity) > 1;
                     return (
                       <tr key={item.id} className="border-t border-[#e2ded4] align-top">
                         <td className="px-4 py-3 font-semibold break-words whitespace-normal">{item.description}</td>
-                        <td className="px-3 py-3 uppercase text-[#6f746e] break-words whitespace-normal">
-                          {fromCustomer ? "customer part" : item.type}
+                        <td className="px-3 py-3 text-[#6f746e] break-words whitespace-normal">
+                          {billItemLabel(item.type, profile)}
                         </td>
                         <td className="px-3 py-3 text-right tabular-nums">
-                          {isPartLine ? Number(item.quantity) : "—"}
+                          {showQty ? Number(item.quantity) : "—"}
                         </td>
                         <td className="px-3 py-3 text-right break-words whitespace-normal">
                           {fromCustomer ? (
@@ -311,8 +338,17 @@ export default function BillDetailPage() {
               <div className="flex justify-between gap-6"><span>Charges</span><strong className="tabular-nums">{money(bill.subtotal)}</strong></div>
               <div className="flex justify-between gap-6"><span>Deductions</span><strong className="tabular-nums">- {money(bill.total_deductions)}</strong></div>
               <div className="flex justify-between gap-6"><span>Paid</span><strong className="tabular-nums">- {money(bill.amount_paid)}</strong></div>
+              <div className="flex justify-between gap-6 border-t border-[#e2ded4] pt-3">
+                <span>Due</span>
+                <strong className={`tabular-nums ${Number(bill.balance_due) > 0 ? "text-[#b84837]" : ""}`}>
+                  {money(bill.balance_due)}
+                </strong>
+              </div>
               <div className="flex justify-between gap-6 border-t-2 border-[#20221f] pt-4 font-display text-2xl uppercase">
-                <span>Due</span><strong className="tabular-nums">{money(bill.balance_due)}</strong>
+                <span>Balance</span>
+                <strong className={`tabular-nums ${Number(bill.customer_balance ?? 0) > 0 ? "text-[#167c73]" : ""}`}>
+                  {money(bill.customer_balance ?? 0)}
+                </strong>
               </div>
             </div>
           </Panel>
@@ -328,12 +364,12 @@ export default function BillDetailPage() {
             </div>
 
             {mode === "item" ? (
-              <form onSubmit={addItem} className="space-y-4 p-5">
+              <form key={formKey} onSubmit={addItem} className="space-y-4 p-5">
                 <label className="block text-xs font-bold uppercase">
                   Type
                   <select
                     name="type"
-                    value={type}
+                    value={activeType}
                     onChange={(event) => {
                       setType(event.target.value);
                       setSelectedPartId("");
@@ -349,7 +385,7 @@ export default function BillDetailPage() {
                   </select>
                 </label>
 
-                {type === "part" ? (
+                {isStockType ? (
                   <>
                     <div className="grid gap-2 sm:grid-cols-2">
                       <label className="flex cursor-pointer items-center gap-3 border border-[#d7d3c8] bg-[#fbfaf6] px-3 py-3">
@@ -393,7 +429,7 @@ export default function BillDetailPage() {
                         <label className="block text-xs font-bold uppercase">
                           Search parts
                           <input
-                            value={partQuery}
+                            value={partQuery ?? ""}
                             onChange={(event) => {
                               setPartQuery(event.target.value);
                               setSelectedPartId("");
@@ -453,10 +489,16 @@ export default function BillDetailPage() {
                         <input name="unit_price" type="number" min="0" step="0.01" required className={`${inputClass} mt-2`} />
                       </label>
                     )}
+                    {showQuantity && (
+                      <label className="block text-xs font-bold uppercase">
+                        Quantity
+                        <input name="quantity" type="number" min="1" step={selectedType?.allowQty && !isStockType ? "0.01" : "1"} defaultValue="1" required className={`${inputClass} mt-2`} />
+                      </label>
+                    )}
                   </>
                 )}
 
-                {showQuantity && (selectedPartId || outsidePart || customerPart) && (
+                {isStockType && showQuantity && (selectedPartId || outsidePart || customerPart) && (
                   <label className="block text-xs font-bold uppercase">
                     Quantity
                     <input name="quantity" type="number" min="1" step="1" defaultValue="1" required className={`${inputClass} mt-2`} />

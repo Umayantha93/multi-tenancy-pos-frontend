@@ -1,4 +1,5 @@
 import type { FeatureKey } from "@/lib/api";
+import { BUSINESS_PROFILES, profileFor, type BusinessProfile } from "@/lib/business-profiles";
 
 export type ModuleFeature = {
   id?: number;
@@ -12,9 +13,15 @@ const GROUP_ORDER = ["Service Intake", "Inventory", "People", "Finance"];
 
 const FALLBACK_GROUP: Record<string, string> = {
   admit_vehicle: "Service Intake",
+  photo_bookings: "Service Intake",
+  photo_packages: "Service Intake",
+  retail_pos: "Service Intake",
+  cottage_stays: "Service Intake",
   customers: "Service Intake",
   billing: "Service Intake",
   parts_inventory: "Inventory",
+  product_catalog: "Inventory",
+  cottage_rooms: "Inventory",
   employees_management: "People",
   attendance: "People",
   payroll: "People",
@@ -22,17 +29,18 @@ const FALLBACK_GROUP: Record<string, string> = {
   reports: "Finance",
 };
 
-export const MODULE_CATALOG: Array<{ key: FeatureKey; name: string; group: string }> = [
-  { key: "admit_vehicle", name: "Admit vehicle", group: "Service Intake" },
-  { key: "customers", name: "Customers", group: "Service Intake" },
-  { key: "billing", name: "Job cards", group: "Service Intake" },
-  { key: "parts_inventory", name: "Parts inventory", group: "Inventory" },
-  { key: "employees_management", name: "Team", group: "People" },
-  { key: "attendance", name: "Attendance", group: "People" },
-  { key: "payroll", name: "Payroll", group: "People" },
-  { key: "balance_sheet", name: "Finance", group: "Finance" },
-  { key: "reports", name: "Reports", group: "Finance" },
-];
+/** Full catalog fallback — prefer profileFor(type).moduleCatalog when type is known. */
+export const MODULE_CATALOG: Array<{ key: FeatureKey; name: string; group: string }> = Object.values(BUSINESS_PROFILES)
+  .flatMap((profile) => profile.moduleCatalog)
+  .filter((module, index, list) => list.findIndex((item) => item.key === module.key) === index);
+
+export function catalogForType(type?: string | null): Array<{ key: FeatureKey; name: string; group: string }> {
+  return profileFor(type).moduleCatalog;
+}
+
+export function defaultsForType(type?: string | null): FeatureKey[] {
+  return profileFor(type).defaultFeatures;
+}
 
 export function groupModules<T extends ModuleFeature>(features: T[]) {
   const buckets = new Map<string, T[]>();
@@ -54,3 +62,5 @@ export function groupModules<T extends ModuleFeature>(features: T[]) {
     features: buckets.get(group) ?? [],
   }));
 }
+
+export type { BusinessProfile };
