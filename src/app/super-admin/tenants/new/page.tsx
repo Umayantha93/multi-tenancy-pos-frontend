@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, Check, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
-import { ErrorMessage, Panel, buttonClass, inputClass } from "@/components/ui";
+import { ErrorMessage, Panel, PasswordInput, buttonClass, inputClass } from "@/components/ui";
 import { api, BusinessType, Tenant } from "@/lib/api";
 import { BUSINESS_TYPE_OPTIONS, PAYMENT_PLAN_OPTIONS, PLAN_OPTIONS, defaultPlanFor, profileFor } from "@/lib/business-profiles";
 import { groupModules } from "@/lib/feature-modules";
@@ -231,7 +231,9 @@ export default function NewTenantPage() {
 
               <label className="text-sm font-semibold sm:col-span-2">
                 Temporary password
-                <input name="password" type="password" minLength={8} required className={`mt-2 ${inputClass}`} />
+                <div className="mt-2">
+                  <PasswordInput name="password" minLength={8} required className={inputClass} />
+                </div>
               </label>
             </div>
           </Panel>
