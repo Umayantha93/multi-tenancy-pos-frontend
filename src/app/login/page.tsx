@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Building2, LockKeyhole, Store } from "lucide-react";
+import { PasswordInput } from "@/components/ui";
 import { api, mediaUrl, storeSession, User } from "@/lib/api";
 
 type Branding = {
@@ -127,15 +128,14 @@ export default function LoginPage() {
             </label>
             <label className="block text-sm font-semibold">
               Password
-              <div className="relative mt-2">
-                <LockKeyhole className="absolute left-4 top-3.5 text-[#858a83]" size={19} />
-                <input
+              <div className="mt-2">
+                <PasswordInput
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  type="password"
                   required
                   autoComplete="current-password"
-                  className="h-12 w-full border border-[#c9c5b9] bg-[#fbfaf6] pl-12 pr-4 outline-none focus:border-[#167c73]"
+                  className="h-12 w-full border border-[#c9c5b9] bg-[#fbfaf6] outline-none focus:border-[#167c73]"
+                  leftIcon={<LockKeyhole className="absolute left-4 top-3.5 text-[#858a83]" size={19} />}
                 />
               </div>
             </label>
