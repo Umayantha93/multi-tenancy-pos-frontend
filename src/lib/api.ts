@@ -48,6 +48,7 @@ export type Tenant = {
   business_name: string;
   business_type: BusinessType;
   status: "active" | "inactive";
+  dual_financial_view_enabled?: boolean;
   plan?: string | null;
   payment_plan?: "monthly" | "yearly" | null;
   plan_amount?: number | string | null;
@@ -61,7 +62,16 @@ export type Tenant = {
   contact_phone?: string | null;
   contact_phones?: PhoneEntry[] | null;
 };
-export type User = { id: number; tenant_id: number | null; name: string; email: string; role: "super_admin" | "business_owner" | "staff"; status: "active" | "inactive"; tenant?: Tenant | null };
+export type User = {
+  id: number;
+  tenant_id: number | null;
+  name: string;
+  email: string;
+  role: "super_admin" | "business_owner" | "staff";
+  status: "active" | "inactive";
+  is_secondary_view?: boolean;
+  tenant?: Tenant | null;
+};
 
 export function storeSession(token: string, user: User, features: string[]) {
   localStorage.setItem("garage_token", token);
@@ -89,6 +99,15 @@ export function currentFeatures(): string[] {
 
 export function money(value: number | string) {
   return new Intl.NumberFormat("en-LK", { style: "currency", currency: "LKR", maximumFractionDigits: 2 }).format(Number(value));
+}
+
+export function formatDate(value?: string | null) {
+  if (!value) return "—";
+  const raw = String(value).trim();
+  const dateOnly = raw.match(/^(\d{4}-\d{2}-\d{2})/)?.[1];
+  const parsed = new Date(dateOnly ? `${dateOnly}T12:00:00` : raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  return parsed.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 export function mediaUrl(path?: string | null) {

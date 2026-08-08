@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { Check, Plus, Power, Trash2, Users } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
-import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
+import { ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
 import { api, mediaUrl, PhoneEntry, Tenant } from "@/lib/api";
 import { profileFor } from "@/lib/business-profiles";
 import { groupModules } from "@/lib/feature-modules";
@@ -16,8 +16,9 @@ type Detail = Tenant & {
   owner_email: string;
   owner_phone: string;
   plan: string | null;
+  dual_financial_view_enabled?: boolean;
   users_count: number;
-  users: Array<{ id: number; name: string; email: string; role: string; status: string }>;
+  users: Array<{ id: number; name: string; email: string; role: string; status: string; is_secondary_view?: boolean }>;
   features: Feature[];
 };
 type FeatureResponse = { available: Feature[]; enabled: string[]; business_type?: string };
@@ -29,8 +30,13 @@ export default function TenantDetailPage() {
   const [enabled, setEnabled] = useState<string[]>([]);
   const [contactPhones, setContactPhones] = useState<PhoneEntry[]>([{ label: "Business", number: "" }]);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [logoSaving, setLogoSaving] = useState(false);
+  const [dualSaving, setDualSaving] = useState(false);
+  const [secondaryName, setSecondaryName] = useState("");
+  const [secondaryEmail, setSecondaryEmail] = useState("");
+  const [secondaryPassword, setSecondaryPassword] = useState("");
 
   function load() {
     Promise.all([
@@ -51,14 +57,83 @@ export default function TenantDetailPage() {
 
   useEffect(load, [id]);
 
+  const secondaryUser = tenant?.users?.find((user) => user.is_secondary_view);
+
   async function changeStatus() {
     if (!tenant) return;
+    const nextInactive = tenant.status === "active";
+    const confirmed = window.confirm(
+      nextInactive
+        ? `Deactivate ${tenant.business_name}? All users for this business will be signed out and cannot log in until you activate it again.`
+        : `Activate ${tenant.business_name}? Users will be able to sign in again.`,
+    );
+    if (!confirmed) return;
     setError("");
+    setNotice("");
     try {
-      const result = await api<Detail>(`/super-admin/tenants/${id}/${tenant.status === "active" ? "deactivate" : "activate"}`, { method: "POST" });
+      const result = await api<Detail>(`/super-admin/tenants/${id}/${nextInactive ? "deactivate" : "activate"}`, { method: "POST" });
       setTenant({ ...tenant, status: result.status });
+      setNotice(
+        nextInactive
+          ? `${tenant.business_name} has been deactivated. Tenant users can no longer sign in.`
+          : `${tenant.business_name} has been activated. Tenant users can sign in again.`,
+      );
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to change status.");
+      setError(caught instanceof Error ? caught.message : "Unable to change tenant status. Please try again.");
+    }
+  }
+
+  async function saveDualFinancialView(enable: boolean) {
+    if (!tenant) return;
+    if (enable) {
+      if (!secondaryUser && (!secondaryName.trim() || !secondaryEmail.trim() || secondaryPassword.length < 8)) {
+        setError("Enter the secondary login name, email, and a password (at least 8 characters) before enabling.");
+        return;
+      }
+      if (!window.confirm("Enable Dual Financial View for this tenant? A secondary login will see reduced financial figures.")) return;
+    } else if (!window.confirm("Disable Dual Financial View? The secondary login will be deactivated and can no longer sign in.")) {
+      return;
+    }
+    setDualSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await api<{ tenant: Detail; secondary_user: Detail["users"][number] | null }>(
+        `/super-admin/tenants/${id}/dual-financial-view`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            enabled: enable,
+            ...(enable && !secondaryUser
+              ? {
+                  secondary_name: secondaryName.trim(),
+                  secondary_email: secondaryEmail.trim(),
+                  secondary_password: secondaryPassword,
+                }
+              : {}),
+          }),
+        },
+      );
+      setTenant((current) =>
+        current
+          ? {
+              ...current,
+              ...result.tenant,
+              dual_financial_view_enabled: result.tenant.dual_financial_view_enabled,
+              users: result.tenant.users ?? current.users,
+            }
+          : current,
+      );
+      setSecondaryPassword("");
+      setNotice(
+        enable
+          ? "Dual Financial View is enabled. The secondary login is active."
+          : "Dual Financial View is disabled. The secondary login has been deactivated.",
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to update Dual Financial View. Please try again.");
+    } finally {
+      setDualSaving(false);
     }
   }
 
@@ -119,6 +194,7 @@ export default function TenantDetailPage() {
       )}
     >
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
+      {notice && <div className="mb-5"><SuccessMessage message={notice} /></div>}
       {!tenant || !featureData ? (
         <PageState message="Loading tenant controls..." />
       ) : (
@@ -151,6 +227,51 @@ export default function TenantDetailPage() {
               <Link href={`/super-admin/tenants/${id}/users`} className={`${buttonClass} mt-6 w-full`}>
                 <Users size={18} />Manage tenant users
               </Link>
+            </Panel>
+
+            <Panel className="p-5">
+              <h2 className="font-display text-2xl font-semibold uppercase">Dual financial view</h2>
+              <p className="mt-2 text-sm text-[#6f746e]">
+                Enable Dual Financial View (35% Secondary Mode). Platform-only — never shown to tenant users.
+              </p>
+              <div className="mt-4 flex items-center justify-between border border-[#d7d3c8] px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold">{tenant.dual_financial_view_enabled ? "Enabled" : "Disabled"}</p>
+                  {secondaryUser && (
+                    <p className="mt-1 text-xs text-[#6f746e]">{secondaryUser.email} · {secondaryUser.status}</p>
+                  )}
+                </div>
+                <span className={`px-2 py-1 text-[10px] font-bold uppercase ${tenant.dual_financial_view_enabled ? "bg-[#167c73]/10 text-[#167c73]" : "bg-[#e7e4db] text-[#6f746e]"}`}>
+                  {tenant.dual_financial_view_enabled ? "On" : "Off"}
+                </span>
+              </div>
+              {!tenant.dual_financial_view_enabled && !secondaryUser && (
+                <div className="mt-4 space-y-3">
+                  <label className="block text-xs font-bold uppercase">
+                    Secondary name
+                    <input value={secondaryName} onChange={(e) => setSecondaryName(e.target.value)} className={`${inputClass} mt-2`} />
+                  </label>
+                  <label className="block text-xs font-bold uppercase">
+                    Secondary email
+                    <input type="email" value={secondaryEmail} onChange={(e) => setSecondaryEmail(e.target.value)} className={`${inputClass} mt-2`} />
+                  </label>
+                  <label className="block text-xs font-bold uppercase">
+                    Secondary password
+                    <input type="password" minLength={8} value={secondaryPassword} onChange={(e) => setSecondaryPassword(e.target.value)} className={`${inputClass} mt-2`} />
+                  </label>
+                </div>
+              )}
+              <button
+                disabled={dualSaving || (!tenant.dual_financial_view_enabled && !secondaryUser && (!secondaryName || !secondaryEmail || secondaryPassword.length < 8))}
+                onClick={() => saveDualFinancialView(!tenant.dual_financial_view_enabled)}
+                className={`${buttonClass} mt-4 w-full ${tenant.dual_financial_view_enabled ? "!bg-[#b84837]" : ""}`}
+              >
+                {dualSaving
+                  ? "Saving..."
+                  : tenant.dual_financial_view_enabled
+                    ? "Disable dual financial view"
+                    : "Enable dual financial view"}
+              </button>
             </Panel>
 
             <Panel className="p-5">
