@@ -92,7 +92,7 @@ export default function TenantDetailPage() {
       }
       setConfirm({
         title: "Enable dual financial view",
-        message: "Enable Dual Financial View for this tenant? A secondary login will see reduced financial figures.",
+        message: "Enable Dual Financial View for this tenant? Secondary sees full amounts except labor, which shows at 50%.",
         confirmLabel: "Enable",
         tone: "teal",
         action: "dual-enable",
@@ -288,7 +288,7 @@ export default function TenantDetailPage() {
             <Panel className="p-5">
               <h2 className="font-display text-2xl font-semibold uppercase">Dual financial view</h2>
               <p className="mt-2 text-sm text-[#6f746e]">
-                Enable Dual Financial View (35% Secondary Mode). Platform-only — never shown to tenant users.
+                Enable Dual Financial View. Secondary login: amounts stay at 100%, except labor which shows at 50%. Platform-only — never shown to tenant users.
               </p>
               <div className="mt-4 flex items-center justify-between border border-[#d7d3c8] px-4 py-3">
                 <div>
