@@ -17,19 +17,42 @@ type Detail = Tenant & {
   owner_phone: string;
   plan: string | null;
   dual_financial_view_enabled?: boolean;
+  current_month_paid?: boolean;
   users_count: number;
   users: Array<{ id: number; name: string; email: string; role: string; status: string; is_secondary_view?: boolean }>;
   features: Feature[];
 };
 type FeatureResponse = { available: Feature[]; enabled: string[]; business_type?: string };
+type FeePayment = {
+  id: number;
+  year: number;
+  month: number;
+  period: string;
+  amount: number | string;
+  paid_at: string;
+  notes?: string | null;
+  marked_by?: { id: number; name: string; email: string } | null;
+};
+type FeePaymentsResponse = { current_month_paid: boolean; payments: FeePayment[] };
 
 type ConfirmState = {
   title: string;
   message: string;
   confirmLabel: string;
   tone: "default" | "danger" | "teal";
-  action: "status" | "dual-enable" | "dual-disable";
+  action: "status" | "dual-enable" | "dual-disable" | "fee-paid" | "fee-unpaid";
 };
+
+function money(value: number | string | null | undefined) {
+  if (value == null) return "—";
+  return `LKR ${Number(value).toLocaleString("en-LK", { minimumFractionDigits: 2 })}`;
+}
+
+function periodLabel(period: string) {
+  const [year, month] = period.split("-").map(Number);
+  if (!year || !month) return period;
+  return new Date(year, month - 1, 1).toLocaleString("en-LK", { month: "long", year: "numeric" });
+}
 
 export default function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -42,21 +65,27 @@ export default function TenantDetailPage() {
   const [saving, setSaving] = useState(false);
   const [logoSaving, setLogoSaving] = useState(false);
   const [dualSaving, setDualSaving] = useState(false);
+  const [feeSaving, setFeeSaving] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
   const [secondaryName, setSecondaryName] = useState("");
   const [secondaryEmail, setSecondaryEmail] = useState("");
   const [secondaryPassword, setSecondaryPassword] = useState("");
+  const [feePayments, setFeePayments] = useState<FeePayment[]>([]);
+  const [currentMonthPaid, setCurrentMonthPaid] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
   function load() {
     Promise.all([
       api<Detail>(`/super-admin/tenants/${id}`),
       api<FeatureResponse>(`/super-admin/tenants/${id}/features`),
+      api<FeePaymentsResponse>(`/super-admin/tenants/${id}/fee-payments`),
     ])
-      .then(([detail, features]) => {
+      .then(([detail, features, fees]) => {
         setTenant(detail);
         setFeatureData(features);
         setEnabled(features.enabled);
+        setFeePayments(fees.payments);
+        setCurrentMonthPaid(fees.current_month_paid);
         const phones = detail.contact_phones?.length
           ? detail.contact_phones
           : [{ label: "Business", number: detail.contact_phone || detail.owner_phone || "" }];
@@ -176,11 +205,51 @@ export default function TenantDetailPage() {
     }
   }
 
+  function requestFeeChange(paid: boolean) {
+    if (!tenant) return;
+    setConfirm({
+      title: paid ? "Mark monthly fee paid" : "Mark monthly fee unpaid",
+      message: paid
+        ? `Mark ${tenant.business_name}'s fee as paid for the current month (${money(tenant.plan_amount)})?`
+        : `Mark ${tenant.business_name}'s fee as unpaid for the current month?`,
+      confirmLabel: paid ? "Mark paid" : "Mark unpaid",
+      tone: paid ? "teal" : "danger",
+      action: paid ? "fee-paid" : "fee-unpaid",
+    });
+  }
+
+  async function saveFeePayment(paid: boolean) {
+    if (!tenant) return;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    setFeeSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await api<FeePaymentsResponse>(
+        `/super-admin/tenants/${id}/fee-payments/${year}/${month}`,
+        { method: "PUT", body: JSON.stringify({ paid }) },
+      );
+      setFeePayments(result.payments);
+      setCurrentMonthPaid(result.current_month_paid);
+      setTenant((current) => (current ? { ...current, current_month_paid: result.current_month_paid } : current));
+      setNotice(paid ? "Current month marked as paid." : "Current month marked as unpaid.");
+      setConfirm(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to update fee payment.");
+    } finally {
+      setFeeSaving(false);
+    }
+  }
+
   async function handleConfirm() {
     if (!confirm) return;
     if (confirm.action === "status") await changeStatus();
     if (confirm.action === "dual-enable") await saveDualFinancialView(true);
     if (confirm.action === "dual-disable") await saveDualFinancialView(false);
+    if (confirm.action === "fee-paid") await saveFeePayment(true);
+    if (confirm.action === "fee-unpaid") await saveFeePayment(false);
   }
 
   async function saveFeatures() {
@@ -245,8 +314,8 @@ export default function TenantDetailPage() {
         message={confirm?.message ?? ""}
         confirmLabel={confirm?.confirmLabel}
         tone={confirm?.tone}
-        busy={dualSaving || statusSaving}
-        onCancel={() => { if (!dualSaving && !statusSaving) setConfirm(null); }}
+        busy={dualSaving || statusSaving || feeSaving}
+        onCancel={() => { if (!dualSaving && !statusSaving && !feeSaving) setConfirm(null); }}
         onConfirm={handleConfirm}
       />
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
@@ -283,6 +352,77 @@ export default function TenantDetailPage() {
               <Link href={`/super-admin/tenants/${id}/users`} className={`${buttonClass} mt-6 w-full`}>
                 <Users size={18} />Manage tenant users
               </Link>
+            </Panel>
+
+            <Panel className="p-5">
+              <h2 className="font-display text-2xl font-semibold uppercase">Monthly fee payments</h2>
+              <p className="mt-2 text-sm text-[#6f746e]">
+                Track SaaS fee collection for this business. Mark the current month paid after payment is received.
+              </p>
+              {tenant.payment_plan === "monthly" ? (
+                <>
+                  <div className="mt-4 flex items-center justify-between border border-[#d7d3c8] px-4 py-3">
+                    <div>
+                      <p className="text-sm font-semibold">
+                        Current month · {money(tenant.plan_amount)}
+                      </p>
+                      <p className="mt-1 text-xs text-[#6f746e]">
+                        {periodLabel(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`)}
+                      </p>
+                    </div>
+                    <span
+                      className={`px-2 py-1 text-[10px] font-bold uppercase ${
+                        currentMonthPaid ? "bg-[#167c73]/10 text-[#167c73]" : "bg-[#b84837]/10 text-[#b84837]"
+                      }`}
+                    >
+                      {currentMonthPaid ? "Paid" : "Unpaid"}
+                    </span>
+                  </div>
+                  <button
+                    disabled={feeSaving}
+                    onClick={() => requestFeeChange(!currentMonthPaid)}
+                    className={`${buttonClass} mt-4 w-full ${currentMonthPaid ? "!bg-[#b84837]" : ""}`}
+                  >
+                    {feeSaving ? "Saving..." : currentMonthPaid ? "Mark unpaid" : "Mark paid"}
+                  </button>
+                  <div className="mt-6 overflow-x-auto">
+                    <table className="w-full min-w-[420px] text-left text-sm">
+                      <thead className="bg-[#e7e4db] text-[10px] uppercase text-[#6f746e]">
+                        <tr>
+                          <th className="px-3 py-2">Period</th>
+                          <th>Amount</th>
+                          <th>Paid at</th>
+                          <th>Marked by</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {feePayments.map((payment) => (
+                          <tr key={payment.id} className="border-t border-[#dedad0]">
+                            <td className="px-3 py-3 font-semibold">{periodLabel(payment.period)}</td>
+                            <td>{money(payment.amount)}</td>
+                            <td className="text-xs text-[#6f746e]">
+                              {payment.paid_at
+                                ? new Date(payment.paid_at).toLocaleString("en-LK", {
+                                    dateStyle: "medium",
+                                    timeStyle: "short",
+                                  })
+                                : "—"}
+                            </td>
+                            <td className="text-xs">{payment.marked_by?.name ?? "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {feePayments.length === 0 && (
+                      <p className="mt-3 text-sm text-[#6f746e]">No fee payments recorded yet.</p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p className="mt-4 text-sm text-[#6f746e]">
+                  This tenant is on a yearly plan. Monthly fee tracking does not apply.
+                </p>
+              )}
             </Panel>
 
             <Panel className="p-5">
