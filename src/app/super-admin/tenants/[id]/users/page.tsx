@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { ArrowLeft, Power, Trash2, UserPlus } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
-import { ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
+import { ConfirmModal, ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
 import { api } from "@/lib/api";
 
 type TenantUser = {
@@ -17,13 +17,24 @@ type TenantUser = {
   is_secondary_view?: boolean;
 };
 
+type ConfirmState = {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  tone: "default" | "danger" | "teal";
+  action: "status" | "remove";
+  user: TenantUser;
+};
+
 export default function TenantUsersPage() {
   const { id } = useParams<{ id: string }>();
   const [users, setUsers] = useState<TenantUser[] | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
   const [asSecondary, setAsSecondary] = useState(false);
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
   function load() {
     api<TenantUser[]>(`/super-admin/tenants/${id}/users`)
@@ -59,39 +70,55 @@ export default function TenantUsersPage() {
     }
   }
 
-  async function status(user: TenantUser) {
+  function requestStatus(user: TenantUser) {
     const nextInactive = user.status === "active";
-    const confirmed = window.confirm(
-      nextInactive
+    setConfirm({
+      title: nextInactive ? "Deactivate user" : "Activate user",
+      message: nextInactive
         ? `Deactivate ${user.name} (${user.email})? They will be signed out and cannot log in until activated again.`
         : `Activate ${user.name} (${user.email})? They will be able to sign in again.`,
-    );
-    if (!confirmed) return;
-    setError("");
-    setNotice("");
-    try {
-      await api(`/super-admin/users/${user.id}/${nextInactive ? "deactivate" : "activate"}`, { method: "POST" });
-      setNotice(
-        nextInactive
-          ? `${user.name} has been deactivated and can no longer sign in.`
-          : `${user.name} has been activated and can sign in again.`,
-      );
-      load();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to change user status. Please try again.");
-    }
+      confirmLabel: nextInactive ? "Deactivate" : "Activate",
+      tone: nextInactive ? "danger" : "teal",
+      action: "status",
+      user,
+    });
   }
 
-  async function remove(user: TenantUser) {
-    if (!confirm(`Remove ${user.name}? Historical records will remain intact.`)) return;
+  function requestRemove(user: TenantUser) {
+    setConfirm({
+      title: "Remove user",
+      message: `Remove ${user.name}? Historical records will remain intact.`,
+      confirmLabel: "Remove",
+      tone: "danger",
+      action: "remove",
+      user,
+    });
+  }
+
+  async function handleConfirm() {
+    if (!confirm) return;
+    setActionBusy(true);
     setError("");
     setNotice("");
     try {
-      await api(`/super-admin/users/${user.id}`, { method: "DELETE" });
-      setNotice(`${user.name} has been removed.`);
+      if (confirm.action === "status") {
+        const nextInactive = confirm.user.status === "active";
+        await api(`/super-admin/users/${confirm.user.id}/${nextInactive ? "deactivate" : "activate"}`, { method: "POST" });
+        setNotice(
+          nextInactive
+            ? `${confirm.user.name} has been deactivated and can no longer sign in.`
+            : `${confirm.user.name} has been activated and can sign in again.`,
+        );
+      } else {
+        await api(`/super-admin/users/${confirm.user.id}`, { method: "DELETE" });
+        setNotice(`${confirm.user.name} has been removed.`);
+      }
+      setConfirm(null);
       load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to remove user. Please try again.");
+      setError(caught instanceof Error ? caught.message : "Unable to complete this action. Please try again.");
+    } finally {
+      setActionBusy(false);
     }
   }
 
@@ -107,6 +134,16 @@ export default function TenantUsersPage() {
         </Link>
       }
     >
+      <ConfirmModal
+        open={Boolean(confirm)}
+        title={confirm?.title ?? ""}
+        message={confirm?.message ?? ""}
+        confirmLabel={confirm?.confirmLabel}
+        tone={confirm?.tone}
+        busy={actionBusy}
+        onCancel={() => { if (!actionBusy) setConfirm(null); }}
+        onConfirm={handleConfirm}
+      />
       {error && (
         <div className="mb-5">
           <ErrorMessage message={error} />
@@ -140,10 +177,10 @@ export default function TenantUsersPage() {
                   <span className={`px-2 py-1 text-[10px] font-bold uppercase ${user.status === "active" ? "bg-[#167c73]/10 text-[#167c73]" : "bg-[#b84837]/10 text-[#b84837]"}`}>
                     {user.status}
                   </span>
-                  <button title={`${user.status === "active" ? "Deactivate" : "Activate"} user`} onClick={() => status(user)} className="grid size-9 place-items-center border border-[#cbc7bc]">
+                  <button title={`${user.status === "active" ? "Deactivate" : "Activate"} user`} onClick={() => requestStatus(user)} className="grid size-9 place-items-center border border-[#cbc7bc]">
                     <Power size={16} />
                   </button>
-                  <button title="Delete user" onClick={() => remove(user)} className="grid size-9 place-items-center border border-[#cbc7bc] text-[#b84837]">
+                  <button title="Delete user" onClick={() => requestRemove(user)} className="grid size-9 place-items-center border border-[#cbc7bc] text-[#b84837]">
                     <Trash2 size={16} />
                   </button>
                 </div>

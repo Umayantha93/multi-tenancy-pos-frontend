@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { Check, Plus, Power, Trash2, Users } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
-import { ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
+import { ConfirmModal, ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
 import { api, mediaUrl, PhoneEntry, Tenant } from "@/lib/api";
 import { profileFor } from "@/lib/business-profiles";
 import { groupModules } from "@/lib/feature-modules";
@@ -23,6 +23,14 @@ type Detail = Tenant & {
 };
 type FeatureResponse = { available: Feature[]; enabled: string[]; business_type?: string };
 
+type ConfirmState = {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  tone: "default" | "danger" | "teal";
+  action: "status" | "dual-enable" | "dual-disable";
+};
+
 export default function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [tenant, setTenant] = useState<Detail | null>(null);
@@ -34,9 +42,11 @@ export default function TenantDetailPage() {
   const [saving, setSaving] = useState(false);
   const [logoSaving, setLogoSaving] = useState(false);
   const [dualSaving, setDualSaving] = useState(false);
+  const [statusSaving, setStatusSaving] = useState(false);
   const [secondaryName, setSecondaryName] = useState("");
   const [secondaryEmail, setSecondaryEmail] = useState("");
   const [secondaryPassword, setSecondaryPassword] = useState("");
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
   function load() {
     Promise.all([
@@ -59,15 +69,49 @@ export default function TenantDetailPage() {
 
   const secondaryUser = tenant?.users?.find((user) => user.is_secondary_view);
 
+  function requestStatusChange() {
+    if (!tenant) return;
+    const nextInactive = tenant.status === "active";
+    setConfirm({
+      title: nextInactive ? "Deactivate tenant" : "Activate tenant",
+      message: nextInactive
+        ? `Deactivate ${tenant.business_name}? All users for this business will be signed out and cannot log in until you activate it again.`
+        : `Activate ${tenant.business_name}? Users will be able to sign in again.`,
+      confirmLabel: nextInactive ? "Deactivate" : "Activate",
+      tone: nextInactive ? "danger" : "teal",
+      action: "status",
+    });
+  }
+
+  function requestDualChange(enable: boolean) {
+    if (!tenant) return;
+    if (enable) {
+      if (!secondaryUser && (!secondaryName.trim() || !secondaryEmail.trim() || secondaryPassword.length < 8)) {
+        setError("Enter the secondary login name, email, and a password (at least 8 characters) before enabling.");
+        return;
+      }
+      setConfirm({
+        title: "Enable dual financial view",
+        message: "Enable Dual Financial View for this tenant? A secondary login will see reduced financial figures.",
+        confirmLabel: "Enable",
+        tone: "teal",
+        action: "dual-enable",
+      });
+      return;
+    }
+    setConfirm({
+      title: "Disable dual financial view",
+      message: "Disable Dual Financial View? The secondary login will be deactivated and can no longer sign in.",
+      confirmLabel: "Disable",
+      tone: "danger",
+      action: "dual-disable",
+    });
+  }
+
   async function changeStatus() {
     if (!tenant) return;
     const nextInactive = tenant.status === "active";
-    const confirmed = window.confirm(
-      nextInactive
-        ? `Deactivate ${tenant.business_name}? All users for this business will be signed out and cannot log in until you activate it again.`
-        : `Activate ${tenant.business_name}? Users will be able to sign in again.`,
-    );
-    if (!confirmed) return;
+    setStatusSaving(true);
     setError("");
     setNotice("");
     try {
@@ -78,22 +122,16 @@ export default function TenantDetailPage() {
           ? `${tenant.business_name} has been deactivated. Tenant users can no longer sign in.`
           : `${tenant.business_name} has been activated. Tenant users can sign in again.`,
       );
+      setConfirm(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to change tenant status. Please try again.");
+    } finally {
+      setStatusSaving(false);
     }
   }
 
   async function saveDualFinancialView(enable: boolean) {
     if (!tenant) return;
-    if (enable) {
-      if (!secondaryUser && (!secondaryName.trim() || !secondaryEmail.trim() || secondaryPassword.length < 8)) {
-        setError("Enter the secondary login name, email, and a password (at least 8 characters) before enabling.");
-        return;
-      }
-      if (!window.confirm("Enable Dual Financial View for this tenant? A secondary login will see reduced financial figures.")) return;
-    } else if (!window.confirm("Disable Dual Financial View? The secondary login will be deactivated and can no longer sign in.")) {
-      return;
-    }
     setDualSaving(true);
     setError("");
     setNotice("");
@@ -130,11 +168,19 @@ export default function TenantDetailPage() {
           ? "Dual Financial View is enabled. The secondary login is active."
           : "Dual Financial View is disabled. The secondary login has been deactivated.",
       );
+      setConfirm(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to update Dual Financial View. Please try again.");
     } finally {
       setDualSaving(false);
     }
+  }
+
+  async function handleConfirm() {
+    if (!confirm) return;
+    if (confirm.action === "status") await changeStatus();
+    if (confirm.action === "dual-enable") await saveDualFinancialView(true);
+    if (confirm.action === "dual-disable") await saveDualFinancialView(false);
   }
 
   async function saveFeatures() {
@@ -186,13 +232,23 @@ export default function TenantDetailPage() {
       eyebrow="Business control"
       action={tenant && (
         <button
-          onClick={changeStatus}
+          onClick={requestStatusChange}
           className={`flex h-10 items-center gap-2 px-4 text-sm font-semibold text-white ${tenant.status === "active" ? "bg-[#b84837]" : "bg-[#167c73]"}`}
         >
           <Power size={17} />{tenant.status === "active" ? "Deactivate" : "Activate"}
         </button>
       )}
     >
+      <ConfirmModal
+        open={Boolean(confirm)}
+        title={confirm?.title ?? ""}
+        message={confirm?.message ?? ""}
+        confirmLabel={confirm?.confirmLabel}
+        tone={confirm?.tone}
+        busy={dualSaving || statusSaving}
+        onCancel={() => { if (!dualSaving && !statusSaving) setConfirm(null); }}
+        onConfirm={handleConfirm}
+      />
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
       {notice && <div className="mb-5"><SuccessMessage message={notice} /></div>}
       {!tenant || !featureData ? (
@@ -263,7 +319,7 @@ export default function TenantDetailPage() {
               )}
               <button
                 disabled={dualSaving || (!tenant.dual_financial_view_enabled && !secondaryUser && (!secondaryName || !secondaryEmail || secondaryPassword.length < 8))}
-                onClick={() => saveDualFinancialView(!tenant.dual_financial_view_enabled)}
+                onClick={() => requestDualChange(!tenant.dual_financial_view_enabled)}
                 className={`${buttonClass} mt-4 w-full ${tenant.dual_financial_view_enabled ? "!bg-[#b84837]" : ""}`}
               >
                 {dualSaving
