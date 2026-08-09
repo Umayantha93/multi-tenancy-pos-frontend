@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel } from "@/components/ui";
-import { api, money } from "@/lib/api";
+import { api, formatDate, money } from "@/lib/api";
 
 type CustomerDetail = {
   id: number;
@@ -121,7 +121,7 @@ export default function CustomerDetailPage() {
                   <tr key={bill.id} className="border-t border-[#e2ded4]">
                     <td className="px-5 py-4">
                       <p className="font-semibold">{bill.bill_number}</p>
-                      <p className="text-xs text-[#6f746e]">{bill.admission_date}</p>
+                      <p className="text-xs text-[#6f746e]">{formatDate(bill.admission_date)}</p>
                     </td>
                     <td>{bill.vehicle?.number_plate ?? "—"}</td>
                     <td>

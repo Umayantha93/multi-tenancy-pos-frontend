@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { Check, Plus, Power, Trash2, Users } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
-import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
+import { ConfirmModal, ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
 import { api, mediaUrl, PhoneEntry, Tenant } from "@/lib/api";
 import { profileFor } from "@/lib/business-profiles";
 import { groupModules } from "@/lib/feature-modules";
@@ -16,11 +16,43 @@ type Detail = Tenant & {
   owner_email: string;
   owner_phone: string;
   plan: string | null;
+  dual_financial_view_enabled?: boolean;
+  current_month_paid?: boolean;
   users_count: number;
-  users: Array<{ id: number; name: string; email: string; role: string; status: string }>;
+  users: Array<{ id: number; name: string; email: string; role: string; status: string; is_secondary_view?: boolean }>;
   features: Feature[];
 };
 type FeatureResponse = { available: Feature[]; enabled: string[]; business_type?: string };
+type FeePayment = {
+  id: number;
+  year: number;
+  month: number;
+  period: string;
+  amount: number | string;
+  paid_at: string;
+  notes?: string | null;
+  marked_by?: { id: number; name: string; email: string } | null;
+};
+type FeePaymentsResponse = { current_month_paid: boolean; payments: FeePayment[] };
+
+type ConfirmState = {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  tone: "default" | "danger" | "teal";
+  action: "status" | "dual-enable" | "dual-disable" | "fee-paid" | "fee-unpaid";
+};
+
+function money(value: number | string | null | undefined) {
+  if (value == null) return "—";
+  return `LKR ${Number(value).toLocaleString("en-LK", { minimumFractionDigits: 2 })}`;
+}
+
+function periodLabel(period: string) {
+  const [year, month] = period.split("-").map(Number);
+  if (!year || !month) return period;
+  return new Date(year, month - 1, 1).toLocaleString("en-LK", { month: "long", year: "numeric" });
+}
 
 export default function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -29,18 +61,31 @@ export default function TenantDetailPage() {
   const [enabled, setEnabled] = useState<string[]>([]);
   const [contactPhones, setContactPhones] = useState<PhoneEntry[]>([{ label: "Business", number: "" }]);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [logoSaving, setLogoSaving] = useState(false);
+  const [dualSaving, setDualSaving] = useState(false);
+  const [feeSaving, setFeeSaving] = useState(false);
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [secondaryName, setSecondaryName] = useState("");
+  const [secondaryEmail, setSecondaryEmail] = useState("");
+  const [secondaryPassword, setSecondaryPassword] = useState("");
+  const [feePayments, setFeePayments] = useState<FeePayment[]>([]);
+  const [currentMonthPaid, setCurrentMonthPaid] = useState(false);
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
   function load() {
     Promise.all([
       api<Detail>(`/super-admin/tenants/${id}`),
       api<FeatureResponse>(`/super-admin/tenants/${id}/features`),
+      api<FeePaymentsResponse>(`/super-admin/tenants/${id}/fee-payments`),
     ])
-      .then(([detail, features]) => {
+      .then(([detail, features, fees]) => {
         setTenant(detail);
         setFeatureData(features);
         setEnabled(features.enabled);
+        setFeePayments(fees.payments);
+        setCurrentMonthPaid(fees.current_month_paid);
         const phones = detail.contact_phones?.length
           ? detail.contact_phones
           : [{ label: "Business", number: detail.contact_phone || detail.owner_phone || "" }];
@@ -51,15 +96,160 @@ export default function TenantDetailPage() {
 
   useEffect(load, [id]);
 
+  const secondaryUser = tenant?.users?.find((user) => user.is_secondary_view);
+
+  function requestStatusChange() {
+    if (!tenant) return;
+    const nextInactive = tenant.status === "active";
+    setConfirm({
+      title: nextInactive ? "Deactivate tenant" : "Activate tenant",
+      message: nextInactive
+        ? `Deactivate ${tenant.business_name}? All users for this business will be signed out and cannot log in until you activate it again.`
+        : `Activate ${tenant.business_name}? Users will be able to sign in again.`,
+      confirmLabel: nextInactive ? "Deactivate" : "Activate",
+      tone: nextInactive ? "danger" : "teal",
+      action: "status",
+    });
+  }
+
+  function requestDualChange(enable: boolean) {
+    if (!tenant) return;
+    if (enable) {
+      if (!secondaryUser && (!secondaryName.trim() || !secondaryEmail.trim() || secondaryPassword.length < 8)) {
+        setError("Enter the secondary login name, email, and a password (at least 8 characters) before enabling.");
+        return;
+      }
+      setConfirm({
+        title: "Enable dual financial view",
+        message: "Enable Dual Financial View for this tenant? Secondary sees full amounts except labor, which shows at 50%.",
+        confirmLabel: "Enable",
+        tone: "teal",
+        action: "dual-enable",
+      });
+      return;
+    }
+    setConfirm({
+      title: "Disable dual financial view",
+      message: "Disable Dual Financial View? The secondary login will be deactivated and can no longer sign in.",
+      confirmLabel: "Disable",
+      tone: "danger",
+      action: "dual-disable",
+    });
+  }
+
   async function changeStatus() {
     if (!tenant) return;
+    const nextInactive = tenant.status === "active";
+    setStatusSaving(true);
     setError("");
+    setNotice("");
     try {
-      const result = await api<Detail>(`/super-admin/tenants/${id}/${tenant.status === "active" ? "deactivate" : "activate"}`, { method: "POST" });
+      const result = await api<Detail>(`/super-admin/tenants/${id}/${nextInactive ? "deactivate" : "activate"}`, { method: "POST" });
       setTenant({ ...tenant, status: result.status });
+      setNotice(
+        nextInactive
+          ? `${tenant.business_name} has been deactivated. Tenant users can no longer sign in.`
+          : `${tenant.business_name} has been activated. Tenant users can sign in again.`,
+      );
+      setConfirm(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to change status.");
+      setError(caught instanceof Error ? caught.message : "Unable to change tenant status. Please try again.");
+    } finally {
+      setStatusSaving(false);
     }
+  }
+
+  async function saveDualFinancialView(enable: boolean) {
+    if (!tenant) return;
+    setDualSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await api<{ tenant: Detail; secondary_user: Detail["users"][number] | null }>(
+        `/super-admin/tenants/${id}/dual-financial-view`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            enabled: enable,
+            ...(enable && !secondaryUser
+              ? {
+                  secondary_name: secondaryName.trim(),
+                  secondary_email: secondaryEmail.trim(),
+                  secondary_password: secondaryPassword,
+                }
+              : {}),
+          }),
+        },
+      );
+      setTenant((current) =>
+        current
+          ? {
+              ...current,
+              ...result.tenant,
+              dual_financial_view_enabled: result.tenant.dual_financial_view_enabled,
+              users: result.tenant.users ?? current.users,
+            }
+          : current,
+      );
+      setSecondaryPassword("");
+      setNotice(
+        enable
+          ? "Dual Financial View is enabled. The secondary login is active."
+          : "Dual Financial View is disabled. The secondary login has been deactivated.",
+      );
+      setConfirm(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to update Dual Financial View. Please try again.");
+    } finally {
+      setDualSaving(false);
+    }
+  }
+
+  function requestFeeChange(paid: boolean) {
+    if (!tenant) return;
+    setConfirm({
+      title: paid ? "Mark monthly fee paid" : "Mark monthly fee unpaid",
+      message: paid
+        ? `Mark ${tenant.business_name}'s fee as paid for the current month (${money(tenant.plan_amount)})?`
+        : `Mark ${tenant.business_name}'s fee as unpaid for the current month?`,
+      confirmLabel: paid ? "Mark paid" : "Mark unpaid",
+      tone: paid ? "teal" : "danger",
+      action: paid ? "fee-paid" : "fee-unpaid",
+    });
+  }
+
+  async function saveFeePayment(paid: boolean) {
+    if (!tenant) return;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    setFeeSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await api<FeePaymentsResponse>(
+        `/super-admin/tenants/${id}/fee-payments/${year}/${month}`,
+        { method: "PUT", body: JSON.stringify({ paid }) },
+      );
+      setFeePayments(result.payments);
+      setCurrentMonthPaid(result.current_month_paid);
+      setTenant((current) => (current ? { ...current, current_month_paid: result.current_month_paid } : current));
+      setNotice(paid ? "Current month marked as paid." : "Current month marked as unpaid.");
+      setConfirm(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to update fee payment.");
+    } finally {
+      setFeeSaving(false);
+    }
+  }
+
+  async function handleConfirm() {
+    if (!confirm) return;
+    if (confirm.action === "status") await changeStatus();
+    if (confirm.action === "dual-enable") await saveDualFinancialView(true);
+    if (confirm.action === "dual-disable") await saveDualFinancialView(false);
+    if (confirm.action === "fee-paid") await saveFeePayment(true);
+    if (confirm.action === "fee-unpaid") await saveFeePayment(false);
   }
 
   async function saveFeatures() {
@@ -111,14 +301,25 @@ export default function TenantDetailPage() {
       eyebrow="Business control"
       action={tenant && (
         <button
-          onClick={changeStatus}
+          onClick={requestStatusChange}
           className={`flex h-10 items-center gap-2 px-4 text-sm font-semibold text-white ${tenant.status === "active" ? "bg-[#b84837]" : "bg-[#167c73]"}`}
         >
           <Power size={17} />{tenant.status === "active" ? "Deactivate" : "Activate"}
         </button>
       )}
     >
+      <ConfirmModal
+        open={Boolean(confirm)}
+        title={confirm?.title ?? ""}
+        message={confirm?.message ?? ""}
+        confirmLabel={confirm?.confirmLabel}
+        tone={confirm?.tone}
+        busy={dualSaving || statusSaving || feeSaving}
+        onCancel={() => { if (!dualSaving && !statusSaving && !feeSaving) setConfirm(null); }}
+        onConfirm={handleConfirm}
+      />
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
+      {notice && <div className="mb-5"><SuccessMessage message={notice} /></div>}
       {!tenant || !featureData ? (
         <PageState message="Loading tenant controls..." />
       ) : (
@@ -151,6 +352,122 @@ export default function TenantDetailPage() {
               <Link href={`/super-admin/tenants/${id}/users`} className={`${buttonClass} mt-6 w-full`}>
                 <Users size={18} />Manage tenant users
               </Link>
+            </Panel>
+
+            <Panel className="p-5">
+              <h2 className="font-display text-2xl font-semibold uppercase">Monthly fee payments</h2>
+              <p className="mt-2 text-sm text-[#6f746e]">
+                Track SaaS fee collection for this business. Mark the current month paid after payment is received.
+              </p>
+              {tenant.payment_plan === "monthly" ? (
+                <>
+                  <div className="mt-4 flex items-center justify-between border border-[#d7d3c8] px-4 py-3">
+                    <div>
+                      <p className="text-sm font-semibold">
+                        Current month · {money(tenant.plan_amount)}
+                      </p>
+                      <p className="mt-1 text-xs text-[#6f746e]">
+                        {periodLabel(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`)}
+                      </p>
+                    </div>
+                    <span
+                      className={`px-2 py-1 text-[10px] font-bold uppercase ${
+                        currentMonthPaid ? "bg-[#167c73]/10 text-[#167c73]" : "bg-[#b84837]/10 text-[#b84837]"
+                      }`}
+                    >
+                      {currentMonthPaid ? "Paid" : "Unpaid"}
+                    </span>
+                  </div>
+                  <button
+                    disabled={feeSaving}
+                    onClick={() => requestFeeChange(!currentMonthPaid)}
+                    className={`${buttonClass} mt-4 w-full ${currentMonthPaid ? "!bg-[#b84837]" : ""}`}
+                  >
+                    {feeSaving ? "Saving..." : currentMonthPaid ? "Mark unpaid" : "Mark paid"}
+                  </button>
+                  <div className="mt-6 overflow-x-auto">
+                    <table className="w-full min-w-[420px] text-left text-sm">
+                      <thead className="bg-[#e7e4db] text-[10px] uppercase text-[#6f746e]">
+                        <tr>
+                          <th className="px-3 py-2">Period</th>
+                          <th>Amount</th>
+                          <th>Paid at</th>
+                          <th>Marked by</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {feePayments.map((payment) => (
+                          <tr key={payment.id} className="border-t border-[#dedad0]">
+                            <td className="px-3 py-3 font-semibold">{periodLabel(payment.period)}</td>
+                            <td>{money(payment.amount)}</td>
+                            <td className="text-xs text-[#6f746e]">
+                              {payment.paid_at
+                                ? new Date(payment.paid_at).toLocaleString("en-LK", {
+                                    dateStyle: "medium",
+                                    timeStyle: "short",
+                                  })
+                                : "—"}
+                            </td>
+                            <td className="text-xs">{payment.marked_by?.name ?? "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {feePayments.length === 0 && (
+                      <p className="mt-3 text-sm text-[#6f746e]">No fee payments recorded yet.</p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p className="mt-4 text-sm text-[#6f746e]">
+                  This tenant is on a yearly plan. Monthly fee tracking does not apply.
+                </p>
+              )}
+            </Panel>
+
+            <Panel className="p-5">
+              <h2 className="font-display text-2xl font-semibold uppercase">Dual financial view</h2>
+              <p className="mt-2 text-sm text-[#6f746e]">
+                Enable Dual Financial View. Secondary login: amounts stay at 100%, except labor which shows at 50%. Platform-only — never shown to tenant users.
+              </p>
+              <div className="mt-4 flex items-center justify-between border border-[#d7d3c8] px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold">{tenant.dual_financial_view_enabled ? "Enabled" : "Disabled"}</p>
+                  {secondaryUser && (
+                    <p className="mt-1 text-xs text-[#6f746e]">{secondaryUser.email} · {secondaryUser.status}</p>
+                  )}
+                </div>
+                <span className={`px-2 py-1 text-[10px] font-bold uppercase ${tenant.dual_financial_view_enabled ? "bg-[#167c73]/10 text-[#167c73]" : "bg-[#e7e4db] text-[#6f746e]"}`}>
+                  {tenant.dual_financial_view_enabled ? "On" : "Off"}
+                </span>
+              </div>
+              {!tenant.dual_financial_view_enabled && !secondaryUser && (
+                <div className="mt-4 space-y-3">
+                  <label className="block text-xs font-bold uppercase">
+                    Secondary name
+                    <input value={secondaryName} onChange={(e) => setSecondaryName(e.target.value)} className={`${inputClass} mt-2`} />
+                  </label>
+                  <label className="block text-xs font-bold uppercase">
+                    Secondary email
+                    <input type="email" value={secondaryEmail} onChange={(e) => setSecondaryEmail(e.target.value)} className={`${inputClass} mt-2`} />
+                  </label>
+                  <label className="block text-xs font-bold uppercase">
+                    Secondary password
+                    <input type="password" minLength={8} value={secondaryPassword} onChange={(e) => setSecondaryPassword(e.target.value)} className={`${inputClass} mt-2`} />
+                  </label>
+                </div>
+              )}
+              <button
+                disabled={dualSaving || (!tenant.dual_financial_view_enabled && !secondaryUser && (!secondaryName || !secondaryEmail || secondaryPassword.length < 8))}
+                onClick={() => requestDualChange(!tenant.dual_financial_view_enabled)}
+                className={`${buttonClass} mt-4 w-full ${tenant.dual_financial_view_enabled ? "!bg-[#b84837]" : ""}`}
+              >
+                {dualSaving
+                  ? "Saving..."
+                  : tenant.dual_financial_view_enabled
+                    ? "Disable dual financial view"
+                    : "Enable dual financial view"}
+              </button>
             </Panel>
 
             <Panel className="p-5">

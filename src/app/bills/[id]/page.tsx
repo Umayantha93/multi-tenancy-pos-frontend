@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { CreditCard, Plus, Printer, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
+import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { api, currentUser, mediaUrl, money, storeSession, Tenant, User } from "@/lib/api";
 import { billItemLabel, profileFor } from "@/lib/business-profiles";
 
@@ -24,6 +24,10 @@ type Bill = {
   payments: Array<{ id: number; amount: string; method: string; paid_at: string }>;
 };
 
+type PendingDelete =
+  | { kind: "item"; id: number; label: string }
+  | { kind: "payment"; id: number; method: string; amount: string };
+
 export default function BillDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [bill, setBill] = useState<Bill | null>(null);
@@ -37,6 +41,8 @@ export default function BillDetailPage() {
   const [outsidePart, setOutsidePart] = useState(false);
   const [customerPart, setCustomerPart] = useState(false);
   const [formKey, setFormKey] = useState(0);
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const logoUrl = mediaUrl(tenant?.logo_url || tenant?.logo);
   const contactEmail = tenant?.contact_email || tenant?.owner_email || "";
@@ -155,10 +161,49 @@ export default function BillDetailPage() {
   }
 
   async function remove(itemId: number) {
-    if (!confirm("Remove this line item? Inventory stock will be restored.")) return;
-    await api(`/bills/${id}/items/${itemId}`, { method: "DELETE" });
-    load();
-    api<{ data: Part[] }>("/parts?per_page=100").then((result) => setParts(result.data)).catch(() => undefined);
+    const item = bill?.items.find((entry) => entry.id === itemId);
+    setPendingDelete({
+      kind: "item",
+      id: itemId,
+      label: item?.description || "this line item",
+    });
+  }
+
+  async function removePayment(paymentId: number) {
+    const payment = bill?.payments.find((entry) => entry.id === paymentId);
+    if (!payment) return;
+    setPendingDelete({
+      kind: "payment",
+      id: paymentId,
+      method: payment.method.replace("_", " "),
+      amount: payment.amount,
+    });
+  }
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    setError("");
+    try {
+      if (pendingDelete.kind === "item") {
+        await api(`/bills/${id}/items/${pendingDelete.id}`, { method: "DELETE" });
+        api<{ data: Part[] }>("/parts?per_page=100").then((result) => setParts(result.data)).catch(() => undefined);
+      } else {
+        await api(`/bills/${id}/payments/${pendingDelete.id}`, { method: "DELETE" });
+      }
+      setPendingDelete(null);
+      load();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : pendingDelete.kind === "item"
+            ? "Could not remove item."
+            : "Could not remove payment.",
+      );
+    } finally {
+      setDeleting(false);
+    }
   }
 
   if (!bill) {
@@ -179,6 +224,22 @@ export default function BillDetailPage() {
         </button>
       }
     >
+      <ConfirmModal
+        open={Boolean(pendingDelete)}
+        title={pendingDelete?.kind === "payment" ? "Remove payment" : "Remove line item"}
+        message={
+          pendingDelete?.kind === "payment"
+            ? `Remove the ${pendingDelete.method.toUpperCase()} payment of ${money(pendingDelete.amount)} from this bill? The bill balance will be recalculated.`
+            : `Remove “${pendingDelete?.label ?? "this line item"}” from the bill? Inventory stock will be restored if this line used stock.`
+        }
+        confirmLabel={pendingDelete?.kind === "payment" ? "Remove payment" : "Remove item"}
+        tone="danger"
+        busy={deleting}
+        onCancel={() => {
+          if (!deleting) setPendingDelete(null);
+        }}
+        onConfirm={confirmDelete}
+      />
       <Panel className="bill-letterhead mb-5 p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-4">
@@ -321,9 +382,17 @@ export default function BillDetailPage() {
               </div>
               <div className="divide-y divide-[#e2ded4]">
                 {bill.payments.map((payment) => (
-                  <div key={payment.id} className="flex items-center justify-between px-5 py-3 text-sm">
+                  <div key={payment.id} className="flex items-center gap-3 px-5 py-3 text-sm">
                     <span className="uppercase text-[#6f746e]">{payment.method.replace("_", " ")}</span>
-                    <strong>{money(payment.amount)}</strong>
+                    <strong className="ml-auto tabular-nums">{money(payment.amount)}</strong>
+                    <button
+                      type="button"
+                      onClick={() => removePayment(payment.id)}
+                      className="no-print text-[#b84837]"
+                      title="Remove payment"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
                 ))}
               </div>
