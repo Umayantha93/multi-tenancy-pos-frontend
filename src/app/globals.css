@@ -53,6 +53,11 @@ button, a { -webkit-tap-highlight-color: transparent; }
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+  .bill-status-seal {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    opacity: 0.92;
+  }
   .bill-items-table {
     table-layout: fixed;
     width: 100% !important;

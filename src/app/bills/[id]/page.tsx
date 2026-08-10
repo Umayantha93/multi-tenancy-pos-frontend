@@ -240,8 +240,16 @@ export default function BillDetailPage() {
         }}
         onConfirm={confirmDelete}
       />
-      <Panel className="bill-letterhead mb-5 p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+      <Panel className="bill-letterhead relative mb-5 overflow-hidden p-5">
+        {(bill.status === "paid" || (Number(bill.balance_due) <= 0 && Number(bill.amount_paid) > 0)) && (
+          <div
+            aria-hidden="true"
+            className="bill-status-seal pointer-events-none absolute right-6 top-1/2 z-10 hidden -translate-y-1/2 rotate-[-18deg] select-none border-[3px] border-[#167c73] px-5 py-2 font-display text-6xl font-bold uppercase tracking-[0.12em] text-[#167c73] print:block sm:right-10"
+          >
+            Paid
+          </div>
+        )}
+        <div className="relative z-0 flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-4">
             {logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -413,7 +421,7 @@ export default function BillDetailPage() {
                   {money(bill.balance_due)}
                 </strong>
               </div>
-              <div className="flex justify-between gap-6 border-t-2 border-[#20221f] pt-4 font-display text-2xl uppercase">
+              <div className="flex justify-between gap-6 border-t-2 border-[#20221f] pt-4 text-sm uppercase">
                 <span>Balance</span>
                 <strong className={`tabular-nums ${Number(bill.customer_balance ?? 0) > 0 ? "text-[#167c73]" : ""}`}>
                   {money(bill.customer_balance ?? 0)}
