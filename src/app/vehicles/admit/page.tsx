@@ -11,7 +11,7 @@ import { api } from "@/lib/api";
 type VehicleMatch = {
   id: number;
   number_plate: string;
-  chassis_number: string;
+  chassis_number?: string | null;
   make?: string;
   model?: string;
   year?: number;
@@ -23,7 +23,7 @@ const fields = [
   ["customer_name", "Customer name", "text", true],
   ["customer_phone", "Phone number", "tel", true],
   ["number_plate", "Number plate", "text", true],
-  ["chassis_number", "Chassis number", "text", true],
+  ["chassis_number", "Chassis number", "text", false],
   ["make", "Make", "text", false],
   ["model", "Model", "text", false],
   ["year", "Vehicle year", "number", false],

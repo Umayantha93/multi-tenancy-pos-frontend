@@ -88,7 +88,7 @@ export default function CustomerDetailPage() {
                 <div key={vehicle.id} className="px-5 py-3 text-sm">
                   <p className="font-semibold">{vehicle.number_plate}</p>
                   <p className="text-xs text-[#6f746e]">
-                    {vehicle.make} {vehicle.model} · {vehicle.chassis_number}
+                    {vehicle.make} {vehicle.model} · {vehicle.chassis_number || "No chassis"}
                   </p>
                 </div>
               ))}
