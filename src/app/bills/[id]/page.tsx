@@ -18,7 +18,7 @@ type Bill = {
   amount_paid: string;
   balance_due: string;
   customer_balance?: string | number;
-  customer: { name: string; phone: string } | null;
+  customer: { name: string; phone: string; address?: string | null } | null;
   vehicle: { number_plate: string; chassis_number: string; make?: string; model?: string } | null;
   items: Array<{ id: number; type: string; description: string; quantity: string; unit_price: string; line_total: string }>;
   payments: Array<{ id: number; amount: string; method: string; paid_at: string }>;
@@ -269,6 +269,7 @@ export default function BillDetailPage() {
               </p>
               <p className="mt-2 text-sm text-[#6f746e]">{bill.bill_number}</p>
               <div className="mt-3 space-y-1 text-sm">
+                {tenant?.address && <p><span className="text-[#6f746e]">Address:</span> {tenant.address}</p>}
                 {contactPhones.map((phone) => (
                   <p key={phone}><span className="text-[#6f746e]">Mobile:</span> {phone}</p>
                 ))}
@@ -291,6 +292,9 @@ export default function BillDetailPage() {
                 <p className="text-[10px] font-bold uppercase text-[#6f746e]">Customer</p>
                 <p className="mt-1 font-semibold">{bill.customer?.name ?? "Walk-in"}</p>
                 <p className="text-sm text-[#6f746e]">{bill.customer?.phone}</p>
+                {bill.customer?.address && (
+                  <p className="mt-1 text-sm text-[#6f746e]">{bill.customer.address}</p>
+                )}
               </div>
               {bill.vehicle ? (
                 <>

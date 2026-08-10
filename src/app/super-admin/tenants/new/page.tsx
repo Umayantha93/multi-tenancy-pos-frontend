@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, Check, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
+import { AddressField } from "@/components/address-field";
 import { ErrorMessage, Panel, PasswordInput, buttonClass, inputClass } from "@/components/ui";
 import { api, BusinessType, Tenant } from "@/lib/api";
 import { BUSINESS_TYPE_OPTIONS, PAYMENT_PLAN_OPTIONS, PLAN_OPTIONS, defaultPlanFor, profileFor } from "@/lib/business-profiles";
@@ -182,6 +183,7 @@ export default function NewTenantPage() {
                 Business email
                 <input name="contact_email" type="email" placeholder="Shown on printed bills" className={`mt-2 ${inputClass}`} />
               </label>
+              <AddressField name="address" label="Business address" className="sm:col-span-2" placeholder="Shown on printed bills" />
               <label className="text-sm font-semibold">
                 Owner name
                 <input name="owner_name" required className={`mt-2 ${inputClass}`} />

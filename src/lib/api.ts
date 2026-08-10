@@ -62,6 +62,7 @@ export type Tenant = {
   contact_email?: string | null;
   contact_phone?: string | null;
   contact_phones?: PhoneEntry[] | null;
+  address?: string | null;
 };
 export type User = {
   id: number;
