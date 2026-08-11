@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { Check, Plus, Power, Trash2, Users } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
+import { AddressField } from "@/components/address-field";
 import { ConfirmModal, ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
 import { api, mediaUrl, PhoneEntry, Tenant } from "@/lib/api";
 import { profileFor } from "@/lib/business-profiles";
@@ -60,6 +61,7 @@ export default function TenantDetailPage() {
   const [featureData, setFeatureData] = useState<FeatureResponse | null>(null);
   const [enabled, setEnabled] = useState<string[]>([]);
   const [contactPhones, setContactPhones] = useState<PhoneEntry[]>([{ label: "Business", number: "" }]);
+  const [address, setAddress] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
@@ -90,6 +92,7 @@ export default function TenantDetailPage() {
           ? detail.contact_phones
           : [{ label: "Business", number: detail.contact_phone || detail.owner_phone || "" }];
         setContactPhones(phones);
+        setAddress(detail.address || "");
       })
       .catch((caught) => setError(caught.message));
   }
@@ -271,22 +274,27 @@ export default function TenantDetailPage() {
     }
   }
 
-  async function uploadLogo(event: FormEvent<HTMLFormElement>) {
+  async function saveTenantDetails(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLogoSaving(true);
     setError("");
+    setNotice("");
     const form = event.currentTarget;
     const formData = new FormData(form);
+    formData.set("address", address);
     formData.set("contact_phones", JSON.stringify(contactPhones.filter((p) => p.number.trim())));
     if (contactPhones.find((p) => p.number.trim())) {
       formData.set("contact_phone", contactPhones.find((p) => p.number.trim())!.number);
     }
     try {
       const updated = await api<Detail>(`/super-admin/tenants/${id}`, { method: "POST", body: formData });
-      setTenant((current) => current ? { ...current, ...updated } : updated);
-      form.reset();
+      setTenant((current) => (current ? { ...current, ...updated } : updated));
+      setAddress(updated.address || "");
+      setNotice("Tenant details saved.");
+      const logoInput = form.querySelector<HTMLInputElement>('input[name="logo"]');
+      if (logoInput) logoInput.value = "";
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to upload logo.");
+      setError(caught instanceof Error ? caught.message : "Unable to save tenant details.");
     } finally {
       setLogoSaving(false);
     }
@@ -344,6 +352,10 @@ export default function TenantDetailPage() {
               <dl className="mt-7 space-y-3 text-sm">
                 <div className="flex justify-between border-b border-[#e2ded4] pb-3"><dt className="text-[#6f746e]">Owner</dt><dd className="font-semibold">{tenant.owner_name}</dd></div>
                 <div className="flex justify-between border-b border-[#e2ded4] pb-3"><dt className="text-[#6f746e]">Email</dt><dd>{tenant.owner_email}</dd></div>
+                <div className="flex justify-between gap-4 border-b border-[#e2ded4] pb-3">
+                  <dt className="shrink-0 text-[#6f746e]">Address</dt>
+                  <dd className="text-right">{tenant.address || "—"}</dd>
+                </div>
                 <div className="flex justify-between border-b border-[#e2ded4] pb-3"><dt className="text-[#6f746e]">Plan</dt><dd>{tenant.plan ?? "Custom"}</dd></div>
                 <div className="flex justify-between border-b border-[#e2ded4] pb-3"><dt className="text-[#6f746e]">Payment plan</dt><dd className="capitalize">{tenant.payment_plan ?? "monthly"}</dd></div>
                 <div className="flex justify-between border-b border-[#e2ded4] pb-3"><dt className="text-[#6f746e]">Amount</dt><dd>{tenant.plan_amount != null ? `LKR ${Number(tenant.plan_amount).toLocaleString("en-LK", { minimumFractionDigits: 2 })}` : "—"}</dd></div>
@@ -471,9 +483,20 @@ export default function TenantDetailPage() {
             </Panel>
 
             <Panel className="p-5">
-              <h2 className="font-display text-2xl font-semibold uppercase">Bill branding</h2>
-              <p className="mt-2 text-sm text-[#6f746e]">Logo and contact details appear at the top of every printed bill.</p>
-              <form onSubmit={uploadLogo} className="mt-4 space-y-4">
+              <h2 className="font-display text-2xl font-semibold uppercase">Edit tenant</h2>
+              <p className="mt-2 text-sm text-[#6f746e]">Update business identity and bill branding details.</p>
+              <form onSubmit={saveTenantDetails} className="mt-4 space-y-4">
+                <label className="block text-xs font-bold uppercase">
+                  Business name
+                  <input name="business_name" required defaultValue={tenant.business_name} className={`${inputClass} mt-2`} />
+                </label>
+                <AddressField
+                  name="address"
+                  label="Business address"
+                  value={address}
+                  onChange={setAddress}
+                  placeholder="Shown on printed bills"
+                />
                 <div>
                   <div className="mb-2 flex items-center justify-between">
                     <p className="text-xs font-bold uppercase">Business phones</p>
@@ -518,7 +541,7 @@ export default function TenantDetailPage() {
                   Logo image
                   <input name="logo" type="file" accept="image/*" className="mt-2 block w-full border border-[#c9c5b9] bg-white p-3 text-sm" />
                 </label>
-                <button disabled={logoSaving} className={buttonClass}>{logoSaving ? "Saving..." : "Save branding"}</button>
+                <button disabled={logoSaving} className={buttonClass}>{logoSaving ? "Saving..." : "Save tenant details"}</button>
               </form>
             </Panel>
           </div>

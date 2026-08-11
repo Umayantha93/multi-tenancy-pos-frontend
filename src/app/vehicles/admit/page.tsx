@@ -4,25 +4,26 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardCheck, Plus, Save, Search } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { AddressField } from "@/components/address-field";
 import { buttonClass, ErrorMessage, inputClass, Panel } from "@/components/ui";
 import { api } from "@/lib/api";
 
 type VehicleMatch = {
   id: number;
   number_plate: string;
-  chassis_number: string;
+  chassis_number?: string | null;
   make?: string;
   model?: string;
   year?: number;
   bills_count: number;
-  customer: { id: number; name: string; phone: string };
+  customer: { id: number; name: string; phone: string; address?: string | null };
 };
 
 const fields = [
   ["customer_name", "Customer name", "text", true],
   ["customer_phone", "Phone number", "tel", true],
   ["number_plate", "Number plate", "text", true],
-  ["chassis_number", "Chassis number", "text", true],
+  ["chassis_number", "Chassis number", "text", false],
   ["make", "Make", "text", false],
   ["model", "Model", "text", false],
   ["year", "Vehicle year", "number", false],
@@ -164,6 +165,12 @@ export default function AdmitVehiclePage() {
                   )}
                 </label>
               ))}
+              <AddressField
+                name="customer_address"
+                label="Customer address"
+                className="sm:col-span-2"
+                placeholder="Home or business address"
+              />
               <label className="text-sm font-semibold sm:col-span-2">
                 Admission notes
                 <textarea

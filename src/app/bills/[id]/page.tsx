@@ -8,7 +8,7 @@ import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel }
 import { api, currentUser, mediaUrl, money, storeSession, Tenant, User } from "@/lib/api";
 import { billItemLabel, profileFor } from "@/lib/business-profiles";
 
-type Part = { id: number; name: string; price: string; stock_qty: number; sku?: string; brand?: string };
+type Part = { id: number; name: string; price: string; stock_qty: number; sku?: string | null; barcode?: string | null; brand?: string };
 type Bill = {
   id: number;
   bill_number: string;
@@ -18,8 +18,8 @@ type Bill = {
   amount_paid: string;
   balance_due: string;
   customer_balance?: string | number;
-  customer: { name: string; phone: string } | null;
-  vehicle: { number_plate: string; chassis_number: string; make?: string; model?: string } | null;
+  customer: { name: string; phone: string; address?: string | null } | null;
+  vehicle: { number_plate: string; chassis_number?: string | null; make?: string; model?: string } | null;
   items: Array<{ id: number; type: string; description: string; quantity: string; unit_price: string; line_total: string }>;
   payments: Array<{ id: number; amount: string; method: string; paid_at: string }>;
 };
@@ -94,7 +94,7 @@ export default function BillDetailPage() {
       .filter((part) => part.stock_qty > 0)
       .filter((part) => {
         if (!query) return true;
-        return [part.name, part.sku, part.brand].filter(Boolean).join(" ").toLowerCase().includes(query);
+        return [part.name, part.sku, part.barcode, part.brand].filter(Boolean).join(" ").toLowerCase().includes(query);
       });
   }, [partQuery, parts]);
 
@@ -103,6 +103,64 @@ export default function BillDetailPage() {
   const showQuantity = isStockType || Boolean(selectedType?.allowQty);
   const showCost = !isStockType || outsidePart;
   const useStockSearch = isStockType && !outsidePart && !customerPart;
+
+  function findPartByCode(code: string, catalog: Part[] = parts) {
+    const needle = code.trim().toLowerCase();
+    if (!needle) return null;
+    return catalog.find((part) => {
+      if (part.stock_qty <= 0) return false;
+      return part.barcode?.toLowerCase() === needle || part.sku?.toLowerCase() === needle;
+    }) ?? null;
+  }
+
+  async function selectPartByScan(code: string) {
+    const trimmed = code.trim();
+    if (!trimmed) return false;
+
+    const local = findPartByCode(trimmed);
+    if (local) {
+      setSelectedPartId(String(local.id));
+      setPartQuery(local.name);
+      setError("");
+      return true;
+    }
+
+    try {
+      const result = await api<{ data: Part[] }>(`/parts?barcode=${encodeURIComponent(trimmed)}&per_page=5`);
+      const match = result.data.find((part) => part.stock_qty > 0) ?? null;
+      if (match) {
+        setParts((current) => (current.some((part) => part.id === match.id) ? current : [...current, match]));
+        setSelectedPartId(String(match.id));
+        setPartQuery(match.name);
+        setError("");
+        return true;
+      }
+    } catch {
+      // Fall through to filtered name match / barcode error below.
+    }
+
+    const matches = parts
+      .filter((part) => part.stock_qty > 0)
+      .filter((part) =>
+        [part.name, part.sku, part.barcode, part.brand]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(trimmed.toLowerCase()),
+      );
+    if (matches.length === 1) {
+      setSelectedPartId(String(matches[0].id));
+      setPartQuery(matches[0].name);
+      setError("");
+      return true;
+    }
+
+    if (!/\s/.test(trimmed)) {
+      setError(`No in-stock part found for barcode "${trimmed}".`);
+      setSelectedPartId("");
+    }
+    return false;
+  }
 
   async function addItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -240,8 +298,16 @@ export default function BillDetailPage() {
         }}
         onConfirm={confirmDelete}
       />
-      <Panel className="bill-letterhead mb-5 p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+      <Panel className="bill-letterhead relative mb-5 overflow-hidden p-5">
+        {(bill.status === "paid" || (Number(bill.balance_due) <= 0 && Number(bill.amount_paid) > 0)) && (
+          <div
+            aria-hidden="true"
+            className="bill-status-seal pointer-events-none absolute right-6 top-1/2 z-10 hidden -translate-y-1/2 rotate-[-18deg] select-none border-[3px] border-[#167c73] px-5 py-2 font-display text-6xl font-bold uppercase tracking-[0.12em] text-[#167c73] print:block sm:right-10"
+          >
+            Paid
+          </div>
+        )}
+        <div className="relative z-0 flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-4">
             {logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -261,6 +327,7 @@ export default function BillDetailPage() {
               </p>
               <p className="mt-2 text-sm text-[#6f746e]">{bill.bill_number}</p>
               <div className="mt-3 space-y-1 text-sm">
+                {tenant?.address && <p><span className="text-[#6f746e]">Address:</span> {tenant.address}</p>}
                 {contactPhones.map((phone) => (
                   <p key={phone}><span className="text-[#6f746e]">Mobile:</span> {phone}</p>
                 ))}
@@ -283,6 +350,9 @@ export default function BillDetailPage() {
                 <p className="text-[10px] font-bold uppercase text-[#6f746e]">Customer</p>
                 <p className="mt-1 font-semibold">{bill.customer?.name ?? "Walk-in"}</p>
                 <p className="text-sm text-[#6f746e]">{bill.customer?.phone}</p>
+                {bill.customer?.address && (
+                  <p className="mt-1 text-sm text-[#6f746e]">{bill.customer.address}</p>
+                )}
               </div>
               {bill.vehicle ? (
                 <>
@@ -293,7 +363,7 @@ export default function BillDetailPage() {
                   </div>
                   <div>
                     <p className="text-[10px] font-bold uppercase text-[#6f746e]">Chassis</p>
-                    <p className="mt-1 break-all text-sm">{bill.vehicle.chassis_number}</p>
+                    <p className="mt-1 break-all text-sm">{bill.vehicle.chassis_number || "—"}</p>
                   </div>
                 </>
               ) : (
@@ -413,7 +483,7 @@ export default function BillDetailPage() {
                   {money(bill.balance_due)}
                 </strong>
               </div>
-              <div className="flex justify-between gap-6 border-t-2 border-[#20221f] pt-4 font-display text-2xl uppercase">
+              <div className="flex justify-between gap-6 border-t-2 border-[#20221f] pt-4 text-sm uppercase">
                 <span>Balance</span>
                 <strong className={`tabular-nums ${Number(bill.customer_balance ?? 0) > 0 ? "text-[#167c73]" : ""}`}>
                   {money(bill.customer_balance ?? 0)}
@@ -496,15 +566,28 @@ export default function BillDetailPage() {
                     {useStockSearch ? (
                       <>
                         <label className="block text-xs font-bold uppercase">
-                          Search parts
+                          Search / scan barcode
                           <input
                             value={partQuery ?? ""}
                             onChange={(event) => {
-                              setPartQuery(event.target.value);
-                              setSelectedPartId("");
+                              const value = event.target.value;
+                              setPartQuery(value);
+                              const exact = findPartByCode(value);
+                              if (exact) {
+                                setSelectedPartId(String(exact.id));
+                                setError("");
+                              } else {
+                                setSelectedPartId("");
+                              }
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key !== "Enter") return;
+                              event.preventDefault();
+                              void selectPartByScan(partQuery);
                             }}
                             className={`${inputClass} mt-2`}
-                            placeholder="Type name, SKU or brand"
+                            placeholder="Scan barcode or type name / SKU"
+                            autoComplete="off"
                           />
                         </label>
                         <div className="max-h-44 overflow-y-auto border border-[#d7d3c8] bg-white">
@@ -515,17 +598,29 @@ export default function BillDetailPage() {
                               <button
                                 type="button"
                                 key={part.id}
-                                onClick={() => setSelectedPartId(String(part.id))}
+                                onClick={() => {
+                                  setSelectedPartId(String(part.id));
+                                  setPartQuery(part.name);
+                                  setError("");
+                                }}
                                 className={`flex w-full items-center justify-between border-b border-[#eeeae1] px-3 py-2 text-left text-sm ${selectedPartId === String(part.id) ? "bg-[#167c73]/10" : "hover:bg-[#f7f5ef]"}`}
                               >
-                                <span className="font-semibold">{part.name}</span>
+                                <span>
+                                  <span className="font-semibold">{part.name}</span>
+                                  {part.barcode && (
+                                    <span className="mt-0.5 block text-[10px] text-[#6f746e]">Barcode: {part.barcode}</span>
+                                  )}
+                                </span>
                                 <span className="text-xs text-[#6f746e]">{part.stock_qty} · {money(part.price)}</span>
                               </button>
                             ))
                           )}
                         </div>
                         {selectedPart && (
-                          <p className="text-xs text-[#167c73]">Selected: {selectedPart.name}</p>
+                          <p className="text-xs text-[#167c73]">
+                            Selected: {selectedPart.name}
+                            {selectedPart.barcode ? ` · ${selectedPart.barcode}` : ""}
+                          </p>
                         )}
                       </>
                     ) : outsidePart ? (
