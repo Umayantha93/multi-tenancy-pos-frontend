@@ -60,6 +60,15 @@ export default function PartsPage() {
     return () => cancelAnimationFrame(frame);
   }, [load]);
 
+  useEffect(() => {
+    if (!mode) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setMode(null);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mode]);
+
   function openAdd() {
     setSelected(null);
     setMode("add");
@@ -225,6 +234,13 @@ export default function PartsPage() {
               Download the Excel template, fill the Parts sheet (keep headers exactly), then Import Excel.
               Each row creates an inventory expense of <span className="font-semibold">cost_price × stock_qty</span>.
             </p>
+            <a
+              href="/samples/parts-import-sample.xlsx"
+              download="parts-import-sample.xlsx"
+              className="mt-2 inline-flex items-center gap-1 text-xs font-bold uppercase text-[#167c73]"
+            >
+              <Download size={14} /> Download sample with 6 parts
+            </a>
           </div>
         </div>
       )}
@@ -303,8 +319,15 @@ export default function PartsPage() {
       )}
 
       {(mode === "add" || mode === "edit") && (
-        <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4">
-          <form onSubmit={savePart} className="my-8 w-full max-w-2xl bg-[#f3f0e8]">
+        <div
+          className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4"
+          onClick={() => setMode(null)}
+        >
+          <form
+            onSubmit={savePart}
+            onClick={(event) => event.stopPropagation()}
+            className="my-8 w-full max-w-2xl bg-[#f3f0e8]"
+          >
             <div className="flex items-center justify-between border-b border-[#d7d3c8] p-5">
               <h2 className="font-display text-3xl font-semibold uppercase">{mode === "edit" ? "Edit part" : "Add inventory part"}</h2>
               <button type="button" onClick={() => setMode(null)} aria-label="Close"><X /></button>
@@ -373,8 +396,15 @@ export default function PartsPage() {
       )}
 
       {mode === "restock" && selected && (
-        <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4">
-          <form onSubmit={restock} className="my-8 w-full max-w-md bg-[#f3f0e8]">
+        <div
+          className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4"
+          onClick={() => setMode(null)}
+        >
+          <form
+            onSubmit={restock}
+            onClick={(event) => event.stopPropagation()}
+            className="my-8 w-full max-w-md bg-[#f3f0e8]"
+          >
             <div className="flex items-center justify-between border-b border-[#d7d3c8] p-5">
               <h2 className="font-display text-3xl font-semibold uppercase">Restock</h2>
               <button type="button" onClick={() => setMode(null)} aria-label="Close"><X /></button>
