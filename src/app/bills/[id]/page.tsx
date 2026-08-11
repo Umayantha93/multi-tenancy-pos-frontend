@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { CreditCard, Plus, Printer, Trash2 } from "lucide-react";
+import { CreditCard, MessageSquare, Plus, Printer, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { api, currentUser, mediaUrl, money, storeSession, Tenant, User } from "@/lib/api";
@@ -12,6 +12,7 @@ type Part = { id: number; name: string; price: string; stock_qty: number; sku?: 
 type Bill = {
   id: number;
   bill_number: string;
+  share_token?: string | null;
   status: string;
   subtotal: string;
   total_deductions: string;
@@ -43,6 +44,8 @@ export default function BillDetailPage() {
   const [formKey, setFormKey] = useState(0);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [sendingSms, setSendingSms] = useState(false);
+  const [smsNotice, setSmsNotice] = useState("");
 
   const logoUrl = mediaUrl(tenant?.logo_url || tenant?.logo);
   const contactEmail = tenant?.contact_email || tenant?.owner_email || "";
@@ -68,6 +71,30 @@ export default function BillDetailPage() {
     setOutsidePart(false);
     setCustomerPart(false);
     setFormKey((value) => value + 1);
+  }
+
+  async function sendBillSms() {
+    if (!bill?.customer?.phone) {
+      setError("Add a customer phone number before sending the bill.");
+      return;
+    }
+
+    setError("");
+    setSmsNotice("");
+    setSendingSms(true);
+    try {
+      const result = await api<{ message: string; share_token?: string }>(`/bills/${bill.id}/send-sms`, {
+        method: "POST",
+      });
+      if (result.share_token && result.share_token !== bill.share_token) {
+        setBill({ ...bill, share_token: result.share_token });
+      }
+      setSmsNotice(result.message || "Bill link sent by SMS.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not send SMS.");
+    } finally {
+      setSendingSms(false);
+    }
   }
 
   const load = useCallback(() => {
@@ -277,9 +304,20 @@ export default function BillDetailPage() {
       title={bill.bill_number}
       eyebrow={`${bill.vehicle?.number_plate ?? bill.customer?.name ?? profile.billingSingular} · ${bill.status.replace("_", " ")}`}
       action={
-        <button onClick={() => window.print()} className="no-print grid size-10 place-items-center border border-[#c9c5b9]" title="Print bill">
-          <Printer size={19} />
-        </button>
+        <div className="no-print flex items-center gap-2">
+          <button
+            type="button"
+            onClick={sendBillSms}
+            disabled={sendingSms || !bill.customer?.phone}
+            className="grid size-10 place-items-center border border-[#c9c5b9] disabled:cursor-not-allowed disabled:opacity-40"
+            title={bill.customer?.phone ? "Send bill link by SMS" : "Customer phone required"}
+          >
+            <MessageSquare size={19} />
+          </button>
+          <button onClick={() => window.print()} className="grid size-10 place-items-center border border-[#c9c5b9]" title="Print bill">
+            <Printer size={19} />
+          </button>
+        </div>
       }
     >
       <ConfirmModal
@@ -376,6 +414,11 @@ export default function BillDetailPage() {
           </Panel>
 
           {error && <div className="no-print"><ErrorMessage message={error} /></div>}
+          {smsNotice && (
+            <div className="no-print border border-[#167c73]/20 bg-[#167c73]/10 px-4 py-3 text-sm text-[#167c73]">
+              {smsNotice}
+            </div>
+          )}
 
           <Panel>
             <div className="border-b border-[#d7d3c8] px-5 py-4">
