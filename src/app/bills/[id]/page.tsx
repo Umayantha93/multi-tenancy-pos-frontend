@@ -310,7 +310,13 @@ export default function BillDetailPage() {
             onClick={sendBillSms}
             disabled={sendingSms || !bill.customer?.phone}
             className="grid size-10 place-items-center border border-[#c9c5b9] disabled:cursor-not-allowed disabled:opacity-40"
-            title={bill.customer?.phone ? "Send bill link by SMS" : "Customer phone required"}
+            title={
+              !bill.customer?.phone
+                ? "Customer phone required"
+                : bill.status === "paid" || (Number(bill.balance_due) <= 0 && Number(bill.amount_paid) > 0)
+                  ? "Send paid bill link by SMS"
+                  : "Send quotation link by SMS"
+            }
           >
             <MessageSquare size={19} />
           </button>
