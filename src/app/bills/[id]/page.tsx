@@ -526,7 +526,7 @@ export default function BillDetailPage() {
         </div>
 
         <div className="space-y-5 print:mt-5">
-          <Panel className="no-print">
+          <Panel className="no-print xl:sticky xl:top-4">
             <div className="grid grid-cols-2 border-b border-[#d7d3c8]">
               <button onClick={() => setMode("item")} className={`h-11 text-sm font-semibold ${mode === "item" ? "bg-[#20221f] text-white" : ""}`}>
                 <Plus className="inline" size={16} /> Add item
@@ -537,10 +537,11 @@ export default function BillDetailPage() {
             </div>
 
             {mode === "item" ? (
-              <form key={formKey} onSubmit={addItem} className="space-y-4 p-5">
+              <form key={formKey} onSubmit={addItem} className="flex max-h-[min(78vh,46rem)] flex-col">
+                <div className="space-y-3 overflow-y-auto p-4">
                 <div>
                   <p className="mb-2 text-xs font-bold uppercase">Type</p>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-1.5">
                     {itemTypes.map((option) => {
                       const selected = activeType === option.value;
                       return (
@@ -554,7 +555,7 @@ export default function BillDetailPage() {
                             setOutsidePart(false);
                             setCustomerPart(false);
                           }}
-                          className={`min-h-11 border px-3 py-2 text-left text-xs font-bold uppercase ${
+                          className={`h-9 border px-2 text-left text-[10px] font-bold uppercase leading-tight ${
                             selected
                               ? "border-[#20221f] bg-[#20221f] text-white"
                               : "border-[#d7d3c8] bg-[#fbfaf6] text-[#20221f] hover:border-[#20221f]"
@@ -570,8 +571,8 @@ export default function BillDetailPage() {
 
                 {isStockType ? (
                   <>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <label className="flex cursor-pointer items-center gap-3 border border-[#d7d3c8] bg-[#fbfaf6] px-3 py-3">
+                    <div className="grid gap-1.5 sm:grid-cols-2">
+                      <label className="flex cursor-pointer items-center gap-2 border border-[#d7d3c8] bg-[#fbfaf6] px-2.5 py-2">
                         <input
                           type="checkbox"
                           checked={outsidePart}
@@ -586,9 +587,9 @@ export default function BillDetailPage() {
                           }}
                           className="size-4 accent-[#167c73]"
                         />
-                        <span className="text-xs font-bold uppercase">Bought outside</span>
+                        <span className="text-[10px] font-bold uppercase">Bought outside</span>
                       </label>
-                      <label className="flex cursor-pointer items-center gap-3 border border-[#d7d3c8] bg-[#fbfaf6] px-3 py-3">
+                      <label className="flex cursor-pointer items-center gap-2 border border-[#d7d3c8] bg-[#fbfaf6] px-2.5 py-2">
                         <input
                           type="checkbox"
                           checked={customerPart}
@@ -603,7 +604,7 @@ export default function BillDetailPage() {
                           }}
                           className="size-4 accent-[#167c73]"
                         />
-                        <span className="text-xs font-bold uppercase">Customer supplied</span>
+                        <span className="text-[10px] font-bold uppercase">Customer supplied</span>
                       </label>
                     </div>
 
@@ -673,17 +674,19 @@ export default function BillDetailPage() {
                           Part description
                           <input name="description" required className={`${inputClass} mt-2`} placeholder="e.g. Oil filter bought outside" />
                         </label>
-                        <label className="block text-xs font-bold uppercase">
-                          Selling price
-                          <input name="unit_price" type="number" min="0" step="0.01" required className={`${inputClass} mt-2`} />
-                        </label>
-                        <label className="block text-xs font-bold uppercase">
-                          Purchase cost
-                          <input name="purchase_unit_cost" type="number" min="0" step="0.01" required className={`${inputClass} mt-2`} />
-                          <span className="mt-1 block text-[11px] font-normal normal-case text-[#6f746e]">
-                            Added to inventory expenses for profit calculation.
-                          </span>
-                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <label className="block text-xs font-bold uppercase">
+                            Selling price
+                            <input name="unit_price" type="number" min="0" step="0.01" required className={`${inputClass} mt-2`} />
+                          </label>
+                          <label className="block text-xs font-bold uppercase">
+                            Purchase cost
+                            <input name="purchase_unit_cost" type="number" min="0" step="0.01" required className={`${inputClass} mt-2`} />
+                          </label>
+                        </div>
+                        <p className="text-[11px] text-[#6f746e]">
+                          Purchase cost is added to inventory expenses for profit calculation.
+                        </p>
                       </>
                     ) : (
                       <label className="block text-xs font-bold uppercase">
@@ -719,10 +722,13 @@ export default function BillDetailPage() {
                     <input name="quantity" type="number" min="1" step="1" defaultValue="1" required className={`${inputClass} mt-2`} />
                   </label>
                 )}
+                </div>
 
-                <button className={`${buttonClass} w-full`}>
-                  <Plus size={17} />Add to bill
-                </button>
+                <div className="shrink-0 border-t border-[#d7d3c8] bg-white p-4">
+                  <button className={`${buttonClass} w-full`}>
+                    <Plus size={17} />Add to bill
+                  </button>
+                </div>
               </form>
             ) : (
               <form onSubmit={addPayment} className="space-y-4 p-5">
