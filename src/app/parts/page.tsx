@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { Boxes, Download, FileSpreadsheet, PackagePlus, Pencil, Plus, Search, Upload, X } from "lucide-react";
+import { Boxes, Download, PackagePlus, Pencil, Plus, Search, Upload, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, PageState, Panel, SuccessMessage } from "@/components/ui";
 import { API_URL, api, currentUser, mediaUrl, money } from "@/lib/api";
@@ -225,26 +225,6 @@ export default function PartsPage() {
         </div>
       ) : undefined}
     >
-      {admin && (
-        <div className="mb-5 flex items-start gap-3 border-l-4 border-[#167c73] bg-[#fbfaf6] p-4">
-          <FileSpreadsheet className="mt-0.5 shrink-0 text-[#167c73]" size={18} />
-          <div className="text-sm text-[#6f746e]">
-            <p className="font-semibold text-[#20221f]">Bulk import</p>
-            <p className="mt-1">
-              Download the Excel template, fill the Parts sheet (keep headers exactly), then Import Excel.
-              Each row creates an inventory expense of <span className="font-semibold">cost_price × stock_qty</span>.
-            </p>
-            <a
-              href="/samples/parts-import-sample.xlsx"
-              download="parts-import-sample.xlsx"
-              className="mt-2 inline-flex items-center gap-1 text-xs font-bold uppercase text-[#167c73]"
-            >
-              <Download size={14} /> Download sample with 6 parts
-            </a>
-          </div>
-        </div>
-      )}
-
       <div className="mb-5 flex max-w-3xl gap-2">
         <label className="relative flex-1">
           <Search className="absolute left-3 top-3 text-[#6f746e]" size={18} />

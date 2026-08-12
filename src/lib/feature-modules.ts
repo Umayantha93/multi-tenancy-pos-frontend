@@ -19,6 +19,7 @@ const FALLBACK_GROUP: Record<string, string> = {
   cottage_stays: "Service Intake",
   customers: "Service Intake",
   billing: "Service Intake",
+  bill_sms: "Service Intake",
   parts_inventory: "Inventory",
   product_catalog: "Inventory",
   cottage_rooms: "Inventory",

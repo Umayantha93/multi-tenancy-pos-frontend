@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { CreditCard, MessageSquare, Plus, Printer, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
-import { api, currentUser, mediaUrl, money, storeSession, Tenant, User } from "@/lib/api";
+import { api, currentFeatures, currentUser, mediaUrl, money, storeSession, Tenant, User } from "@/lib/api";
 import { billItemLabel, profileFor } from "@/lib/business-profiles";
 
 type Part = { id: number; name: string; price: string; stock_qty: number; sku?: string | null; barcode?: string | null; brand?: string };
@@ -46,6 +46,8 @@ export default function BillDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [sendingSms, setSendingSms] = useState(false);
   const [smsNotice, setSmsNotice] = useState("");
+  const [features, setFeatures] = useState<string[]>(() => currentFeatures());
+  const canSendSms = features.includes("bill_sms");
 
   const logoUrl = mediaUrl(tenant?.logo_url || tenant?.logo);
   const contactEmail = tenant?.contact_email || tenant?.owner_email || "";
@@ -109,6 +111,7 @@ export default function BillDetailPage() {
     api<{ user: User; features: string[] }>("/user")
       .then((result) => {
         setTenant(result.user.tenant ?? null);
+        setFeatures(result.features);
         const token = localStorage.getItem("garage_token");
         if (token) storeSession(token, result.user, result.features);
       })
@@ -305,21 +308,23 @@ export default function BillDetailPage() {
       eyebrow={`${bill.vehicle?.number_plate ?? bill.customer?.name ?? profile.billingSingular} · ${bill.status.replace("_", " ")}`}
       action={
         <div className="no-print flex items-center gap-2">
-          <button
-            type="button"
-            onClick={sendBillSms}
-            disabled={sendingSms || !bill.customer?.phone}
-            className="grid size-10 place-items-center border border-[#c9c5b9] disabled:cursor-not-allowed disabled:opacity-40"
-            title={
-              !bill.customer?.phone
-                ? "Customer phone required"
-                : bill.status === "paid" || (Number(bill.balance_due) <= 0 && Number(bill.amount_paid) > 0)
-                  ? "Send paid bill link by SMS"
-                  : "Send quotation link by SMS"
-            }
-          >
-            <MessageSquare size={19} />
-          </button>
+          {canSendSms && (
+            <button
+              type="button"
+              onClick={sendBillSms}
+              disabled={sendingSms || !bill.customer?.phone}
+              className="grid size-10 place-items-center border border-[#c9c5b9] disabled:cursor-not-allowed disabled:opacity-40"
+              title={
+                !bill.customer?.phone
+                  ? "Customer phone required"
+                  : bill.status === "paid" || (Number(bill.balance_due) <= 0 && Number(bill.amount_paid) > 0)
+                    ? "Send paid bill link by SMS"
+                    : "Send quotation link by SMS"
+              }
+            >
+              <MessageSquare size={19} />
+            </button>
+          )}
           <button onClick={() => window.print()} className="grid size-10 place-items-center border border-[#c9c5b9]" title="Print bill">
             <Printer size={19} />
           </button>
