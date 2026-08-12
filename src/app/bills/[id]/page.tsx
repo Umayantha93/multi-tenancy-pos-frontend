@@ -211,6 +211,7 @@ export default function BillDetailPage() {
       } else if (outsidePart) {
         payload.description = String(formData.get("description") || "");
         payload.unit_price = String(formData.get("unit_price") || "");
+        payload.purchase_unit_cost = String(formData.get("purchase_unit_cost") || "");
         payload.quantity = String(formData.get("quantity") || "1");
       } else {
         if (!selectedPartId) {
@@ -391,7 +392,7 @@ export default function BillDetailPage() {
         </div>
       </Panel>
 
-      <div className="grid gap-5 xl:grid-cols-[1.55fr_0.75fr] print:block print:space-y-5">
+      <div className="grid items-start gap-5 xl:grid-cols-[1.55fr_0.75fr] print:block print:space-y-5">
         <div className="space-y-5">
           <Panel>
             <div className="grid gap-4 p-5 sm:grid-cols-3">
@@ -524,29 +525,8 @@ export default function BillDetailPage() {
           )}
         </div>
 
-        <div className="mt-5 space-y-5 print:mt-5">
-          <Panel className="p-5">
-            <p className="text-xs font-bold uppercase text-[#6f746e]">Bill summary</p>
-            <div className="mt-5 space-y-3 text-sm">
-              <div className="flex justify-between gap-6"><span>Charges</span><strong className="tabular-nums">{money(bill.subtotal)}</strong></div>
-              <div className="flex justify-between gap-6"><span>Deductions</span><strong className="tabular-nums">- {money(bill.total_deductions)}</strong></div>
-              <div className="flex justify-between gap-6"><span>Paid</span><strong className="tabular-nums">- {money(bill.amount_paid)}</strong></div>
-              <div className="flex justify-between gap-6 border-t border-[#e2ded4] pt-3">
-                <span>Due</span>
-                <strong className={`tabular-nums ${Number(bill.balance_due) > 0 ? "text-[#b84837]" : ""}`}>
-                  {money(bill.balance_due)}
-                </strong>
-              </div>
-              <div className="flex justify-between gap-6 border-t-2 border-[#20221f] pt-4 text-sm uppercase">
-                <span>Balance</span>
-                <strong className={`tabular-nums ${Number(bill.customer_balance ?? 0) > 0 ? "text-[#167c73]" : ""}`}>
-                  {money(bill.customer_balance ?? 0)}
-                </strong>
-              </div>
-            </div>
-          </Panel>
-
-          <Panel className="no-print">
+        <div className="space-y-5 print:mt-5">
+          <Panel className="no-print xl:sticky xl:top-4">
             <div className="grid grid-cols-2 border-b border-[#d7d3c8]">
               <button onClick={() => setMode("item")} className={`h-11 text-sm font-semibold ${mode === "item" ? "bg-[#20221f] text-white" : ""}`}>
                 <Plus className="inline" size={16} /> Add item
@@ -557,31 +537,42 @@ export default function BillDetailPage() {
             </div>
 
             {mode === "item" ? (
-              <form key={formKey} onSubmit={addItem} className="space-y-4 p-5">
-                <label className="block text-xs font-bold uppercase">
-                  Type
-                  <select
-                    name="type"
-                    value={activeType}
-                    onChange={(event) => {
-                      setType(event.target.value);
-                      setSelectedPartId("");
-                      setPartQuery("");
-                      setOutsidePart(false);
-                      setCustomerPart(false);
-                    }}
-                    className={`${inputClass} mt-2`}
-                  >
-                    {itemTypes.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </label>
+              <form key={formKey} onSubmit={addItem} className="flex max-h-[min(78vh,46rem)] flex-col">
+                <div className="space-y-3 overflow-y-auto p-4">
+                <div>
+                  <p className="mb-2 text-xs font-bold uppercase">Type</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {itemTypes.map((option) => {
+                      const selected = activeType === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => {
+                            setType(option.value);
+                            setSelectedPartId("");
+                            setPartQuery("");
+                            setOutsidePart(false);
+                            setCustomerPart(false);
+                          }}
+                          className={`h-9 border px-2 text-left text-[10px] font-bold uppercase leading-tight ${
+                            selected
+                              ? "border-[#20221f] bg-[#20221f] text-white"
+                              : "border-[#d7d3c8] bg-[#fbfaf6] text-[#20221f] hover:border-[#20221f]"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <input type="hidden" name="type" value={activeType} />
+                </div>
 
                 {isStockType ? (
                   <>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <label className="flex cursor-pointer items-center gap-3 border border-[#d7d3c8] bg-[#fbfaf6] px-3 py-3">
+                    <div className="grid gap-1.5 sm:grid-cols-2">
+                      <label className="flex cursor-pointer items-center gap-2 border border-[#d7d3c8] bg-[#fbfaf6] px-2.5 py-2">
                         <input
                           type="checkbox"
                           checked={outsidePart}
@@ -596,9 +587,9 @@ export default function BillDetailPage() {
                           }}
                           className="size-4 accent-[#167c73]"
                         />
-                        <span className="text-xs font-bold uppercase">Bought outside</span>
+                        <span className="text-[10px] font-bold uppercase">Bought outside</span>
                       </label>
-                      <label className="flex cursor-pointer items-center gap-3 border border-[#d7d3c8] bg-[#fbfaf6] px-3 py-3">
+                      <label className="flex cursor-pointer items-center gap-2 border border-[#d7d3c8] bg-[#fbfaf6] px-2.5 py-2">
                         <input
                           type="checkbox"
                           checked={customerPart}
@@ -613,7 +604,7 @@ export default function BillDetailPage() {
                           }}
                           className="size-4 accent-[#167c73]"
                         />
-                        <span className="text-xs font-bold uppercase">Customer supplied</span>
+                        <span className="text-[10px] font-bold uppercase">Customer supplied</span>
                       </label>
                     </div>
 
@@ -683,10 +674,19 @@ export default function BillDetailPage() {
                           Part description
                           <input name="description" required className={`${inputClass} mt-2`} placeholder="e.g. Oil filter bought outside" />
                         </label>
-                        <label className="block text-xs font-bold uppercase">
-                          Cost
-                          <input name="unit_price" type="number" min="0" step="0.01" required className={`${inputClass} mt-2`} />
-                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <label className="block text-xs font-bold uppercase">
+                            Selling price
+                            <input name="unit_price" type="number" min="0" step="0.01" required className={`${inputClass} mt-2`} />
+                          </label>
+                          <label className="block text-xs font-bold uppercase">
+                            Purchase cost
+                            <input name="purchase_unit_cost" type="number" min="0" step="0.01" required className={`${inputClass} mt-2`} />
+                          </label>
+                        </div>
+                        <p className="text-[11px] text-[#6f746e]">
+                          Purchase cost is added to inventory expenses for profit calculation.
+                        </p>
                       </>
                     ) : (
                       <label className="block text-xs font-bold uppercase">
@@ -722,10 +722,13 @@ export default function BillDetailPage() {
                     <input name="quantity" type="number" min="1" step="1" defaultValue="1" required className={`${inputClass} mt-2`} />
                   </label>
                 )}
+                </div>
 
-                <button className={`${buttonClass} w-full`}>
-                  <Plus size={17} />Add to bill
-                </button>
+                <div className="shrink-0 border-t border-[#d7d3c8] bg-white p-4">
+                  <button className={`${buttonClass} w-full`}>
+                    <Plus size={17} />Add to bill
+                  </button>
+                </div>
               </form>
             ) : (
               <form onSubmit={addPayment} className="space-y-4 p-5">
@@ -751,6 +754,27 @@ export default function BillDetailPage() {
                 </button>
               </form>
             )}
+          </Panel>
+
+          <Panel className="p-5">
+            <p className="text-xs font-bold uppercase text-[#6f746e]">Bill summary</p>
+            <div className="mt-5 space-y-3 text-sm">
+              <div className="flex justify-between gap-6"><span>Charges</span><strong className="tabular-nums">{money(bill.subtotal)}</strong></div>
+              <div className="flex justify-between gap-6"><span>Deductions</span><strong className="tabular-nums">- {money(bill.total_deductions)}</strong></div>
+              <div className="flex justify-between gap-6"><span>Paid</span><strong className="tabular-nums">- {money(bill.amount_paid)}</strong></div>
+              <div className="flex justify-between gap-6 border-t border-[#e2ded4] pt-3">
+                <span>Due</span>
+                <strong className={`tabular-nums ${Number(bill.balance_due) > 0 ? "text-[#b84837]" : ""}`}>
+                  {money(bill.balance_due)}
+                </strong>
+              </div>
+              <div className="flex justify-between gap-6 border-t-2 border-[#20221f] pt-4 text-sm uppercase">
+                <span>Balance</span>
+                <strong className={`tabular-nums ${Number(bill.customer_balance ?? 0) > 0 ? "text-[#167c73]" : ""}`}>
+                  {money(bill.customer_balance ?? 0)}
+                </strong>
+              </div>
+            </div>
           </Panel>
         </div>
       </div>

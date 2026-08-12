@@ -48,8 +48,9 @@ export default function NewTenantPage() {
     const primaryContact = contactPhones.find((p) => p.number.trim())?.number;
     if (primaryContact) formData.set("contact_phone", primaryContact);
     try {
-      const tenant = await api<Tenant>("/super-admin/tenants", { method: "POST", body: formData });
-      router.push(`/super-admin/tenants/${tenant.id}`);
+      const tenant = await api<Tenant & { welcome_email_sent?: boolean }>("/super-admin/tenants", { method: "POST", body: formData });
+      const welcome = tenant.welcome_email_sent === false ? "failed" : "sent";
+      router.push(`/super-admin/tenants/${tenant.id}?welcome_email=${welcome}`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to onboard business.");
     } finally {
