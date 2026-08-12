@@ -490,6 +490,20 @@ export default function TenantDetailPage() {
                   Business name
                   <input name="business_name" required defaultValue={tenant.business_name} className={`${inputClass} mt-2`} />
                 </label>
+                <label className="block text-xs font-bold uppercase">
+                  SMS Sender ID
+                  <input
+                    name="sms_sender_id"
+                    defaultValue={tenant.sms_sender_id || ""}
+                    maxLength={11}
+                    placeholder={tenant.suggested_sms_sender_id || "BAY06GARAGE"}
+                    className={`${inputClass} mt-2 uppercase`}
+                  />
+                  <span className="mt-1 block text-[11px] font-normal normal-case text-[#6f746e]">
+                    Approved Notify.lk mask (letters/numbers only, max 11). Suggested:{" "}
+                    <span className="font-semibold">{tenant.suggested_sms_sender_id || "—"}</span>. Leave blank to use the platform default.
+                  </span>
+                </label>
                 <AddressField
                   name="address"
                   label="Business address"

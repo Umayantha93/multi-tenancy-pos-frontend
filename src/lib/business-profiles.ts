@@ -52,6 +52,7 @@ export type BusinessProfile = {
 const sharedPeopleFinance: Array<{ key: FeatureKey; name: string; group: string }> = [
   { key: "customers", name: "Customers", group: "Service Intake" },
   { key: "billing", name: "Billing", group: "Service Intake" },
+  { key: "bill_sms", name: "Bill SMS", group: "Service Intake" },
   { key: "employees_management", name: "Team", group: "People" },
   { key: "attendance", name: "Attendance", group: "People" },
   { key: "payroll", name: "Payroll", group: "People" },
@@ -86,7 +87,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
     ],
     defaultFeatures: [
-      "admit_vehicle", "parts_inventory", "customers", "billing",
+      "admit_vehicle", "parts_inventory", "customers", "billing", "bill_sms",
       "employees_management", "attendance", "payroll", "balance_sheet", "reports",
     ],
     moduleCatalog: [
@@ -125,7 +126,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
     ],
     defaultFeatures: [
-      "photo_bookings", "photo_packages", "customers", "billing",
+      "photo_bookings", "photo_packages", "customers", "billing", "bill_sms",
       "employees_management", "attendance", "payroll", "balance_sheet", "reports",
     ],
     moduleCatalog: [
@@ -165,7 +166,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
     ],
     defaultFeatures: [
-      "retail_pos", "product_catalog", "customers", "billing",
+      "retail_pos", "product_catalog", "customers", "billing", "bill_sms",
       "employees_management", "attendance", "payroll", "balance_sheet", "reports",
     ],
     moduleCatalog: [
@@ -204,7 +205,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
     ],
     defaultFeatures: [
-      "cottage_rooms", "cottage_stays", "customers", "billing",
+      "cottage_rooms", "cottage_stays", "customers", "billing", "bill_sms",
       "employees_management", "attendance", "payroll", "balance_sheet", "reports",
     ],
     moduleCatalog: [

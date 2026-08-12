@@ -74,6 +74,18 @@ export default function NewTenantPage() {
                 Business name
                 <input name="business_name" required className={`mt-2 ${inputClass}`} />
               </label>
+              <label className="text-sm font-semibold sm:col-span-2">
+                SMS Sender ID
+                <input
+                  name="sms_sender_id"
+                  maxLength={11}
+                  placeholder="e.g. BAY06GARAGE"
+                  className={`mt-2 ${inputClass} uppercase`}
+                />
+                <span className="mt-1 block text-xs font-normal text-[#6f746e]">
+                  Must match an approved Notify.lk Sender ID (letters/numbers only, max 11). Leave blank to use the platform default until approved.
+                </span>
+              </label>
               <label className="text-sm font-semibold">
                 Business type
                 <select
