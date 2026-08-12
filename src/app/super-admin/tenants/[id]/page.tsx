@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { Check, Plus, Power, Trash2, Users } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
@@ -57,6 +57,7 @@ function periodLabel(period: string) {
 
 export default function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const [tenant, setTenant] = useState<Detail | null>(null);
   const [featureData, setFeatureData] = useState<FeatureResponse | null>(null);
   const [enabled, setEnabled] = useState<string[]>([]);
@@ -98,6 +99,15 @@ export default function TenantDetailPage() {
   }
 
   useEffect(load, [id]);
+
+  useEffect(() => {
+    const welcome = searchParams.get("welcome_email");
+    if (welcome === "sent") {
+      setNotice("Tenant created. Login link, email, and temporary password were emailed to the owner.");
+    } else if (welcome === "failed") {
+      setError("Tenant was created, but the welcome email could not be sent. Check Improvmx settings and resend manually.");
+    }
+  }, [searchParams]);
 
   const secondaryUser = tenant?.users?.find((user) => user.is_secondary_view);
 
