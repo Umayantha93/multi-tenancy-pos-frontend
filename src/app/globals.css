@@ -58,6 +58,12 @@ button, a { -webkit-tap-highlight-color: transparent; }
     print-color-adjust: exact;
     opacity: 0.92;
   }
+  .bill-discount-row {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    background: #e7f4f2 !important;
+    color: #167c73;
+  }
   .bill-items-table {
     table-layout: fixed;
     width: 100% !important;

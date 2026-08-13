@@ -283,3 +283,18 @@ export function billItemLabel(type: string, profile?: BusinessProfile | null): s
   if (type === "service") return "Service";
   return type.replaceAll("_", " ");
 }
+
+/** Inventory / parts first, other charges, labor, discount last. */
+export function sortBillItems<T extends { id: number; type: string }>(items: T[]): T[] {
+  const rank = (type: string) => {
+    if (type === "part" || type === "customer_part") return 1;
+    if (type === "labor") return 3;
+    if (type === "discount") return 4;
+    return 2;
+  };
+
+  return [...items].sort((a, b) => {
+    const byType = rank(a.type) - rank(b.type);
+    return byType !== 0 ? byType : a.id - b.id;
+  });
+}
