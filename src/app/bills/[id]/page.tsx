@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { CreditCard, MessageSquare, Plus, Printer, Trash2 } from "lucide-react";
+import { CreditCard, Lock, MessageSquare, Plus, Printer, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { api, currentFeatures, currentUser, mediaUrl, money, storeSession, Tenant, User } from "@/lib/api";
@@ -44,6 +44,8 @@ export default function BillDetailPage() {
   const [formKey, setFormKey] = useState(0);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [pendingClose, setPendingClose] = useState(false);
+  const [closing, setClosing] = useState(false);
   const [sendingSms, setSendingSms] = useState(false);
   const [smsNotice, setSmsNotice] = useState("");
   const [features, setFeatures] = useState<string[]>(() => currentFeatures());
@@ -61,6 +63,7 @@ export default function BillDetailPage() {
   const billItems = useMemo(() => sortBillItems(bill?.items ?? []), [bill?.items]);
   const chargeItems = useMemo(() => billItems.filter((item) => item.type !== "discount"), [billItems]);
   const discountItems = useMemo(() => billItems.filter((item) => item.type === "discount"), [billItems]);
+  const isClosed = bill?.status === "closed";
 
   useEffect(() => {
     if (!itemTypes.length) return;
@@ -197,6 +200,7 @@ export default function BillDetailPage() {
 
   async function addItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isClosed) return;
     setError("");
     const form = event.currentTarget;
     const formData = new FormData(form);
@@ -242,6 +246,7 @@ export default function BillDetailPage() {
 
   async function addPayment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isClosed) return;
     const form = event.currentTarget;
     try {
       await api(`/bills/${id}/payments`, { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(form))) });
@@ -253,6 +258,7 @@ export default function BillDetailPage() {
   }
 
   async function remove(itemId: number) {
+    if (isClosed) return;
     const item = bill?.items.find((entry) => entry.id === itemId);
     setPendingDelete({
       kind: "item",
@@ -262,6 +268,7 @@ export default function BillDetailPage() {
   }
 
   async function removePayment(paymentId: number) {
+    if (isClosed) return;
     const payment = bill?.payments.find((entry) => entry.id === paymentId);
     if (!payment) return;
     setPendingDelete({
@@ -295,6 +302,21 @@ export default function BillDetailPage() {
       );
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function confirmClose() {
+    if (!bill || isClosed) return;
+    setClosing(true);
+    setError("");
+    try {
+      await api(`/bills/${id}/close`, { method: "POST" });
+      setPendingClose(false);
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : `Could not close this ${profile.billingSingular.toLowerCase()}.`);
+    } finally {
+      setClosing(false);
     }
   }
 
@@ -332,6 +354,17 @@ export default function BillDetailPage() {
           <button onClick={() => window.print()} className="grid size-10 place-items-center border border-[#c9c5b9]" title="Print bill">
             <Printer size={19} />
           </button>
+          {!isClosed && (
+            <button
+              type="button"
+              onClick={() => setPendingClose(true)}
+              className="inline-flex h-10 items-center gap-2 border border-[#20221f] bg-white px-3 text-sm font-semibold hover:bg-[#20221f] hover:text-white"
+              title={`Close this ${profile.billingSingular.toLowerCase()}`}
+            >
+              <Lock size={16} />
+              <span className="hidden sm:inline">Close</span>
+            </button>
+          )}
         </div>
       }
     >
@@ -351,15 +384,38 @@ export default function BillDetailPage() {
         }}
         onConfirm={confirmDelete}
       />
+      <ConfirmModal
+        open={pendingClose}
+        title={`Close ${profile.billingSingular.toLowerCase()}`}
+        message={
+          Number(bill.balance_due) > 0
+            ? `There is still ${money(bill.balance_due)} due. Closing this ${profile.billingSingular.toLowerCase()} locks items, payments, and all other details so they cannot be changed.`
+            : `Close this ${profile.billingSingular.toLowerCase()}? Items, payments, and all other details will be locked and cannot be changed.`
+        }
+        confirmLabel={`Close ${profile.billingSingular.toLowerCase()}`}
+        tone="default"
+        busy={closing}
+        onCancel={() => {
+          if (!closing) setPendingClose(false);
+        }}
+        onConfirm={confirmClose}
+      />
       <Panel className="bill-letterhead relative mb-5 overflow-hidden p-5">
-        {(bill.status === "paid" || (Number(bill.balance_due) <= 0 && Number(bill.amount_paid) > 0)) && (
+        {(bill.status === "paid" || (Number(bill.balance_due) <= 0 && Number(bill.amount_paid) > 0)) ? (
           <div
             aria-hidden="true"
             className="bill-status-seal pointer-events-none absolute right-6 top-1/2 z-10 hidden -translate-y-1/2 rotate-[-18deg] select-none border-[3px] border-[#167c73] px-5 py-2 font-display text-6xl font-bold uppercase tracking-[0.12em] text-[#167c73] print:block sm:right-10"
           >
             Paid
           </div>
-        )}
+        ) : isClosed ? (
+          <div
+            aria-hidden="true"
+            className="bill-status-seal pointer-events-none absolute right-6 top-1/2 z-10 hidden -translate-y-1/2 rotate-[-18deg] select-none border-[3px] border-[#20221f] px-5 py-2 font-display text-6xl font-bold uppercase tracking-[0.12em] text-[#20221f] print:block sm:right-10"
+          >
+            Closed
+          </div>
+        ) : null}
         <div className="relative z-0 flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-4">
             {logoUrl ? (
@@ -434,6 +490,12 @@ export default function BillDetailPage() {
               {smsNotice}
             </div>
           )}
+          {isClosed && (
+            <div className="no-print flex items-center gap-2 border border-[#20221f]/15 bg-[#20221f]/5 px-4 py-3 text-sm text-[#20221f]">
+              <Lock size={16} />
+              This {profile.billingSingular.toLowerCase()} is closed and cannot be edited.
+            </div>
+          )}
 
           <Panel>
             <div className="border-b border-[#d7d3c8] px-5 py-4">
@@ -447,7 +509,7 @@ export default function BillDetailPage() {
                   <col className="w-[10%]" />
                   <col className="w-[18%]" />
                   <col className="w-[18%]" />
-                  <col className="no-print w-10" />
+                  {!isClosed && <col className="no-print w-10" />}
                 </colgroup>
                 <thead className="bg-[#eeece5] text-[10px] uppercase text-[#6f746e]">
                   <tr>
@@ -456,7 +518,7 @@ export default function BillDetailPage() {
                     <th className="px-3 py-3 text-right">Qty</th>
                     <th className="px-3 py-3 text-right">Rate</th>
                     <th className="px-4 py-3 text-right">Total</th>
-                    <th className="no-print px-2 py-3" />
+                    {!isClosed && <th className="no-print px-2 py-3" />}
                   </tr>
                 </thead>
                 <tbody>
@@ -489,11 +551,13 @@ export default function BillDetailPage() {
                             <span className="tabular-nums">{money(item.line_total)}</span>
                           )}
                         </td>
-                        <td className="no-print px-2 py-3">
-                          <button onClick={() => remove(item.id)} className="text-[#b84837]" title="Remove item">
-                            <Trash2 size={16} />
-                          </button>
-                        </td>
+                        {!isClosed && (
+                          <td className="no-print px-2 py-3">
+                            <button onClick={() => remove(item.id)} className="text-[#b84837]" title="Remove item">
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
@@ -504,7 +568,7 @@ export default function BillDetailPage() {
                       <td colSpan={5} className="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-[#167c73]">
                         Discount
                       </td>
-                      <td className="no-print" />
+                      {!isClosed && <td className="no-print" />}
                     </tr>
                     {discountItems.map((item) => (
                       <tr key={item.id} className="bill-discount-row border-t border-[#167c73]/20 bg-[#e7f4f2] align-top text-[#167c73]">
@@ -517,11 +581,13 @@ export default function BillDetailPage() {
                         </td>
                         <td className="px-3 py-3 text-right tabular-nums">{money(item.unit_price)}</td>
                         <td className="px-4 py-3 text-right font-semibold tabular-nums">-{money(item.line_total)}</td>
-                        <td className="no-print px-2 py-3">
-                          <button onClick={() => remove(item.id)} className="text-[#b84837]" title="Remove item">
-                            <Trash2 size={16} />
-                          </button>
-                        </td>
+                        {!isClosed && (
+                          <td className="no-print px-2 py-3">
+                            <button onClick={() => remove(item.id)} className="text-[#b84837]" title="Remove item">
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -541,14 +607,16 @@ export default function BillDetailPage() {
                   <div key={payment.id} className="flex items-center gap-3 px-5 py-3 text-sm">
                     <span className="uppercase text-[#6f746e]">{payment.method.replace("_", " ")}</span>
                     <strong className="ml-auto tabular-nums">{money(payment.amount)}</strong>
-                    <button
-                      type="button"
-                      onClick={() => removePayment(payment.id)}
-                      className="no-print text-[#b84837]"
-                      title="Remove payment"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    {!isClosed && (
+                      <button
+                        type="button"
+                        onClick={() => removePayment(payment.id)}
+                        className="no-print text-[#b84837]"
+                        title="Remove payment"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -557,6 +625,7 @@ export default function BillDetailPage() {
         </div>
 
         <div className="space-y-5 print:mt-5">
+          {!isClosed && (
           <Panel className="no-print xl:sticky xl:top-4">
             <div className="grid grid-cols-2 border-b border-[#d7d3c8]">
               <button onClick={() => setMode("item")} className={`h-11 text-sm font-semibold ${mode === "item" ? "bg-[#20221f] text-white" : ""}`}>
@@ -786,6 +855,7 @@ export default function BillDetailPage() {
               </form>
             )}
           </Panel>
+          )}
 
           <Panel className="p-5">
             <p className="text-xs font-bold uppercase text-[#6f746e]">Bill summary</p>
