@@ -138,7 +138,13 @@ export default function BillsPage() {
                     <td>{bill.customer?.name ?? "Walk-in"}</td>
                     <td>{bill.vehicle?.number_plate ?? "—"}</td>
                     <td>
-                      <span className={`px-2 py-1 text-[10px] font-bold uppercase ${bill.status === "paid" ? "bg-[#167c73]/10 text-[#167c73]" : "bg-[#f5c842]/25 text-[#735a00]"}`}>
+                      <span className={`px-2 py-1 text-[10px] font-bold uppercase ${
+                        bill.status === "paid"
+                          ? "bg-[#167c73]/10 text-[#167c73]"
+                          : bill.status === "closed"
+                            ? "bg-[#20221f] text-white"
+                            : "bg-[#f5c842]/25 text-[#735a00]"
+                      }`}>
                         {bill.status.replace("_", " ")}
                       </span>
                     </td>
