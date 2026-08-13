@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { Check, Plus, Power, Trash2, Users } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
 import { AddressField } from "@/components/address-field";
 import { ConfirmModal, ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
 import { api, mediaUrl, PhoneEntry, Tenant } from "@/lib/api";
-import { profileFor } from "@/lib/business-profiles";
+import { PAYMENT_PLAN_OPTIONS, PLAN_OPTIONS, profileFor } from "@/lib/business-profiles";
 import { groupModules } from "@/lib/feature-modules";
 
 type Feature = { id: number; key: string; name: string; group?: string | null };
@@ -41,7 +41,7 @@ type ConfirmState = {
   message: string;
   confirmLabel: string;
   tone: "default" | "danger" | "teal";
-  action: "status" | "dual-enable" | "dual-disable" | "fee-paid" | "fee-unpaid";
+  action: "status" | "dual-enable" | "dual-disable" | "fee-paid" | "fee-unpaid" | "delete";
 };
 
 function money(value: number | string | null | undefined) {
@@ -57,6 +57,7 @@ function periodLabel(period: string) {
 
 export default function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [tenant, setTenant] = useState<Detail | null>(null);
   const [featureData, setFeatureData] = useState<FeatureResponse | null>(null);
@@ -70,6 +71,7 @@ export default function TenantDetailPage() {
   const [dualSaving, setDualSaving] = useState(false);
   const [feeSaving, setFeeSaving] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [secondaryName, setSecondaryName] = useState("");
   const [secondaryEmail, setSecondaryEmail] = useState("");
   const [secondaryPassword, setSecondaryPassword] = useState("");
@@ -172,6 +174,32 @@ export default function TenantDetailPage() {
     }
   }
 
+  function requestDelete() {
+    if (!tenant) return;
+    setConfirm({
+      title: "Delete tenant permanently",
+      message: `Delete ${tenant.business_name}? This removes the business from the active list and signs out all users. Existing data is kept (soft delete) and is not wiped.`,
+      confirmLabel: "Delete tenant",
+      tone: "danger",
+      action: "delete",
+    });
+  }
+
+  async function deleteTenant() {
+    if (!tenant) return;
+    setDeleting(true);
+    setError("");
+    setNotice("");
+    try {
+      await api(`/super-admin/tenants/${id}`, { method: "DELETE" });
+      setConfirm(null);
+      router.replace("/super-admin/tenants");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to delete tenant. Please try again.");
+      setDeleting(false);
+    }
+  }
+
   async function saveDualFinancialView(enable: boolean) {
     if (!tenant) return;
     setDualSaving(true);
@@ -259,6 +287,7 @@ export default function TenantDetailPage() {
   async function handleConfirm() {
     if (!confirm) return;
     if (confirm.action === "status") await changeStatus();
+    if (confirm.action === "delete") await deleteTenant();
     if (confirm.action === "dual-enable") await saveDualFinancialView(true);
     if (confirm.action === "dual-disable") await saveDualFinancialView(false);
     if (confirm.action === "fee-paid") await saveFeePayment(true);
@@ -318,12 +347,20 @@ export default function TenantDetailPage() {
       title={tenant?.business_name ?? "Tenant details"}
       eyebrow="Business control"
       action={tenant && (
-        <button
-          onClick={requestStatusChange}
-          className={`flex h-10 items-center gap-2 px-4 text-sm font-semibold text-white ${tenant.status === "active" ? "bg-[#b84837]" : "bg-[#167c73]"}`}
-        >
-          <Power size={17} />{tenant.status === "active" ? "Deactivate" : "Activate"}
-        </button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button
+            onClick={requestStatusChange}
+            className={`flex h-10 items-center gap-2 px-4 text-sm font-semibold text-white ${tenant.status === "active" ? "bg-[#b84837]" : "bg-[#167c73]"}`}
+          >
+            <Power size={17} />{tenant.status === "active" ? "Deactivate" : "Activate"}
+          </button>
+          <button
+            onClick={requestDelete}
+            className="flex h-10 items-center gap-2 border border-[#b84837] bg-white px-4 text-sm font-semibold text-[#b84837]"
+          >
+            <Trash2 size={17} /> Delete
+          </button>
+        </div>
       )}
     >
       <ConfirmModal
@@ -332,8 +369,8 @@ export default function TenantDetailPage() {
         message={confirm?.message ?? ""}
         confirmLabel={confirm?.confirmLabel}
         tone={confirm?.tone}
-        busy={dualSaving || statusSaving || feeSaving}
-        onCancel={() => { if (!dualSaving && !statusSaving && !feeSaving) setConfirm(null); }}
+        busy={dualSaving || statusSaving || feeSaving || deleting}
+        onCancel={() => { if (!dualSaving && !statusSaving && !feeSaving && !deleting) setConfirm(null); }}
         onConfirm={handleConfirm}
       />
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
@@ -501,18 +538,16 @@ export default function TenantDetailPage() {
                   <input name="business_name" required defaultValue={tenant.business_name} className={`${inputClass} mt-2`} />
                 </label>
                 <label className="block text-xs font-bold uppercase">
-                  SMS Sender ID
-                  <input
-                    name="sms_sender_id"
-                    defaultValue={tenant.sms_sender_id || ""}
-                    maxLength={11}
-                    placeholder={tenant.suggested_sms_sender_id || "BAY06GARAGE"}
-                    className={`${inputClass} mt-2 uppercase`}
-                  />
-                  <span className="mt-1 block text-[11px] font-normal normal-case text-[#6f746e]">
-                    Approved Notify.lk mask (letters/numbers only, max 11). Suggested:{" "}
-                    <span className="font-semibold">{tenant.suggested_sms_sender_id || "—"}</span>. Leave blank to use the platform default.
-                  </span>
+                  Owner name
+                  <input name="owner_name" required defaultValue={tenant.owner_name} className={`${inputClass} mt-2`} />
+                </label>
+                <label className="block text-xs font-bold uppercase">
+                  Owner email (login)
+                  <input name="owner_email" type="email" required defaultValue={tenant.owner_email} className={`${inputClass} mt-2`} />
+                </label>
+                <label className="block text-xs font-bold uppercase">
+                  Owner phone
+                  <input name="owner_phone" defaultValue={tenant.owner_phone || ""} className={`${inputClass} mt-2`} />
                 </label>
                 <AddressField
                   name="address"
@@ -561,6 +596,35 @@ export default function TenantDetailPage() {
                   Business email
                   <input name="contact_email" type="email" defaultValue={tenant.contact_email || tenant.owner_email || ""} className={`${inputClass} mt-2`} />
                 </label>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block text-xs font-bold uppercase">
+                    Plan
+                    <select name="plan" defaultValue={tenant.plan || ""} className={`${inputClass} mt-2`}>
+                      {PLAN_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-xs font-bold uppercase">
+                    Payment plan
+                    <select name="payment_plan" defaultValue={tenant.payment_plan || "monthly"} className={`${inputClass} mt-2`}>
+                      {PAYMENT_PLAN_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-xs font-bold uppercase sm:col-span-2">
+                    Plan amount (LKR)
+                    <input
+                      name="plan_amount"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      defaultValue={tenant.plan_amount ?? ""}
+                      className={`${inputClass} mt-2`}
+                    />
+                  </label>
+                </div>
                 <label className="block text-xs font-bold uppercase">
                   Logo image
                   <input name="logo" type="file" accept="image/*" className="mt-2 block w-full border border-[#c9c5b9] bg-white p-3 text-sm" />

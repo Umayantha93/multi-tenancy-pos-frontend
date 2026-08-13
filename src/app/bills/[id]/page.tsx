@@ -6,7 +6,7 @@ import { CreditCard, MessageSquare, Plus, Printer, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { api, currentFeatures, currentUser, mediaUrl, money, storeSession, Tenant, User } from "@/lib/api";
-import { billItemLabel, profileFor } from "@/lib/business-profiles";
+import { billItemLabel, profileFor, sortBillItems } from "@/lib/business-profiles";
 
 type Part = { id: number; name: string; price: string; stock_qty: number; sku?: string | null; barcode?: string | null; brand?: string };
 type Bill = {
@@ -58,6 +58,9 @@ export default function BillDetailPage() {
   const itemTypes = profile.billItemTypes;
   const selectedType = itemTypes.find((option) => option.value === type) ?? itemTypes[0];
   const activeType = type || selectedType?.value || "charge";
+  const billItems = useMemo(() => sortBillItems(bill?.items ?? []), [bill?.items]);
+  const chargeItems = useMemo(() => billItems.filter((item) => item.type !== "discount"), [billItems]);
+  const discountItems = useMemo(() => billItems.filter((item) => item.type === "discount"), [billItems]);
 
   useEffect(() => {
     if (!itemTypes.length) return;
@@ -457,7 +460,7 @@ export default function BillDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {bill.items.map((item) => {
+                  {chargeItems.map((item) => {
                     const fromCustomer = item.type === "customer_part";
                     const isPartLine = item.type === "part" || fromCustomer;
                     const showQty = isPartLine || Number(item.quantity) > 1;
@@ -495,8 +498,36 @@ export default function BillDetailPage() {
                     );
                   })}
                 </tbody>
+                {discountItems.length > 0 && (
+                  <tbody>
+                    <tr className="bill-discount-row border-t-2 border-[#167c73]/35 bg-[#e7f4f2]">
+                      <td colSpan={5} className="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-[#167c73]">
+                        Discount
+                      </td>
+                      <td className="no-print" />
+                    </tr>
+                    {discountItems.map((item) => (
+                      <tr key={item.id} className="bill-discount-row border-t border-[#167c73]/20 bg-[#e7f4f2] align-top text-[#167c73]">
+                        <td className="px-4 py-3 font-semibold break-words whitespace-normal">{item.description}</td>
+                        <td className="px-3 py-3 break-words whitespace-normal">
+                          {billItemLabel(item.type, profile)}
+                        </td>
+                        <td className="px-3 py-3 text-right tabular-nums">
+                          {Number(item.quantity) > 1 ? Number(item.quantity) : "—"}
+                        </td>
+                        <td className="px-3 py-3 text-right tabular-nums">{money(item.unit_price)}</td>
+                        <td className="px-4 py-3 text-right font-semibold tabular-nums">-{money(item.line_total)}</td>
+                        <td className="no-print px-2 py-3">
+                          <button onClick={() => remove(item.id)} className="text-[#b84837]" title="Remove item">
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                )}
               </table>
-              {bill.items.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No charges yet.</p>}
+              {billItems.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No charges yet.</p>}
             </div>
           </Panel>
 
@@ -760,7 +791,10 @@ export default function BillDetailPage() {
             <p className="text-xs font-bold uppercase text-[#6f746e]">Bill summary</p>
             <div className="mt-5 space-y-3 text-sm">
               <div className="flex justify-between gap-6"><span>Charges</span><strong className="tabular-nums">{money(bill.subtotal)}</strong></div>
-              <div className="flex justify-between gap-6"><span>Deductions</span><strong className="tabular-nums">- {money(bill.total_deductions)}</strong></div>
+              <div className={`flex justify-between gap-6 ${Number(bill.total_deductions) > 0 ? "rounded-sm bg-[#e7f4f2] px-2 py-1.5 text-[#167c73]" : ""}`}>
+                <span>Deductions</span>
+                <strong className="tabular-nums">- {money(bill.total_deductions)}</strong>
+              </div>
               <div className="flex justify-between gap-6"><span>Paid</span><strong className="tabular-nums">- {money(bill.amount_paid)}</strong></div>
               <div className="flex justify-between gap-6 border-t border-[#e2ded4] pt-3">
                 <span>Due</span>

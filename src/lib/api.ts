@@ -47,8 +47,6 @@ export type PhoneEntry = { label?: string; number: string };
 export type Tenant = {
   id: number;
   business_name: string;
-  sms_sender_id?: string | null;
-  suggested_sms_sender_id?: string | null;
   business_type: BusinessType;
   status: "active" | "inactive";
   dual_financial_view_enabled?: boolean;

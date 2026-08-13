@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Download } from "lucide-react";
 import { API_URL, formatDate, mediaUrl, money, PhoneEntry, Tenant } from "@/lib/api";
+import { sortBillItems } from "@/lib/business-profiles";
 
 type SharedBill = {
   bill_number: string;
@@ -77,6 +78,9 @@ export default function SharedBillPage() {
   const paid = isPaidBill(bill);
   const documentLabel = paid ? "Paid receipt" : "Quotation";
   const downloadLabel = paid ? "Download receipt" : "Download quotation";
+  const billItems = sortBillItems(bill.items);
+  const chargeItems = billItems.filter((item) => item.type !== "discount");
+  const discountItems = billItems.filter((item) => item.type === "discount");
 
   return (
     <main className="mx-auto min-h-screen max-w-3xl px-4 py-8">
@@ -163,7 +167,7 @@ export default function SharedBillPage() {
               </tr>
             </thead>
             <tbody>
-              {bill.items.map((item) => (
+              {chargeItems.map((item) => (
                 <tr key={item.id} className="border-b border-[#f0ece3]">
                   <td className="px-5 py-3">{item.description}</td>
                   <td className="px-3 py-3 tabular-nums">{item.quantity}</td>
@@ -171,7 +175,24 @@ export default function SharedBillPage() {
                   <td className="px-5 py-3 text-right tabular-nums">{money(item.line_total)}</td>
                 </tr>
               ))}
-              {!bill.items.length && (
+              {discountItems.length > 0 && (
+                <>
+                  <tr className="bill-discount-row border-t-2 border-[#167c73]/35 bg-[#e7f4f2]">
+                    <td colSpan={4} className="px-5 py-2 text-[10px] font-bold uppercase tracking-wide text-[#167c73]">
+                      Discount
+                    </td>
+                  </tr>
+                  {discountItems.map((item) => (
+                    <tr key={item.id} className="bill-discount-row border-t border-[#167c73]/20 bg-[#e7f4f2] text-[#167c73]">
+                      <td className="px-5 py-3">{item.description}</td>
+                      <td className="px-3 py-3 tabular-nums">{item.quantity}</td>
+                      <td className="px-3 py-3 tabular-nums">{money(item.unit_price)}</td>
+                      <td className="px-5 py-3 text-right font-semibold tabular-nums">-{money(item.line_total)}</td>
+                    </tr>
+                  ))}
+                </>
+              )}
+              {!billItems.length && (
                 <tr>
                   <td colSpan={4} className="px-5 py-8 text-center text-[#6f746e]">
                     No line items yet.
@@ -188,8 +209,8 @@ export default function SharedBillPage() {
             <strong className="tabular-nums">{money(bill.subtotal)}</strong>
           </div>
           {Number(bill.total_deductions) > 0 && (
-            <div className="flex justify-between">
-              <span className="text-[#6f746e]">Deductions</span>
+            <div className="bill-discount-row -mx-2 flex justify-between rounded-sm bg-[#e7f4f2] px-2 py-1.5 text-[#167c73]">
+              <span>Deductions</span>
               <strong className="tabular-nums">-{money(bill.total_deductions)}</strong>
             </div>
           )}
