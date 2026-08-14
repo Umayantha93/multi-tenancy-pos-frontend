@@ -64,6 +64,9 @@ export default function BillDetailPage() {
   const chargeItems = useMemo(() => billItems.filter((item) => item.type !== "discount"), [billItems]);
   const discountItems = useMemo(() => billItems.filter((item) => item.type === "discount"), [billItems]);
   const isClosed = bill?.status === "closed";
+  const isPaid = Boolean(
+    bill && (bill.status === "paid" || (Number(bill.balance_due) <= 0 && Number(bill.amount_paid) > 0)),
+  );
 
   useEffect(() => {
     if (!itemTypes.length) return;
@@ -306,7 +309,7 @@ export default function BillDetailPage() {
   }
 
   async function confirmClose() {
-    if (!bill || isClosed) return;
+    if (!bill || isClosed || !isPaid) return;
     setClosing(true);
     setError("");
     try {
@@ -357,9 +360,14 @@ export default function BillDetailPage() {
           {!isClosed && (
             <button
               type="button"
+              disabled={!isPaid}
               onClick={() => setPendingClose(true)}
-              className="inline-flex h-10 items-center gap-2 border border-[#20221f] bg-white px-3 text-sm font-semibold hover:bg-[#20221f] hover:text-white"
-              title={`Close this ${profile.billingSingular.toLowerCase()}`}
+              className="inline-flex h-10 items-center gap-2 border border-[#20221f] bg-white px-3 text-sm font-semibold hover:bg-[#20221f] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-[#20221f]"
+              title={
+                isPaid
+                  ? `Close this ${profile.billingSingular.toLowerCase()}`
+                  : `Pay this ${profile.billingSingular.toLowerCase()} in full before closing`
+              }
             >
               <Lock size={16} />
               <span className="hidden sm:inline">Close</span>
@@ -387,11 +395,7 @@ export default function BillDetailPage() {
       <ConfirmModal
         open={pendingClose}
         title={`Close ${profile.billingSingular.toLowerCase()}`}
-        message={
-          Number(bill.balance_due) > 0
-            ? `There is still ${money(bill.balance_due)} due. Closing this ${profile.billingSingular.toLowerCase()} locks items, payments, and all other details so they cannot be changed.`
-            : `Close this ${profile.billingSingular.toLowerCase()}? Items, payments, and all other details will be locked and cannot be changed.`
-        }
+        message={`Close this ${profile.billingSingular.toLowerCase()}? Items, payments, and all other details will be locked and cannot be changed.`}
         confirmLabel={`Close ${profile.billingSingular.toLowerCase()}`}
         tone="default"
         busy={closing}
