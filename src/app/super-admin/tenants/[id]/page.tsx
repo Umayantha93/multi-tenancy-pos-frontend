@@ -411,6 +411,9 @@ export default function TenantDetailPage() {
               <Link href={`/super-admin/tenants/${id}/users`} className={`${buttonClass} mt-6 w-full`}>
                 <Users size={18} />Manage tenant users
               </Link>
+              <Link href={`/super-admin/invoices?tenant=${id}`} className="mt-2 inline-flex h-11 w-full items-center justify-center border border-[#20221f] bg-white px-4 text-sm font-semibold hover:bg-[#20221f] hover:text-white">
+                Tenants invoices
+              </Link>
             </Panel>
 
             <Panel className="p-5">
