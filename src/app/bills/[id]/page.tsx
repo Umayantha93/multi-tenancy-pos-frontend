@@ -7,6 +7,8 @@ import { AppShell } from "@/components/app-shell";
 import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { api, currentFeatures, currentUser, mediaUrl, money, storeSession, Tenant, User } from "@/lib/api";
 import { billItemLabel, profileFor, sortBillItems } from "@/lib/business-profiles";
+import { billStamp, billStampDateLabel, latestPaymentAt } from "@/lib/bill-stamp";
+import { BillStatusSeal } from "@/components/bill-status-seal";
 
 type Part = { id: number; name: string; price: string; stock_qty: number; sku?: string | null; barcode?: string | null; brand?: string };
 type Bill = {
@@ -19,6 +21,8 @@ type Bill = {
   amount_paid: string;
   balance_due: string;
   customer_balance?: string | number;
+  mileage?: number | string | null;
+  odometer?: number | string | null;
   customer: { name: string; phone: string; address?: string | null } | null;
   vehicle: { number_plate: string; chassis_number?: string | null; make?: string; model?: string } | null;
   items: Array<{ id: number; type: string; description: string; quantity: string; unit_price: string; line_total: string }>;
@@ -48,6 +52,8 @@ export default function BillDetailPage() {
   const [closing, setClosing] = useState(false);
   const [sendingSms, setSendingSms] = useState(false);
   const [smsNotice, setSmsNotice] = useState("");
+  const [mileageDraft, setMileageDraft] = useState("");
+  const [savingMileage, setSavingMileage] = useState(false);
   const [features, setFeatures] = useState<string[]>(() => currentFeatures());
   const canSendSms = features.includes("bill_sms");
 
@@ -64,9 +70,9 @@ export default function BillDetailPage() {
   const chargeItems = useMemo(() => billItems.filter((item) => item.type !== "discount"), [billItems]);
   const discountItems = useMemo(() => billItems.filter((item) => item.type === "discount"), [billItems]);
   const isClosed = bill?.status === "closed";
-  const isPaid = Boolean(
-    bill && (bill.status === "paid" || (Number(bill.balance_due) <= 0 && Number(bill.amount_paid) > 0)),
-  );
+  const isPaid = Boolean(bill && Number(bill.amount_paid) > 0 && Number(bill.balance_due) <= 0);
+  const stamp = bill ? billStamp(bill) : "quote";
+  const paymentDate = bill ? billStampDateLabel(latestPaymentAt(bill.payments)) : null;
 
   useEffect(() => {
     if (!itemTypes.length) return;
@@ -109,7 +115,12 @@ export default function BillDetailPage() {
   }
 
   const load = useCallback(() => {
-    api<Bill>(`/bills/${id}`).then(setBill).catch((caught) => setError(caught.message));
+    api<Bill>(`/bills/${id}`)
+      .then((result) => {
+        setBill(result);
+        setMileageDraft(result.mileage != null && result.mileage !== "" ? String(result.mileage) : "");
+      })
+      .catch((caught) => setError(caught.message));
   }, [id]);
 
   useEffect(() => {
@@ -308,6 +319,25 @@ export default function BillDetailPage() {
     }
   }
 
+  async function saveMileage(event: FormEvent) {
+    event.preventDefault();
+    if (isClosed || !bill) return;
+    setSavingMileage(true);
+    setError("");
+    try {
+      const updated = await api<Bill>(`/bills/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ mileage: mileageDraft === "" ? null : Number(mileageDraft) }),
+      });
+      setBill(updated);
+      setMileageDraft(updated.mileage != null && updated.mileage !== "" ? String(updated.mileage) : "");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save mileage.");
+    } finally {
+      setSavingMileage(false);
+    }
+  }
+
   async function confirmClose() {
     if (!bill || isClosed || !isPaid) return;
     setClosing(true);
@@ -346,7 +376,7 @@ export default function BillDetailPage() {
               title={
                 !bill.customer?.phone
                   ? "Customer phone required"
-                  : bill.status === "paid" || (Number(bill.balance_due) <= 0 && Number(bill.amount_paid) > 0)
+                  : stamp === "paid"
                     ? "Send paid bill link by SMS"
                     : "Send quotation link by SMS"
               }
@@ -404,23 +434,8 @@ export default function BillDetailPage() {
         }}
         onConfirm={confirmClose}
       />
-      <Panel className="bill-letterhead relative mb-5 overflow-hidden p-5">
-        {(bill.status === "paid" || (Number(bill.balance_due) <= 0 && Number(bill.amount_paid) > 0)) ? (
-          <div
-            aria-hidden="true"
-            className="bill-status-seal pointer-events-none absolute right-6 top-1/2 z-10 hidden -translate-y-1/2 rotate-[-18deg] select-none border-[3px] border-[#167c73] px-5 py-2 font-display text-6xl font-bold uppercase tracking-[0.12em] text-[#167c73] print:block sm:right-10"
-          >
-            Paid
-          </div>
-        ) : isClosed ? (
-          <div
-            aria-hidden="true"
-            className="bill-status-seal pointer-events-none absolute right-6 top-1/2 z-10 hidden -translate-y-1/2 rotate-[-18deg] select-none border-[3px] border-[#20221f] px-5 py-2 font-display text-6xl font-bold uppercase tracking-[0.12em] text-[#20221f] print:block sm:right-10"
-          >
-            Closed
-          </div>
-        ) : null}
-        <div className="relative z-0 flex flex-wrap items-start justify-between gap-4">
+      <Panel className="bill-letterhead mb-5 overflow-hidden p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-4">
             {logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -448,9 +463,10 @@ export default function BillDetailPage() {
               </div>
             </div>
           </div>
-          <div className="text-right text-xs uppercase text-[#6f746e]">
+          <div className="flex shrink-0 flex-col items-end text-right text-xs uppercase text-[#6f746e]">
             <p className="font-bold text-[#167c73]">Tax invoice / {profile.billingSingular.toLowerCase()}</p>
             <p className="mt-1 normal-case">{new Date().toLocaleString("en-LK")}</p>
+            <BillStatusSeal stamp={stamp} paymentDate={paymentDate} />
           </div>
         </div>
       </Panel>
@@ -458,7 +474,7 @@ export default function BillDetailPage() {
       <div className="grid items-start gap-5 xl:grid-cols-[1.55fr_0.75fr] print:block print:space-y-5">
         <div className="space-y-5">
           <Panel>
-            <div className="grid gap-4 p-5 sm:grid-cols-3">
+            <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <p className="text-[10px] font-bold uppercase text-[#6f746e]">Customer</p>
                 <p className="mt-1 font-semibold">{bill.customer?.name ?? "Walk-in"}</p>
@@ -477,6 +493,28 @@ export default function BillDetailPage() {
                   <div>
                     <p className="text-[10px] font-bold uppercase text-[#6f746e]">Chassis</p>
                     <p className="mt-1 break-all text-sm">{bill.vehicle.chassis_number || "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-[#6f746e]">Mileage</p>
+                    <p className="mt-1 font-semibold">
+                      {bill.mileage != null && bill.mileage !== "" ? `${Number(bill.mileage).toLocaleString()} km` : "—"}
+                    </p>
+                    {!isClosed && (
+                      <form onSubmit={saveMileage} className="no-print mt-2 flex h-11 items-stretch gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={mileageDraft}
+                          onChange={(event) => setMileageDraft(event.target.value)}
+                          className={inputClass}
+                          placeholder="km"
+                        />
+                        <button type="submit" disabled={savingMileage} className="inline-flex h-11 shrink-0 items-center justify-center border border-[#20221f] px-3 text-[10px] font-bold uppercase">
+                          {savingMileage ? "..." : "Save"}
+                        </button>
+                      </form>
+                    )}
                   </div>
                 </>
               ) : (
