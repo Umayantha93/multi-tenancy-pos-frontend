@@ -22,6 +22,7 @@ type Bill = {
   bill_number: string;
   status: string;
   notes?: string | null;
+  mileage?: number | string | null;
   odometer?: number | null;
   subtotal: string;
   total_deductions: string;
@@ -52,6 +53,7 @@ export default function SuperAdminInvoiceDetailPage() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [notes, setNotes] = useState("");
+  const [mileage, setMileage] = useState("");
   const [itemType, setItemType] = useState("labor");
   const [itemDescription, setItemDescription] = useState("");
   const [itemQty, setItemQty] = useState("1");
@@ -72,6 +74,7 @@ export default function SuperAdminInvoiceDetailPage() {
       .then((result) => {
         setBill(result);
         setNotes(result.notes ?? "");
+        setMileage(result.mileage != null && result.mileage !== "" ? String(result.mileage) : "");
         setDrafts(
           Object.fromEntries(
             result.items.map((item) => [
@@ -118,6 +121,7 @@ export default function SuperAdminInvoiceDetailPage() {
       if ("bill_number" in result) {
         setBill(result);
         setNotes(result.notes ?? "");
+        setMileage(result.mileage != null && result.mileage !== "" ? String(result.mileage) : "");
         setDrafts(
           Object.fromEntries(
             result.items.map((item) => [
@@ -143,8 +147,8 @@ export default function SuperAdminInvoiceDetailPage() {
     event.preventDefault();
     await run(
       `/super-admin/tenants/${tenantId}/bills/${billId}`,
-      { method: "PUT", body: JSON.stringify({ notes }) },
-      "Notes saved.",
+      { method: "PUT", body: JSON.stringify({ notes, mileage: mileage === "" ? null : Number(mileage) }) },
+      "Bill details saved.",
     );
   }
 
@@ -284,6 +288,9 @@ export default function SuperAdminInvoiceDetailPage() {
                   <p className="text-[10px] font-bold uppercase text-[#6f746e]">Vehicle</p>
                   <p className="mt-1 font-semibold">{bill.vehicle.number_plate}</p>
                   <p className="text-sm text-[#6f746e]">{[bill.vehicle.make, bill.vehicle.model].filter(Boolean).join(" ")}</p>
+                  <p className="mt-2 text-sm text-[#6f746e]">
+                    Mileage {bill.mileage != null && bill.mileage !== "" ? `${Number(bill.mileage).toLocaleString()} km` : "—"}
+                  </p>
                 </div>
               )}
               <div className="text-right">
@@ -455,10 +462,14 @@ export default function SuperAdminInvoiceDetailPage() {
           <Panel className="p-5">
             <form onSubmit={saveNotes} className="space-y-3">
               <label className="block text-xs font-bold uppercase text-[#6f746e]">
+                Mileage (km)
+                <input type="number" min="0" step="1" value={mileage} onChange={(event) => setMileage(event.target.value)} className={`${inputClass} mt-2`} />
+              </label>
+              <label className="block text-xs font-bold uppercase text-[#6f746e]">
                 Notes
                 <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={4} className={`${inputClass} mt-2 h-auto py-2`} />
               </label>
-              <button className={`${buttonClass} w-full`} disabled={busy}>Save notes</button>
+              <button className={`${buttonClass} w-full`} disabled={busy}>Save details</button>
             </form>
           </Panel>
 

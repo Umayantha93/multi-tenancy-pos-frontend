@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import { Download } from "lucide-react";
 import { API_URL, formatDate, mediaUrl, money, PhoneEntry, Tenant } from "@/lib/api";
 import { sortBillItems } from "@/lib/business-profiles";
+import { billStamp, billStampDateLabel, latestPaymentAt } from "@/lib/bill-stamp";
+import { BillStatusSeal } from "@/components/bill-status-seal";
 
 type SharedBill = {
   bill_number: string;
@@ -14,6 +16,7 @@ type SharedBill = {
   total_deductions: string;
   amount_paid: string;
   balance_due: string;
+  mileage?: number | string | null;
   notes?: string | null;
   customer: { name: string; phone: string; address?: string | null } | null;
   vehicle: { number_plate: string; make?: string | null; model?: string | null; chassis_number?: string | null } | null;
@@ -22,8 +25,14 @@ type SharedBill = {
   tenant: Tenant | null;
 };
 
-function isPaidBill(bill: SharedBill) {
-  return bill.status === "paid" || (Number(bill.balance_due) <= 0 && Number(bill.amount_paid) > 0);
+function documentCopy(stamp: ReturnType<typeof billStamp>) {
+  if (stamp === "paid") {
+    return { title: "Receipt", label: "Paid receipt", download: "Download receipt" };
+  }
+  if (stamp === "partial") {
+    return { title: "Bill", label: "Partially paid bill", download: "Download bill" };
+  }
+  return { title: "Quotation", label: "Quotation", download: "Download quotation" };
 }
 
 export default function SharedBillPage() {
@@ -46,7 +55,8 @@ export default function SharedBillPage() {
 
   useEffect(() => {
     if (!bill) return;
-    const label = isPaidBill(bill) ? "Receipt" : "Quotation";
+    const stamp = billStamp(bill);
+    const label = documentCopy(stamp).title;
     const business = bill.tenant?.business_name ?? "Business";
     document.title = `${label} ${bill.bill_number} · ${business}`;
   }, [bill]);
@@ -75,9 +85,12 @@ export default function SharedBillPage() {
   const contactPhones = (bill.tenant?.contact_phones?.length
     ? bill.tenant.contact_phones.map((entry: PhoneEntry) => entry.number)
     : [bill.tenant?.contact_phone || bill.tenant?.owner_phone].filter(Boolean)) as string[];
-  const paid = isPaidBill(bill);
-  const documentLabel = paid ? "Paid receipt" : "Quotation";
-  const downloadLabel = paid ? "Download receipt" : "Download quotation";
+  const stamp = billStamp(bill);
+  const copy = documentCopy(stamp);
+  const documentLabel = copy.label;
+  const downloadLabel = copy.download;
+  const paymentDate = billStampDateLabel(latestPaymentAt(bill.payments));
+  const paid = stamp === "paid";
   const billItems = sortBillItems(bill.items);
   const chargeItems = billItems.filter((item) => item.type !== "discount");
   const discountItems = billItems.filter((item) => item.type === "discount");
@@ -100,16 +113,8 @@ export default function SharedBillPage() {
       </div>
 
       <div className="border border-[#e2ddd0] bg-white print:border-0">
-        <div className="relative overflow-hidden border-b border-[#e2ddd0] p-5">
-          <div
-            aria-hidden="true"
-            className={`pointer-events-none absolute right-4 top-1/2 z-10 -translate-y-1/2 rotate-[-18deg] select-none border-[3px] px-4 py-1 font-display text-4xl font-bold uppercase tracking-[0.12em] sm:right-8 sm:text-5xl ${
-              paid ? "border-[#167c73] text-[#167c73]" : "border-[#b8860b] text-[#b8860b]"
-            }`}
-          >
-            {paid ? "Paid" : "Quote"}
-          </div>
-          <div className="relative z-0 flex flex-wrap items-start justify-between gap-4">
+        <div className="overflow-hidden border-b border-[#e2ddd0] p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex min-w-0 flex-wrap items-start gap-4">
               {logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -123,7 +128,6 @@ export default function SharedBillPage() {
                 <p className="font-display text-3xl font-semibold uppercase leading-none">
                   {bill.tenant?.business_name ?? "Business"}
                 </p>
-                <p className="mt-2 text-sm font-semibold uppercase text-[#6f746e]">{documentLabel}</p>
                 <p className="mt-1 text-sm text-[#6f746e]">{bill.bill_number}</p>
                 <p className="mt-1 text-sm text-[#6f746e]">Date: {formatDate(bill.admission_date)}</p>
                 <div className="mt-3 space-y-1 text-sm">
@@ -134,6 +138,10 @@ export default function SharedBillPage() {
                   {contactEmail && <p>{contactEmail}</p>}
                 </div>
               </div>
+            </div>
+            <div className="flex shrink-0 flex-col items-end text-right text-xs uppercase text-[#6f746e]">
+              <p className="font-bold text-[#167c73]">{documentLabel}</p>
+              <BillStatusSeal stamp={stamp} paymentDate={paymentDate} alwaysVisible />
             </div>
           </div>
         </div>
@@ -151,6 +159,10 @@ export default function SharedBillPage() {
               <p className="mt-1 font-semibold">{bill.vehicle.number_plate}</p>
               <p className="text-sm text-[#6f746e]">
                 {[bill.vehicle.make, bill.vehicle.model].filter(Boolean).join(" ") || "—"}
+              </p>
+              <p className="mt-2 text-sm">
+                <span className="text-[10px] font-bold uppercase text-[#6f746e]">Mileage </span>
+                {bill.mileage != null && bill.mileage !== "" ? `${Number(bill.mileage).toLocaleString()} km` : "—"}
               </p>
             </div>
           )}
@@ -237,9 +249,11 @@ export default function SharedBillPage() {
                 <span className="font-semibold">Balance due</span>
                 <strong className="tabular-nums">{money(bill.balance_due)}</strong>
               </div>
-              <p className="pt-2 text-xs text-[#6f746e]">
-                This is a quotation. Final receipt will be available after payment is completed.
-              </p>
+              {stamp === "quote" && (
+                <p className="pt-2 text-xs text-[#6f746e]">
+                  This is a quotation. Final receipt will be available after payment is completed.
+                </p>
+              )}
             </>
           )}
         </div>
