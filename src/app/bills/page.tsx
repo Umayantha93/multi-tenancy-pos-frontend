@@ -7,6 +7,7 @@ import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, inputClass } from "@/components/ui";
 import { api, currentUser, formatDate, money } from "@/lib/api";
 import { profileFor } from "@/lib/business-profiles";
+import { billStatusClass, billStatusLabel, isOweInUrgent } from "@/lib/bill-stamp";
 
 type Bill = {
   id: number;
@@ -15,6 +16,7 @@ type Bill = {
   status: string;
   subtotal: string;
   balance_due: string;
+  owe_in_due_date?: string | null;
   customer: { name: string; phone: string } | null;
   vehicle: { number_plate: string; make?: string; model?: string } | null;
 };
@@ -131,29 +133,31 @@ export default function BillsPage() {
                 </tr>
               </thead>
               <tbody>
-                {bills.map((bill) => (
-                  <tr key={bill.id} className="border-t border-[#e2ded4]">
+                {bills.map((bill) => {
+                  const urgent = bill.status === "owe_in" && isOweInUrgent(bill.owe_in_due_date);
+                  return (
+                  <tr key={bill.id} className={`border-t border-[#e2ded4] ${urgent ? "bg-[#b84837]/8" : ""}`}>
                     <td className="px-5 py-4 font-semibold">{bill.bill_number}</td>
                     <td>{formatDate(bill.admission_date)}</td>
                     <td>{bill.customer?.name ?? "Walk-in"}</td>
                     <td>{bill.vehicle?.number_plate ?? "—"}</td>
                     <td>
-                      <span className={`px-2 py-1 text-[10px] font-bold uppercase ${
-                        bill.status === "paid"
-                          ? "bg-[#167c73]/10 text-[#167c73]"
-                          : bill.status === "closed"
-                            ? "bg-[#20221f] text-white"
-                            : "bg-[#f5c842]/25 text-[#735a00]"
-                      }`}>
-                        {bill.status.replace("_", " ")}
+                      <span className={`px-2 py-1 text-[10px] font-bold uppercase ${billStatusClass(bill.status, bill.owe_in_due_date)}`}>
+                        {billStatusLabel(bill.status)}
                       </span>
+                      {bill.status === "owe_in" && bill.owe_in_due_date && (
+                        <p className={`mt-1 text-[10px] font-semibold ${urgent ? "text-[#b84837]" : "text-[#6f746e]"}`}>
+                          Due {formatDate(bill.owe_in_due_date)}
+                        </p>
+                      )}
                     </td>
-                    <td className="pr-5 text-right font-semibold">{money(bill.balance_due)}</td>
+                    <td className={`pr-5 text-right font-semibold ${urgent ? "text-[#b84837]" : ""}`}>{money(bill.balance_due)}</td>
                     <td className="pr-4">
                       <Link href={`/bills/${bill.id}`} className="text-[#167c73]"><ArrowRight size={18} /></Link>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
             {bills.length === 0 && (

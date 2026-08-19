@@ -27,6 +27,7 @@ export type FeatureKey =
   | "customers"
   | "billing"
   | "bill_sms"
+  | "bill_profits"
   | "payroll"
   | "balance_sheet"
   | "parts_inventory"

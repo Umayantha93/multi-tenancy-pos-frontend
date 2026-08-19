@@ -1,11 +1,11 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { CreditCard, Lock, MessageSquare, Plus, Printer, Trash2 } from "lucide-react";
+import { ChevronDown, CreditCard, Lock, MessageSquare, Plus, Printer, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
-import { api, currentFeatures, currentUser, mediaUrl, money, storeSession, Tenant, User } from "@/lib/api";
+import { api, currentFeatures, currentUser, formatDate, mediaUrl, money, storeSession, Tenant, User } from "@/lib/api";
 import { billItemLabel, profileFor, sortBillItems } from "@/lib/business-profiles";
 import { billStamp, billStampDateLabel, latestPaymentAt } from "@/lib/bill-stamp";
 import { BillStatusSeal } from "@/components/bill-status-seal";
@@ -16,6 +16,7 @@ type Bill = {
   bill_number: string;
   share_token?: string | null;
   status: string;
+  owe_in_due_date?: string | null;
   subtotal: string;
   total_deductions: string;
   amount_paid: string;
@@ -49,7 +50,12 @@ export default function BillDetailPage() {
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [pendingClose, setPendingClose] = useState(false);
+  const [pendingOweIn, setPendingOweIn] = useState(false);
+  const [oweInDate, setOweInDate] = useState("");
+  const [oweInMenu, setOweInMenu] = useState(false);
+  const closeMenuRef = useRef<HTMLDivElement>(null);
   const [closing, setClosing] = useState(false);
+  const [markingOweIn, setMarkingOweIn] = useState(false);
   const [sendingSms, setSendingSms] = useState(false);
   const [smsNotice, setSmsNotice] = useState("");
   const [mileageDraft, setMileageDraft] = useState("");
@@ -70,6 +76,8 @@ export default function BillDetailPage() {
   const chargeItems = useMemo(() => billItems.filter((item) => item.type !== "discount"), [billItems]);
   const discountItems = useMemo(() => billItems.filter((item) => item.type === "discount"), [billItems]);
   const isClosed = bill?.status === "closed";
+  const isOweIn = bill?.status === "owe_in";
+  const isLocked = isClosed || isOweIn;
   const isPaid = Boolean(bill && Number(bill.amount_paid) > 0 && Number(bill.balance_due) <= 0);
   const stamp = bill ? billStamp(bill) : "quote";
   const paymentDate = bill ? billStampDateLabel(latestPaymentAt(bill.payments)) : null;
@@ -80,6 +88,20 @@ export default function BillDetailPage() {
       setType(itemTypes[0].value);
     }
   }, [itemTypes, type]);
+
+  useEffect(() => {
+    if (isOweIn) setMode("payment");
+  }, [isOweIn]);
+
+  useEffect(() => {
+    function onPointer(event: MouseEvent) {
+      if (!closeMenuRef.current?.contains(event.target as Node)) {
+        setOweInMenu(false);
+      }
+    }
+    window.addEventListener("mousedown", onPointer);
+    return () => window.removeEventListener("mousedown", onPointer);
+  }, []);
 
   function resetItemForm(nextType?: string) {
     setType(nextType || itemTypes[0]?.value || "");
@@ -214,7 +236,7 @@ export default function BillDetailPage() {
 
   async function addItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isClosed) return;
+    if (isLocked) return;
     setError("");
     const form = event.currentTarget;
     const formData = new FormData(form);
@@ -272,7 +294,7 @@ export default function BillDetailPage() {
   }
 
   async function remove(itemId: number) {
-    if (isClosed) return;
+    if (isLocked) return;
     const item = bill?.items.find((entry) => entry.id === itemId);
     setPendingDelete({
       kind: "item",
@@ -282,7 +304,7 @@ export default function BillDetailPage() {
   }
 
   async function removePayment(paymentId: number) {
-    if (isClosed) return;
+    if (isLocked) return;
     const payment = bill?.payments.find((entry) => entry.id === paymentId);
     if (!payment) return;
     setPendingDelete({
@@ -321,7 +343,7 @@ export default function BillDetailPage() {
 
   async function saveMileage(event: FormEvent) {
     event.preventDefault();
-    if (isClosed || !bill) return;
+    if (isLocked || !bill) return;
     setSavingMileage(true);
     setError("");
     try {
@@ -350,6 +372,22 @@ export default function BillDetailPage() {
       setError(caught instanceof Error ? caught.message : `Could not close this ${profile.billingSingular.toLowerCase()}.`);
     } finally {
       setClosing(false);
+    }
+  }
+
+  async function confirmOweIn() {
+    if (!bill || isLocked || isPaid || !oweInDate) return;
+    setMarkingOweIn(true);
+    setError("");
+    try {
+      await api(`/bills/${id}/owe-in`, { method: "POST", body: JSON.stringify({ due_date: oweInDate }) });
+      setPendingOweIn(false);
+      setOweInMenu(false);
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not mark this bill as owe in.");
+    } finally {
+      setMarkingOweIn(false);
     }
   }
 
@@ -387,17 +425,58 @@ export default function BillDetailPage() {
           <button onClick={() => window.print()} className="grid size-10 place-items-center border border-[#c9c5b9]" title="Print bill">
             <Printer size={19} />
           </button>
-          {!isClosed && (
+          {!isClosed && !isOweIn && (
+            <div ref={closeMenuRef} className="relative">
+              <div className="inline-flex h-10 overflow-hidden border border-[#c9c5b9] bg-white">
+                <button
+                  type="button"
+                  disabled={!isPaid}
+                  onClick={() => setPendingClose(true)}
+                  className="inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold hover:bg-[#f7f5ef] disabled:cursor-not-allowed disabled:opacity-40"
+                  title={
+                    isPaid
+                      ? `Close this ${profile.billingSingular.toLowerCase()}`
+                      : `Pay this ${profile.billingSingular.toLowerCase()} in full before closing`
+                  }
+                >
+                  <Lock size={16} />
+                  <span className="hidden sm:inline">Close</span>
+                </button>
+                <span className="w-px self-stretch bg-[#c9c5b9]" />
+                <button
+                  type="button"
+                  onClick={() => setOweInMenu((open) => !open)}
+                  className="grid h-10 w-9 place-items-center hover:bg-[#f7f5ef]"
+                  title="More close options"
+                  aria-label="More close options"
+                  aria-expanded={oweInMenu}
+                >
+                  <ChevronDown size={16} />
+                </button>
+              </div>
+              {oweInMenu && (
+                <div className="absolute right-0 z-30 mt-1 min-w-[160px] border border-[#c9c5b9] bg-white shadow-[0_12px_28px_rgba(24,27,25,0.16)]">
+                  <button
+                    type="button"
+                    disabled={isPaid}
+                    onClick={() => {
+                      setOweInMenu(false);
+                      setOweInDate(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
+                      setPendingOweIn(true);
+                    }}
+                    className="block w-full px-4 py-2.5 text-left text-sm font-semibold hover:bg-[#f7f5ef] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Owe In
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          {isOweIn && isPaid && (
             <button
               type="button"
-              disabled={!isPaid}
               onClick={() => setPendingClose(true)}
-              className="inline-flex h-10 items-center gap-2 border border-[#20221f] bg-white px-3 text-sm font-semibold hover:bg-[#20221f] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-[#20221f]"
-              title={
-                isPaid
-                  ? `Close this ${profile.billingSingular.toLowerCase()}`
-                  : `Pay this ${profile.billingSingular.toLowerCase()} in full before closing`
-              }
+              className="inline-flex h-10 items-center gap-2 border border-[#20221f] bg-white px-3 text-sm font-semibold hover:bg-[#20221f] hover:text-white"
             >
               <Lock size={16} />
               <span className="hidden sm:inline">Close</span>
@@ -434,6 +513,29 @@ export default function BillDetailPage() {
         }}
         onConfirm={confirmClose}
       />
+      <ConfirmModal
+        open={pendingOweIn}
+        title="Mark as Owe In"
+        message="The job card will be locked except for payments. Choose the date the customer should settle the balance."
+        confirmLabel="Mark owe in"
+        tone="teal"
+        busy={markingOweIn}
+        onCancel={() => {
+          if (!markingOweIn) setPendingOweIn(false);
+        }}
+        onConfirm={confirmOweIn}
+      >
+        <label className="mt-4 block text-xs font-bold uppercase">
+          Due date
+          <input
+            type="date"
+            min={new Date().toISOString().slice(0, 10)}
+            value={oweInDate}
+            onChange={(event) => setOweInDate(event.target.value)}
+            className={`${inputClass} mt-2`}
+          />
+        </label>
+      </ConfirmModal>
       <Panel className="bill-letterhead mb-5 overflow-hidden p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-4">
@@ -499,7 +601,7 @@ export default function BillDetailPage() {
                     <p className="mt-1 font-semibold">
                       {bill.mileage != null && bill.mileage !== "" ? `${Number(bill.mileage).toLocaleString()} km` : "—"}
                     </p>
-                    {!isClosed && (
+                    {!isLocked && (
                       <form onSubmit={saveMileage} className="no-print mt-2 flex h-11 items-stretch gap-2">
                         <input
                           type="number"
@@ -538,6 +640,12 @@ export default function BillDetailPage() {
               This {profile.billingSingular.toLowerCase()} is closed and cannot be edited.
             </div>
           )}
+          {isOweIn && (
+            <div className="no-print flex items-center gap-2 border border-[#2b6cb0]/20 bg-[#2b6cb0]/8 px-4 py-3 text-sm text-[#2b6cb0]">
+              <Lock size={16} />
+              This {profile.billingSingular.toLowerCase()} is on owe in{bill.owe_in_due_date ? ` until ${formatDate(bill.owe_in_due_date)}` : ""}. Items are locked; payments can still be recorded.
+            </div>
+          )}
 
           <Panel>
             <div className="border-b border-[#d7d3c8] px-5 py-4">
@@ -551,7 +659,7 @@ export default function BillDetailPage() {
                   <col className="w-[10%]" />
                   <col className="w-[18%]" />
                   <col className="w-[18%]" />
-                  {!isClosed && <col className="no-print w-10" />}
+                  {!isLocked && <col className="no-print w-10" />}
                 </colgroup>
                 <thead className="bg-[#eeece5] text-[10px] uppercase text-[#6f746e]">
                   <tr>
@@ -560,7 +668,7 @@ export default function BillDetailPage() {
                     <th className="px-3 py-3 text-right">Qty</th>
                     <th className="px-3 py-3 text-right">Rate</th>
                     <th className="px-4 py-3 text-right">Total</th>
-                    {!isClosed && <th className="no-print px-2 py-3" />}
+                    {!isLocked && <th className="no-print px-2 py-3" />}
                   </tr>
                 </thead>
                 <tbody>
@@ -593,7 +701,7 @@ export default function BillDetailPage() {
                             <span className="tabular-nums">{money(item.line_total)}</span>
                           )}
                         </td>
-                        {!isClosed && (
+                        {!isLocked && (
                           <td className="no-print px-2 py-3">
                             <button onClick={() => remove(item.id)} className="text-[#b84837]" title="Remove item">
                               <Trash2 size={16} />
@@ -610,7 +718,7 @@ export default function BillDetailPage() {
                       <td colSpan={5} className="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-[#167c73]">
                         Discount
                       </td>
-                      {!isClosed && <td className="no-print" />}
+                      {!isLocked && <td className="no-print" />}
                     </tr>
                     {discountItems.map((item) => (
                       <tr key={item.id} className="bill-discount-row border-t border-[#167c73]/20 bg-[#e7f4f2] align-top text-[#167c73]">
@@ -623,7 +731,7 @@ export default function BillDetailPage() {
                         </td>
                         <td className="px-3 py-3 text-right tabular-nums">{money(item.unit_price)}</td>
                         <td className="px-4 py-3 text-right font-semibold tabular-nums">-{money(item.line_total)}</td>
-                        {!isClosed && (
+                        {!isLocked && (
                           <td className="no-print px-2 py-3">
                             <button onClick={() => remove(item.id)} className="text-[#b84837]" title="Remove item">
                               <Trash2 size={16} />
@@ -649,7 +757,7 @@ export default function BillDetailPage() {
                   <div key={payment.id} className="flex items-center gap-3 px-5 py-3 text-sm">
                     <span className="uppercase text-[#6f746e]">{payment.method.replace("_", " ")}</span>
                     <strong className="ml-auto tabular-nums">{money(payment.amount)}</strong>
-                    {!isClosed && (
+                    {!isLocked && (
                       <button
                         type="button"
                         onClick={() => removePayment(payment.id)}
@@ -669,6 +777,7 @@ export default function BillDetailPage() {
         <div className="space-y-5 print:mt-5">
           {!isClosed && (
           <Panel className="no-print xl:sticky xl:top-4">
+            {!isOweIn && (
             <div className="grid grid-cols-2 border-b border-[#d7d3c8]">
               <button onClick={() => setMode("item")} className={`h-11 text-sm font-semibold ${mode === "item" ? "bg-[#20221f] text-white" : ""}`}>
                 <Plus className="inline" size={16} /> Add item
@@ -677,8 +786,14 @@ export default function BillDetailPage() {
                 <CreditCard className="inline" size={16} /> Payment
               </button>
             </div>
+            )}
+            {isOweIn && (
+              <div className="border-b border-[#d7d3c8] px-5 py-3">
+                <p className="text-xs font-bold uppercase text-[#2b6cb0]">Record payment</p>
+              </div>
+            )}
 
-            {mode === "item" ? (
+            {mode === "item" && !isOweIn ? (
               <form key={formKey} onSubmit={addItem} className="flex max-h-[min(78vh,46rem)] flex-col">
                 <div className="space-y-3 overflow-y-auto p-4">
                 <div>
