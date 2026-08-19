@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel } from "@/components/ui";
 import { api, formatDate, money } from "@/lib/api";
+import { billStatusClass, billStatusLabel } from "@/lib/bill-stamp";
 
 type CustomerDetail = {
   id: number;
@@ -125,14 +126,8 @@ export default function CustomerDetailPage() {
                     </td>
                     <td>{bill.vehicle?.number_plate ?? "—"}</td>
                     <td>
-                      <span className={`px-2 py-1 text-[10px] font-bold uppercase ${
-                        bill.status === "paid"
-                          ? "bg-[#167c73]/10 text-[#167c73]"
-                          : bill.status === "closed"
-                            ? "bg-[#20221f] text-white"
-                            : "bg-[#f5c842]/25 text-[#735a00]"
-                      }`}>
-                        {bill.status.replace("_", " ")}
+                      <span className={`px-2 py-1 text-[10px] font-bold uppercase ${billStatusClass(bill.status)}`}>
+                        {billStatusLabel(bill.status)}
                       </span>
                     </td>
                     <td>{money(bill.subtotal)}</td>

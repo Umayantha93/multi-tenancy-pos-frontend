@@ -14,6 +14,7 @@ import {
   ShoppingBag,
   Users,
   ChartNoAxesCombined,
+  PieChart,
   type LucideIcon,
 } from "lucide-react";
 
@@ -53,12 +54,15 @@ const sharedPeopleFinance: Array<{ key: FeatureKey; name: string; group: string 
   { key: "customers", name: "Customers", group: "Service Intake" },
   { key: "billing", name: "Billing", group: "Service Intake" },
   { key: "bill_sms", name: "Bill SMS", group: "Service Intake" },
+  { key: "bill_profits", name: "Bill Profits Analysis", group: "Service Intake" },
   { key: "employees_management", name: "Team", group: "People" },
   { key: "attendance", name: "Attendance", group: "People" },
   { key: "payroll", name: "Payroll", group: "People" },
   { key: "balance_sheet", name: "Finance", group: "Finance" },
   { key: "reports", name: "Reports", group: "Finance" },
 ];
+
+const billProfitsNav: NavItem = { href: "/bill-profits", label: "Bill profits", icon: PieChart, feature: "bill_profits" };
 
 const sharedNavTail: NavItem[] = [
   { href: "/customers", label: "Customers", icon: Contact, feature: "customers" },
@@ -87,7 +91,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
     ],
     defaultFeatures: [
-      "admit_vehicle", "parts_inventory", "customers", "billing", "bill_sms",
+      "admit_vehicle", "parts_inventory", "customers", "billing", "bill_sms", "bill_profits",
       "employees_management", "attendance", "payroll", "balance_sheet", "reports",
     ],
     moduleCatalog: [
@@ -99,6 +103,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/dashboard", label: "Overview", icon: Gauge },
       { href: "/vehicles/admit", label: "Admit vehicle", icon: ClipboardList, feature: "admit_vehicle" },
       { href: "/bills", label: "Job cards", icon: ReceiptText, feature: "billing" },
+      billProfitsNav,
       { href: "/parts", label: "Parts", icon: Boxes, feature: "parts_inventory" },
       ...sharedNavTail,
     ],
@@ -126,7 +131,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
     ],
     defaultFeatures: [
-      "photo_bookings", "photo_packages", "customers", "billing", "bill_sms",
+      "photo_bookings", "photo_packages", "customers", "billing", "bill_sms", "bill_profits",
       "employees_management", "attendance", "payroll", "balance_sheet", "reports",
     ],
     moduleCatalog: [
@@ -139,6 +144,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/bookings", label: "Bookings", icon: CalendarDays, feature: "photo_bookings" },
       { href: "/packages", label: "Packages", icon: Camera, feature: "photo_packages" },
       { href: "/bills", label: "Orders", icon: ReceiptText, feature: "billing" },
+      billProfitsNav,
       ...sharedNavTail,
     ],
     billItemTypes: [
@@ -166,7 +172,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
     ],
     defaultFeatures: [
-      "retail_pos", "product_catalog", "customers", "billing", "bill_sms",
+      "retail_pos", "product_catalog", "customers", "billing", "bill_sms", "bill_profits",
       "employees_management", "attendance", "payroll", "balance_sheet", "reports",
     ],
     moduleCatalog: [
@@ -179,6 +185,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/pos", label: "New sale", icon: ShoppingBag, feature: "retail_pos" },
       { href: "/catalog", label: "Catalog", icon: Package, feature: "product_catalog" },
       { href: "/bills", label: "Sales", icon: ReceiptText, feature: "billing" },
+      billProfitsNav,
       ...sharedNavTail,
     ],
     billItemTypes: [
@@ -205,7 +212,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
     ],
     defaultFeatures: [
-      "cottage_rooms", "cottage_stays", "customers", "billing", "bill_sms",
+      "cottage_rooms", "cottage_stays", "customers", "billing", "bill_sms", "bill_profits",
       "employees_management", "attendance", "payroll", "balance_sheet", "reports",
     ],
     moduleCatalog: [
@@ -218,6 +225,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/stays", label: "Stays", icon: BedDouble, feature: "cottage_stays" },
       { href: "/rooms", label: "Rooms", icon: Package, feature: "cottage_rooms" },
       { href: "/bills", label: "Billing", icon: ReceiptText, feature: "billing" },
+      billProfitsNav,
       ...sharedNavTail,
     ],
     billItemTypes: [

@@ -8,6 +8,7 @@ import { PlatformShell } from "@/components/platform-shell";
 import { ConfirmModal, ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
 import { api, formatDate, money, Tenant } from "@/lib/api";
 import { billItemLabel, profileFor, sortBillItems } from "@/lib/business-profiles";
+import { billStatusClass } from "@/lib/bill-stamp";
 
 type BillItem = {
   id: number;
@@ -38,9 +39,7 @@ type Bill = {
 type Part = { id: number; name: string; price: string; stock_qty: number; sku?: string | null; brand?: string };
 
 function statusClass(status: string) {
-  if (status === "paid") return "bg-[#167c73]/10 text-[#167c73]";
-  if (status === "closed") return "bg-[#20221f] text-white";
-  return "bg-[#f5c842]/25 text-[#735a00]";
+  return billStatusClass(status);
 }
 
 export default function SuperAdminInvoiceDetailPage() {

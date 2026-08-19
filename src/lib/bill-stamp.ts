@@ -24,3 +24,24 @@ export function billStampLabel(stamp: BillStamp): string {
 export function billStampDateLabel(paidAt: string | null): string | null {
   return paidAt ? formatDate(paidAt) : null;
 }
+
+export function isOweInUrgent(dueDate?: string | null, withinDays = 3): boolean {
+  if (!dueDate) return false;
+  const due = new Date(`${dueDate.slice(0, 10)}T00:00:00`);
+  const limit = new Date();
+  limit.setHours(0, 0, 0, 0);
+  limit.setDate(limit.getDate() + withinDays);
+  return due.getTime() <= limit.getTime();
+}
+
+export function billStatusClass(status: string, dueDate?: string | null): string {
+  if (status === "owe_in" && isOweInUrgent(dueDate)) return "bg-[#b84837] text-white";
+  if (status === "owe_in") return "bg-[#2b6cb0]/15 text-[#2b6cb0]";
+  if (status === "paid") return "bg-[#167c73]/10 text-[#167c73]";
+  if (status === "closed") return "bg-[#20221f] text-white";
+  return "bg-[#f5c842]/25 text-[#735a00]";
+}
+
+export function billStatusLabel(status: string): string {
+  return status.replaceAll("_", " ");
+}

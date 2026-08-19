@@ -174,9 +174,13 @@ export default function PartsPage() {
     if (!selected) return;
     const form = event.currentTarget;
     try {
+      const payload = Object.fromEntries(new FormData(form));
+      if (!payload.due_date || payload.payment_status !== "credit") {
+        delete payload.due_date;
+      }
       await api(`/parts/${selected.id}/restock`, {
         method: "POST",
-        body: JSON.stringify(Object.fromEntries(new FormData(form))),
+        body: JSON.stringify(payload),
       });
       form.reset();
       setMode(null);
@@ -391,7 +395,7 @@ export default function PartsPage() {
             </div>
             <div className="space-y-4 p-5">
               <p className="text-sm text-[#6f746e]">
-                Adding stock for <strong>{selected.name}</strong> (now {selected.stock_qty}). This records an inventory expense so finance stays balanced.
+                Adding stock for <strong>{selected.name}</strong> (now {selected.stock_qty}). Paid purchases hit finance immediately; credit purchases stay as payables until settled.
               </p>
               <label className="block text-xs font-bold uppercase">
                 Quantity to add
@@ -400,6 +404,17 @@ export default function PartsPage() {
               <label className="block text-xs font-bold uppercase">
                 Unit cost
                 <input name="unit_cost" type="number" min="0" step="0.01" defaultValue={selected.cost_price || ""} className={`${inputClass} mt-2`} />
+              </label>
+              <label className="block text-xs font-bold uppercase">
+                Supplier payment
+                <select name="payment_status" className={`${inputClass} mt-2`} defaultValue="paid">
+                  <option value="paid">Paid now</option>
+                  <option value="credit">Buy on credit</option>
+                </select>
+              </label>
+              <label className="block text-xs font-bold uppercase">
+                Supplier due date (credit only)
+                <input name="due_date" type="date" className={`${inputClass} mt-2`} />
               </label>
               <label className="block text-xs font-bold uppercase">
                 Expense date

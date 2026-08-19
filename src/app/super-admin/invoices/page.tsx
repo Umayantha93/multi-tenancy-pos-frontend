@@ -7,6 +7,7 @@ import { ArrowRight, Search } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
 import { ErrorMessage, PageState, Panel, inputClass } from "@/components/ui";
 import { api, formatDate, money, Tenant } from "@/lib/api";
+import { billStatusClass, billStatusLabel } from "@/lib/bill-stamp";
 
 type TenantRow = Tenant & { owner_email?: string | null };
 type TenantPage = { data: TenantRow[] };
@@ -24,9 +25,7 @@ type BillRow = {
 type BillPage = { data: BillRow[]; total: number };
 
 function statusClass(status: string) {
-  if (status === "paid") return "bg-[#167c73]/10 text-[#167c73]";
-  if (status === "closed") return "bg-[#20221f] text-white";
-  return "bg-[#f5c842]/25 text-[#735a00]";
+  return billStatusClass(status);
 }
 
 function InvoicesPageInner() {
@@ -166,7 +165,7 @@ function InvoicesPageInner() {
                     <td>{bill.vehicle?.number_plate ?? "—"}</td>
                     <td>
                       <span className={`px-2 py-1 text-[10px] font-bold uppercase ${statusClass(bill.status)}`}>
-                        {bill.status.replace("_", " ")}
+                        {billStatusLabel(bill.status)}
                       </span>
                     </td>
                     <td className="text-right tabular-nums">{money(bill.subtotal)}</td>

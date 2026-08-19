@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Minus, Plus, TrendingUp } from "lucide-react";
+import { Minus, Plus, TrendingUp, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, Panel } from "@/components/ui";
 import { api, currentUser, formatDate, money } from "@/lib/api";
@@ -11,10 +11,19 @@ type AccountRow = {
   description: string;
   reference?: string | null;
   category: string;
-  type: "income" | "expense";
+  type: "income" | "expense" | "payable" | "bill";
   debit: number;
   credit: number;
   balance: number;
+};
+
+type PayableItem = {
+  id: number;
+  description: string;
+  amount: number;
+  expense_date?: string | null;
+  due_date?: string | null;
+  category: string;
 };
 
 type Sheet = {
@@ -25,8 +34,21 @@ type Sheet = {
   accounts: AccountRow[];
   yearly_trend: Array<{ month: number; income: number; expenses: number; net_profit: number }>;
   period?: { month: number; year: number };
+  inventory_payables?: { payables_total: number; items: PayableItem[] };
+  bill_receivables?: { receivables_total: number; count: number };
 };
 type Part = { id: number; name: string; stock_qty: number; cost_price: string };
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function entryTone(type: AccountRow["type"]) {
+  if (type === "income") return "bg-[#167c73]/10 text-[#167c73]";
+  if (type === "expense") return "bg-[#b84837]/10 text-[#b84837]";
+  if (type === "payable") return "bg-[#b8860b]/15 text-[#735a00]";
+  return "bg-[#2b6cb0]/10 text-[#2b6cb0]";
+}
 
 export default function BalanceSheetPage() {
   const now = new Date();
@@ -37,6 +59,9 @@ export default function BalanceSheetPage() {
   const [category, setCategory] = useState("rent");
   const [parts, setParts] = useState<Part[]>([]);
   const [partId, setPartId] = useState("");
+  const [paymentStatus, setPaymentStatus] = useState("paid");
+  const [settlingId, setSettlingId] = useState<number | null>(null);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const businessName = currentUser()?.tenant?.business_name ?? "Business";
 
   const load = useCallback(() => {
@@ -68,6 +93,8 @@ export default function BalanceSheetPage() {
             quantity,
             unit_cost: unitCost,
             expense_date: formData.get("expense_date"),
+            payment_status: formData.get("payment_status") || "paid",
+            due_date: formData.get("due_date") || undefined,
           }),
         });
       } else {
@@ -76,6 +103,7 @@ export default function BalanceSheetPage() {
       form.reset();
       setCategory("rent");
       setPartId("");
+      setPaymentStatus("paid");
       load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not add expense.");
@@ -89,6 +117,41 @@ export default function BalanceSheetPage() {
     [month, year],
   );
   const accounts = sheet?.accounts ?? [];
+  const payables = sheet?.inventory_payables?.items ?? [];
+  const dailyAccounts = useMemo(() => {
+    const days = new Map<string, { date: string; debit: number; credit: number; balance: number; entries: AccountRow[] }>();
+    for (const row of accounts) {
+      const date = row.date;
+      const current = days.get(date) ?? { date, debit: 0, credit: 0, balance: 0, entries: [] };
+      current.entries.push(row);
+      if (row.type === "income" || row.type === "expense") {
+        current.debit += row.debit;
+        current.credit += row.credit;
+      }
+      current.balance = row.balance;
+      days.set(date, current);
+    }
+    return [...days.values()].map((day) => ({
+      ...day,
+      debit: roundMoney(day.debit),
+      credit: roundMoney(day.credit),
+      profit: roundMoney(day.credit - day.debit),
+    }));
+  }, [accounts]);
+  const dayDetail = dailyAccounts.find((day) => day.date === selectedDay) ?? null;
+
+  async function settlePayable(id: number) {
+    setSettlingId(id);
+    setError("");
+    try {
+      await api(`/expenses/${id}/settle`, { method: "POST" });
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not settle this credit purchase.");
+    } finally {
+      setSettlingId(null);
+    }
+  }
 
   return (
     <AppShell title="Finance" eyebrow="Income, expenses & profit">
@@ -176,8 +239,26 @@ export default function BalanceSheetPage() {
                     )}
                     {selectedPart && (
                       <p className="text-xs text-[#167c73]">
-                        Current stock {selectedPart.stock_qty}. Total purchase amount below becomes the inventory expense.
+                        Current stock {selectedPart.stock_qty}. Total purchase amount below becomes the inventory expense when paid now.
                       </p>
+                    )}
+                    <label className="block text-xs font-bold uppercase">
+                      Supplier payment
+                      <select
+                        name="payment_status"
+                        value={paymentStatus}
+                        onChange={(event) => setPaymentStatus(event.target.value)}
+                        className={`${inputClass} mt-2`}
+                      >
+                        <option value="paid">Paid now</option>
+                        <option value="credit">Buy on credit</option>
+                      </select>
+                    </label>
+                    {paymentStatus === "credit" && (
+                      <label className="block text-xs font-bold uppercase">
+                        Supplier due date
+                        <input name="due_date" type="date" required className={`${inputClass} mt-2`} />
+                      </label>
                     )}
                   </>
                 )}
@@ -201,11 +282,51 @@ export default function BalanceSheetPage() {
                   <input name="expense_date" required type="date" defaultValue={now.toISOString().slice(0, 10)} className={`${inputClass} mt-2`} />
                 </label>
                 <button className={`${buttonClass} w-full`}>
-                  {partId ? "Restock & record expense" : "Record expense"}
+                  {partId ? "Restock & record purchase" : "Record expense"}
                 </button>
               </form>
             </Panel>
           </div>
+
+          {(payables.length > 0 || (sheet.bill_receivables?.count ?? 0) > 0) && (
+            <div className="mt-5 grid gap-5 xl:grid-cols-2">
+              <Panel className="p-5">
+                <h2 className="font-display text-2xl font-semibold uppercase">Inventory on credit</h2>
+                <p className="mt-1 text-sm text-[#6f746e]">
+                  Outstanding {money(sheet.inventory_payables?.payables_total ?? 0)}. These do not reduce profit until you pay the supplier.
+                </p>
+                <div className="mt-4 divide-y divide-[#e2ded4]">
+                  {payables.map((item) => (
+                    <div key={item.id} className="flex items-center gap-3 py-3 text-sm">
+                      <div className="min-w-0">
+                        <p className="font-semibold">{item.description}</p>
+                        <p className="text-xs text-[#6f746e]">Due {item.due_date ? formatDate(item.due_date) : "—"}</p>
+                      </div>
+                      <strong className="ml-auto tabular-nums">{money(item.amount)}</strong>
+                      <button
+                        type="button"
+                        disabled={settlingId === item.id}
+                        onClick={() => settlePayable(item.id)}
+                        className="border border-[#167c73] px-2 py-1 text-[10px] font-bold uppercase text-[#167c73] disabled:opacity-50"
+                      >
+                        {settlingId === item.id ? "..." : "Settle"}
+                      </button>
+                    </div>
+                  ))}
+                  {payables.length === 0 && <p className="py-4 text-sm text-[#6f746e]">No supplier credit purchases open.</p>}
+                </div>
+              </Panel>
+              <Panel className="p-5">
+                <h2 className="font-display text-2xl font-semibold uppercase">Customer owe in</h2>
+                <p className="mt-1 text-sm text-[#6f746e]">
+                  {sheet.bill_receivables?.count ?? 0} credit bills still collecting.
+                </p>
+                <p className="mt-4 font-display text-3xl font-semibold text-[#b84837]">
+                  {money(sheet.bill_receivables?.receivables_total ?? 0)}
+                </p>
+              </Panel>
+            </div>
+          )}
 
           <Panel className="mt-5 overflow-hidden">
             <div className="border-b border-[#d7d3c8] px-5 py-4">
@@ -214,48 +335,48 @@ export default function BalanceSheetPage() {
                 Monthly accounts summary · {monthLabel}
               </h2>
               <p className="mt-2 text-sm text-[#6f746e]">
-                Day-by-day income and expenses for this period, with a running balance.
+                Daily profit and expenses for this period. Open a day to see its credits and debits.
               </p>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[920px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[720px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="text-[10px] font-bold uppercase tracking-wide">
                     <th className="border border-[#d7d3c8] bg-[#dceef2] px-3 py-3 text-[#2f4f57]">Date</th>
-                    <th className="border border-[#d7d3c8] bg-[#dceef2] px-3 py-3 text-[#2f4f57]">Description</th>
-                    <th className="border border-[#d7d3c8] bg-[#dceef2] px-3 py-3 text-[#2f4f57]">Reference / Bill #</th>
-                    <th className="border border-[#d7d3c8] bg-[#f3dfc8] px-3 py-3 text-[#6a4a28]">Category</th>
                     <th className="border border-[#d7d3c8] bg-[#f3dfc8] px-3 py-3 text-right text-[#6a4a28]">Debit (expenses)</th>
                     <th className="border border-[#d7d3c8] bg-[#d7ebe4] px-3 py-3 text-right text-[#1f5a52]">Credit (income)</th>
-                    <th className="border border-[#d7d3c8] bg-[#e8e6df] px-3 py-3 text-right text-[#4f544e]">Balance</th>
+                    <th className="border border-[#d7d3c8] bg-[#e8e6df] px-3 py-3 text-right text-[#4f544e]">Daily profit</th>
+                    <th className="border border-[#d7d3c8] bg-[#eeece5] px-3 py-3 text-right text-[#4f544e]">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {accounts.map((row, index) => (
-                    <tr key={`${row.date}-${row.reference ?? row.description}-${index}`} className="bg-[#fbfaf6]">
-                      <td className="border border-[#e2ded4] px-3 py-2.5 whitespace-nowrap">{formatDate(row.date)}</td>
-                      <td className="border border-[#e2ded4] px-3 py-2.5">{row.description}</td>
-                      <td className="border border-[#e2ded4] px-3 py-2.5 font-medium text-[#4f544e]">{row.reference || "—"}</td>
-                      <td className="border border-[#e2ded4] px-3 py-2.5">
-                        <span className={`inline-block px-2 py-0.5 text-[10px] font-bold uppercase ${row.type === "income" ? "bg-[#167c73]/10 text-[#167c73]" : "bg-[#b84837]/10 text-[#b84837]"}`}>
-                          {row.category}
-                        </span>
-                      </td>
+                  {dailyAccounts.map((day) => (
+                    <tr key={day.date} className="bg-[#fbfaf6]">
+                      <td className="border border-[#e2ded4] px-3 py-2.5 whitespace-nowrap font-semibold">{formatDate(day.date)}</td>
                       <td className="border border-[#e2ded4] px-3 py-2.5 text-right tabular-nums text-[#b84837]">
-                        {row.debit > 0 ? money(row.debit) : "—"}
+                        {day.debit > 0 ? money(day.debit) : "—"}
                       </td>
                       <td className="border border-[#e2ded4] px-3 py-2.5 text-right tabular-nums text-[#167c73]">
-                        {row.credit > 0 ? `+${money(row.credit)}` : "—"}
+                        {day.credit > 0 ? `+${money(day.credit)}` : "—"}
                       </td>
-                      <td className="border border-[#e2ded4] px-3 py-2.5 text-right font-semibold tabular-nums">
-                        {row.balance >= 0 ? `+${money(row.balance)}` : money(row.balance)}
+                      <td className={`border border-[#e2ded4] px-3 py-2.5 text-right font-semibold tabular-nums ${day.profit >= 0 ? "text-[#167c73]" : "text-[#b84837]"}`}>
+                        {money(day.profit)}
+                      </td>
+                      <td className="border border-[#e2ded4] px-3 py-2.5 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDay(day.date)}
+                          className="text-sm font-semibold text-[#167c73]"
+                        >
+                          View details
+                        </button>
                       </td>
                     </tr>
                   ))}
-                  {accounts.length === 0 && (
+                  {dailyAccounts.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="border border-[#e2ded4] px-5 py-10 text-center text-sm text-[#6f746e]">
+                      <td colSpan={5} className="border border-[#e2ded4] px-5 py-10 text-center text-sm text-[#6f746e]">
                         No income or expense entries for this month yet.
                       </td>
                     </tr>
@@ -263,7 +384,7 @@ export default function BalanceSheetPage() {
                 </tbody>
                 <tfoot>
                   <tr className="bg-[#f3f0e8] text-sm font-semibold">
-                    <td colSpan={4} className="border border-[#d7d3c8] px-3 py-4 uppercase tracking-wide text-[#4f544e]">
+                    <td className="border border-[#d7d3c8] px-3 py-4 uppercase tracking-wide text-[#4f544e]">
                       Monthly totals
                     </td>
                     <td className="border border-[#d7d3c8] px-3 py-4 text-right text-[#b84837]">
@@ -280,12 +401,66 @@ export default function BalanceSheetPage() {
                         {money(sheet.net_profit)}
                       </span>
                     </td>
+                    <td className="border border-[#d7d3c8] px-3 py-4" />
                   </tr>
                 </tfoot>
               </table>
             </div>
           </Panel>
         </>
+      )}
+
+      {dayDetail && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+          <button type="button" aria-label="Close dialog" className="absolute inset-0 bg-[#181b19]/55" onClick={() => setSelectedDay(null)} />
+          <div className="relative z-10 max-h-[90vh] w-full max-w-4xl overflow-y-auto border border-[#d7d3c8] bg-[#fbfaf6]">
+            <div className="flex items-start justify-between border-b border-[#e2ded4] px-5 py-4">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-[#167c73]">Daily ledger</p>
+                <h2 className="mt-1 font-display text-2xl font-semibold uppercase">{formatDate(dayDetail.date)}</h2>
+                <p className="mt-1 text-sm text-[#6f746e]">
+                  Debit {money(dayDetail.debit)} · Credit {money(dayDetail.credit)} · Profit{" "}
+                  <span className={dayDetail.profit >= 0 ? "text-[#167c73]" : "text-[#b84837]"}>{money(dayDetail.profit)}</span>
+                </p>
+              </div>
+              <button type="button" onClick={() => setSelectedDay(null)} className="grid size-9 place-items-center border border-[#d7d3c8]" aria-label="Close">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="overflow-x-auto p-5">
+              <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="text-[10px] font-bold uppercase tracking-wide">
+                    <th className="border border-[#d7d3c8] bg-[#dceef2] px-3 py-2 text-[#2f4f57]">Description</th>
+                    <th className="border border-[#d7d3c8] bg-[#dceef2] px-3 py-2 text-[#2f4f57]">Reference / Bill #</th>
+                    <th className="border border-[#d7d3c8] bg-[#f3dfc8] px-3 py-2 text-[#6a4a28]">Category</th>
+                    <th className="border border-[#d7d3c8] bg-[#f3dfc8] px-3 py-2 text-right text-[#6a4a28]">Debit</th>
+                    <th className="border border-[#d7d3c8] bg-[#d7ebe4] px-3 py-2 text-right text-[#1f5a52]">Credit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dayDetail.entries.map((row, index) => (
+                    <tr key={`${row.reference ?? row.description}-${index}`} className="bg-white">
+                      <td className="border border-[#e2ded4] px-3 py-2.5">{row.description}</td>
+                      <td className="border border-[#e2ded4] px-3 py-2.5 font-medium text-[#4f544e]">{row.reference || "—"}</td>
+                      <td className="border border-[#e2ded4] px-3 py-2.5">
+                        <span className={`inline-block px-2 py-0.5 text-[10px] font-bold uppercase ${entryTone(row.type)}`}>
+                          {row.category}
+                        </span>
+                      </td>
+                      <td className="border border-[#e2ded4] px-3 py-2.5 text-right tabular-nums text-[#b84837]">
+                        {row.debit > 0 ? money(row.debit) : "—"}
+                      </td>
+                      <td className="border border-[#e2ded4] px-3 py-2.5 text-right tabular-nums text-[#167c73]">
+                        {row.credit > 0 ? `+${money(row.credit)}` : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       )}
     </AppShell>
   );

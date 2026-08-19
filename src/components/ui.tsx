@@ -49,6 +49,7 @@ type ConfirmModalProps = {
   cancelLabel?: string;
   tone?: "default" | "danger" | "teal";
   busy?: boolean;
+  children?: ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
 };
@@ -61,6 +62,7 @@ export function ConfirmModal({
   cancelLabel = "Cancel",
   tone = "default",
   busy = false,
+  children,
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
@@ -116,6 +118,7 @@ export function ConfirmModal({
         </div>
         <div className="px-5 py-5">
           <p className="text-sm leading-relaxed text-[#4f544e]">{message}</p>
+          {children}
         </div>
         <div className="flex flex-wrap justify-end gap-2 border-t border-[#e2ded4] bg-[#f3f0e8] px-5 py-4">
           <button
