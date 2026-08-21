@@ -101,33 +101,6 @@ export default function AdmitVehiclePage() {
         </div>
 
         <Panel className="p-5">
-          <h2 className="font-display text-2xl font-semibold uppercase">Job type</h2>
-          <p className="mt-1 text-sm text-[#6f746e]">Repair uses parts and labor. Service uses the priced addon buttons.</p>
-          <div className="mt-4 grid max-w-md grid-cols-2 gap-2">
-            {([
-              ["repair", "Repair"],
-              ["service", "Service"],
-            ] as const).map(([value, label]) => {
-              const selected = jobKind === value;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setJobKind(value)}
-                  className={`h-11 border text-sm font-semibold ${
-                    selected
-                      ? "border-[#20221f] bg-[#20221f] text-white"
-                      : "border-[#d7d3c8] bg-white hover:border-[#20221f]"
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        </Panel>
-
-        <Panel className="p-5">
           <h2 className="font-display text-2xl font-semibold uppercase">Search by number plate</h2>
           <label className="relative mt-4 block max-w-xl">
             <Search className="absolute left-3 top-3 text-[#6f746e]" size={18} />
@@ -168,6 +141,33 @@ export default function AdmitVehiclePage() {
           {!lookingUp && plateQuery.trim().length >= 2 && vehicles.length === 0 && (
             <p className="mt-4 text-sm text-[#6f746e]">No match — use the new admission form below.</p>
           )}
+        </Panel>
+
+        <Panel className="p-5">
+          <h2 className="font-display text-2xl font-semibold uppercase">Job type</h2>
+          <p className="mt-1 text-sm text-[#6f746e]">Repair uses parts and labor. Service uses the priced addon buttons.</p>
+          <div className="mt-4 grid max-w-md grid-cols-2 gap-2">
+            {([
+              ["repair", "Repair"],
+              ["service", "Service"],
+            ] as const).map(([value, label]) => {
+              const selected = jobKind === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setJobKind(value)}
+                  className={`h-11 border text-sm font-semibold ${
+                    selected
+                      ? "border-[#20221f] bg-[#20221f] text-white"
+                      : "border-[#d7d3c8] bg-white hover:border-[#20221f]"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </Panel>
 
         {error && <ErrorMessage message={error} />}
