@@ -4,8 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
-import { api, formatDate, money } from "@/lib/api";
+import { api, currentUser, formatDate, money } from "@/lib/api";
 import { billStatusClass, billStatusLabel } from "@/lib/bill-stamp";
+
+type JobKindFilter = "service" | "repair" | null;
 
 type ProfitLine = {
   id: number;
@@ -36,16 +38,28 @@ type ProfitBill = {
   margin: number;
   billing_type: "instant" | "credit";
   payment_status: string;
+  job_kind?: "service" | "repair";
   lines?: ProfitLine[];
   payments?: Array<{ id: number; amount: string; method: string; paid_at: string }>;
 };
 
 type Report = {
   period: { date_from: string; date_to: string };
+  job_kind?: "service" | "repair" | null;
   total_revenue: number;
   total_cogs: number;
   gross_profit: number;
   margin: number;
+  service_revenue: number;
+  service_cogs: number;
+  service_gross_profit: number;
+  service_margin: number;
+  service_count: number;
+  repair_revenue: number;
+  repair_cogs: number;
+  repair_gross_profit: number;
+  repair_margin: number;
+  repair_count: number;
   credit_count: number;
   credit_generated: number;
   credit_collected: number;
@@ -60,8 +74,10 @@ function daysAgo(days: number) {
 }
 
 export default function BillProfitsPage() {
+  const [isGarage, setIsGarage] = useState(false);
   const [dateFrom, setDateFrom] = useState(() => daysAgo(29));
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [jobKind, setJobKind] = useState<JobKindFilter>(null);
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -78,13 +94,21 @@ export default function BillProfitsPage() {
     setLoading(true);
     setError("");
     const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, per_page: "50" });
+    if (jobKind) params.set("job_kind", jobKind);
     api<Report>(`/bill-profits?${params}`)
       .then(setReport)
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load bill profits."))
       .finally(() => setLoading(false));
-  }, [dateFrom, dateTo, rangeInvalid]);
+  }, [dateFrom, dateTo, jobKind, rangeInvalid]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    setIsGarage(currentUser()?.tenant?.business_type === "garage");
+  }, []);
+
+  function toggleKind(kind: "service" | "repair") {
+    setJobKind((current) => (current === kind ? null : kind));
+  }
 
   async function openDetails(billId: number) {
     setDetailBusy(true);
@@ -103,6 +127,55 @@ export default function BillProfitsPage() {
     return `${formatDate(report.period.date_from)} – ${formatDate(report.period.date_to)}`;
   }, [report]);
 
+  const summary = useMemo(() => {
+    if (!report) return null;
+    if (jobKind === "service") {
+      return {
+        title: "Service",
+        revenue: report.service_revenue,
+        cogs: report.service_cogs,
+        profit: report.service_gross_profit,
+        margin: report.service_margin,
+        count: report.service_count,
+      };
+    }
+    if (jobKind === "repair") {
+      return {
+        title: "Repair",
+        revenue: report.repair_revenue,
+        cogs: report.repair_cogs,
+        profit: report.repair_gross_profit,
+        margin: report.repair_margin,
+        count: report.repair_count,
+      };
+    }
+    return {
+      title: "All",
+      revenue: report.total_revenue,
+      cogs: report.total_cogs,
+      profit: report.gross_profit,
+      margin: report.margin,
+      count: report.service_count + report.repair_count,
+    };
+  }, [jobKind, report]);
+
+  const kindButton = (kind: "service" | "repair", label: string) => {
+    const selected = jobKind === kind;
+    return (
+      <button
+        type="button"
+        onClick={() => toggleKind(kind)}
+        className={`inline-flex h-11 items-center border px-3 text-sm font-semibold ${
+          selected
+            ? "border-[#20221f] bg-[#20221f] text-white"
+            : "border-[#c9c5b9] bg-white hover:border-[#20221f]"
+        }`}
+      >
+        {label}
+      </button>
+    );
+  };
+
   return (
     <AppShell title="Bill Profits Analysis" eyebrow="Revenue, inventory cost & credit bills">
       <div className="mb-5 flex flex-wrap items-end gap-3">
@@ -115,25 +188,43 @@ export default function BillProfitsPage() {
           <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className={`${inputClass} w-auto min-w-40`} />
         </label>
         <button type="button" onClick={load} className={buttonClass}>Apply period</button>
+        {isGarage && (
+          <div className="flex flex-wrap gap-2">
+            {kindButton("service", "Services Profits")}
+            {kindButton("repair", "Repair Profits")}
+          </div>
+        )}
       </div>
 
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
-      {loading && !report ? <PageState message="Loading bill profits..." /> : report && (
+      {loading && !report ? <PageState message="Loading bill profits..." /> : report && summary && (
         <>
-          <p className="mb-3 text-xs font-bold uppercase text-[#6f746e]">{periodLabel}</p>
+          <p className="mb-3 text-xs font-bold uppercase text-[#6f746e]">
+            {periodLabel}
+            {jobKind === "service" ? " · Service bills" : jobKind === "repair" ? " · Repair bills" : ""}
+          </p>
           <div className="grid gap-3 sm:grid-cols-3">
             <Panel className="p-5">
-              <p className="text-xs font-bold uppercase text-[#6f746e]">Total revenue (bills)</p>
-              <p className="mt-3 font-display text-3xl font-semibold">{money(report.total_revenue)}</p>
+              <p className="text-xs font-bold uppercase text-[#6f746e]">
+                {jobKind ? `${summary.title} revenue` : "Total revenue (bills)"}
+              </p>
+              <p className="mt-3 font-display text-3xl font-semibold">{money(summary.revenue)}</p>
+              <p className="mt-2 text-xs text-[#6f746e]">
+                {summary.count} bill{summary.count === 1 ? "" : "s"}
+              </p>
             </Panel>
             <Panel className="p-5">
-              <p className="text-xs font-bold uppercase text-[#6f746e]">Cost of goods sold</p>
-              <p className="mt-3 font-display text-3xl font-semibold">{money(report.total_cogs)}</p>
+              <p className="text-xs font-bold uppercase text-[#6f746e]">
+                {jobKind ? `${summary.title} cost of goods` : "Cost of goods sold"}
+              </p>
+              <p className="mt-3 font-display text-3xl font-semibold">{money(summary.cogs)}</p>
             </Panel>
             <Panel className="bg-[#242723] p-5 text-white">
-              <p className="text-xs font-bold uppercase text-white/50">Gross profit</p>
-              <p className="mt-3 font-display text-3xl font-semibold">{money(report.gross_profit)}</p>
-              <p className="mt-2 text-xs text-white/50">Gross margin {report.margin}%</p>
+              <p className="text-xs font-bold uppercase text-white/50">
+                {jobKind ? `${summary.title} gross profit` : "Gross profit"}
+              </p>
+              <p className="mt-3 font-display text-3xl font-semibold">{money(summary.profit)}</p>
+              <p className="mt-2 text-xs text-white/50">Gross margin {summary.margin}%</p>
             </Panel>
           </div>
 
@@ -157,7 +248,9 @@ export default function BillProfitsPage() {
 
           <Panel className="mt-5 overflow-hidden">
             <div className="border-b border-[#d7d3c8] px-5 py-4">
-              <h2 className="font-display text-2xl font-semibold uppercase">Bills</h2>
+              <h2 className="font-display text-2xl font-semibold uppercase">
+                {jobKind === "service" ? "Service bills" : jobKind === "repair" ? "Repair bills" : "Bills"}
+              </h2>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[960px] text-left text-sm">
@@ -165,6 +258,7 @@ export default function BillProfitsPage() {
                   <tr>
                     <th className="px-5 py-3">Bill</th>
                     <th>Date</th>
+                    {isGarage && <th>Type</th>}
                     <th>Customer</th>
                     <th>Payment</th>
                     <th>Billing type</th>
@@ -179,6 +273,9 @@ export default function BillProfitsPage() {
                     <tr key={bill.id} className="border-t border-[#e2ded4]">
                       <td className="px-5 py-4 font-semibold">{bill.bill_number}</td>
                       <td>{formatDate(bill.admission_date)}</td>
+                      {isGarage && (
+                        <td className="capitalize">{bill.job_kind === "service" ? "Service" : "Repair"}</td>
+                      )}
                       <td>{bill.customer?.name ?? "Walk-in"}</td>
                       <td>
                         <span className={`px-2 py-1 text-[10px] font-bold uppercase ${billStatusClass(bill.status, bill.owe_in_due_date)}`}>
@@ -216,6 +313,7 @@ export default function BillProfitsPage() {
                 <h2 className="mt-1 font-display text-2xl font-semibold uppercase">{detail.bill_number}</h2>
                 <p className="mt-1 text-sm text-[#6f746e]">
                   {detail.customer?.name ?? "Walk-in"} · {detail.vehicle?.number_plate ?? "—"} · {formatDate(detail.admission_date)}
+                  {detail.job_kind ? ` · ${detail.job_kind === "service" ? "Service" : "Repair"}` : ""}
                 </p>
               </div>
               <button type="button" onClick={() => setDetail(null)} className="grid size-9 place-items-center border border-[#d7d3c8]" aria-label="Close">

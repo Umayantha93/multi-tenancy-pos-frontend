@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, ClipboardPlus, Search, X } from "lucide-react";
+import { ArrowRight, ClipboardPlus, Search, Wrench, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, inputClass } from "@/components/ui";
 import { api, currentUser, formatDate, money } from "@/lib/api";
@@ -14,6 +14,7 @@ type Bill = {
   bill_number: string;
   admission_date: string;
   status: string;
+  job_kind?: string | null;
   subtotal: string;
   balance_due: string;
   owe_in_due_date?: string | null;
@@ -28,8 +29,13 @@ export default function BillsPage() {
   const [dateTo, setDateTo] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [isOwner, setIsOwner] = useState(false);
   const profile = useMemo(() => profileFor(currentUser()?.tenant?.business_type), []);
   const rangeInvalid = Boolean(dateFrom && dateTo && dateFrom > dateTo);
+
+  useEffect(() => {
+    setIsOwner(currentUser()?.role === "business_owner");
+  }, []);
 
   useEffect(() => {
     if (rangeInvalid) {
@@ -66,9 +72,19 @@ export default function BillsPage() {
       title={profile.billingLabel}
       eyebrow="Open bills & queue"
       action={
-        <Link href={profile.primaryCta.href} className="flex h-10 items-center gap-2 bg-[#f5c842] px-3 text-sm font-semibold">
-          <ClipboardPlus size={18} /><span className="hidden sm:inline">{profile.primaryCta.label}</span>
-        </Link>
+        <div className="flex items-center gap-2">
+          {profile.type === "garage" && isOwner && (
+            <Link
+              href="/service-addons"
+              className="flex h-10 items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-sm font-semibold hover:border-[#167c73]"
+            >
+              <Wrench size={16} /><span className="hidden sm:inline">Service addons</span>
+            </Link>
+          )}
+          <Link href={profile.primaryCta.href} className="flex h-10 items-center gap-2 bg-[#f5c842] px-3 text-sm font-semibold">
+            <ClipboardPlus size={18} /><span className="hidden sm:inline">{profile.primaryCta.label}</span>
+          </Link>
+        </div>
       }
     >
       <div className="mb-5 flex flex-wrap items-end gap-3">
@@ -125,6 +141,7 @@ export default function BillsPage() {
                 <tr>
                   <th className="px-5 py-3">Ref</th>
                   <th>Date</th>
+                  <th>Type</th>
                   <th>Customer</th>
                   <th>Detail</th>
                   <th>Status</th>
@@ -139,6 +156,13 @@ export default function BillsPage() {
                   <tr key={bill.id} className={`border-t border-[#e2ded4] ${urgent ? "bg-[#b84837]/8" : ""}`}>
                     <td className="px-5 py-4 font-semibold">{bill.bill_number}</td>
                     <td>{formatDate(bill.admission_date)}</td>
+                    <td>
+                      {profile.type === "garage" ? (
+                        <span className="px-2 py-1 text-[10px] font-bold uppercase bg-[#eeece5] text-[#6f746e]">
+                          {bill.job_kind === "service" ? "Service" : "Repair"}
+                        </span>
+                      ) : "—"}
+                    </td>
                     <td>{bill.customer?.name ?? "Walk-in"}</td>
                     <td>{bill.vehicle?.number_plate ?? "—"}</td>
                     <td>

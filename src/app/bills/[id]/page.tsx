@@ -6,16 +6,25 @@ import { ChevronDown, CreditCard, Lock, MessageSquare, Plus, Printer, Trash2 } f
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { api, currentFeatures, currentUser, formatDate, mediaUrl, money, storeSession, Tenant, User } from "@/lib/api";
-import { billItemLabel, profileFor, sortBillItems } from "@/lib/business-profiles";
+import { billItemLabel, billLinePresentation, profileFor, sortBillItems } from "@/lib/business-profiles";
 import { billStamp, billStampDateLabel, latestPaymentAt } from "@/lib/bill-stamp";
 import { BillStatusSeal } from "@/components/bill-status-seal";
 
 type Part = { id: number; name: string; price: string; stock_qty: number; sku?: string | null; barcode?: string | null; brand?: string };
+type ServiceAddon = {
+  id: number;
+  name: string;
+  price: string;
+  is_full_service: boolean;
+  active: boolean;
+  inclusions?: Array<{ id: number; name: string }>;
+};
 type Bill = {
   id: number;
   bill_number: string;
   share_token?: string | null;
   status: string;
+  job_kind?: string | null;
   owe_in_due_date?: string | null;
   subtotal: string;
   total_deductions: string;
@@ -26,7 +35,15 @@ type Bill = {
   odometer?: number | string | null;
   customer: { name: string; phone: string; address?: string | null } | null;
   vehicle: { number_plate: string; chassis_number?: string | null; make?: string; model?: string } | null;
-  items: Array<{ id: number; type: string; description: string; quantity: string; unit_price: string; line_total: string }>;
+  items: Array<{
+    id: number;
+    type: string;
+    description: string;
+    included_services?: string[] | null;
+    quantity: string;
+    unit_price: string;
+    line_total: string;
+  }>;
   payments: Array<{ id: number; amount: string; method: string; paid_at: string }>;
 };
 
@@ -38,6 +55,10 @@ export default function BillDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [bill, setBill] = useState<Bill | null>(null);
   const [parts, setParts] = useState<Part[]>([]);
+  const [addons, setAddons] = useState<ServiceAddon[]>([]);
+  const [addonQty, setAddonQty] = useState("1");
+  const [addingAddonId, setAddingAddonId] = useState<number | null>(null);
+  const [serviceAddMode, setServiceAddMode] = useState<"services" | "inventory" | "discount">("services");
   const [tenant, setTenant] = useState<Tenant | null>(currentUser()?.tenant ?? null);
   const [error, setError] = useState("");
   const [mode, setMode] = useState<"item" | "payment">("item");
@@ -69,9 +90,10 @@ export default function BillDetailPage() {
     ? tenant.contact_phones.map((p) => p.number)
     : [tenant?.contact_phone || tenant?.owner_phone].filter(Boolean)) as string[];
   const profile = profileFor(tenant?.business_type);
-  const itemTypes = profile.billItemTypes;
+  const itemTypes = profile.billItemTypes.filter((option) => option.value !== "charge");
   const selectedType = itemTypes.find((option) => option.value === type) ?? itemTypes[0];
-  const activeType = type || selectedType?.value || "charge";
+  const activeType = type || selectedType?.value || "labor";
+  const isServiceJob = profile.type === "garage" && bill?.job_kind === "service";
   const billItems = useMemo(() => sortBillItems(bill?.items ?? []), [bill?.items]);
   const chargeItems = useMemo(() => billItems.filter((item) => item.type !== "discount"), [billItems]);
   const discountItems = useMemo(() => billItems.filter((item) => item.type === "discount"), [billItems]);
@@ -109,6 +131,18 @@ export default function BillDetailPage() {
     setSelectedPartId("");
     setOutsidePart(false);
     setCustomerPart(false);
+    setFormKey((value) => value + 1);
+  }
+
+  function switchServiceAddMode(next: "services" | "inventory" | "discount") {
+    setServiceAddMode(next);
+    setSelectedPartId("");
+    setPartQuery("");
+    setOutsidePart(false);
+    setCustomerPart(false);
+    setError("");
+    if (next === "inventory") setType("part");
+    if (next === "discount") setType("discount");
     setFormKey((value) => value + 1);
   }
 
@@ -150,6 +184,11 @@ export default function BillDetailPage() {
     api<{ data: Part[] }>("/parts?per_page=100")
       .then((result) => setParts(result.data))
       .catch(() => undefined);
+    if (profile.type === "garage") {
+      api<ServiceAddon[]>("/service-addons")
+        .then((result) => setAddons(result.filter((addon) => addon.active !== false)))
+        .catch(() => undefined);
+    }
     api<{ user: User; features: string[] }>("/user")
       .then((result) => {
         setTenant(result.user.tenant ?? null);
@@ -171,7 +210,7 @@ export default function BillDetailPage() {
   }, [partQuery, parts]);
 
   const selectedPart = parts.find((part) => String(part.id) === selectedPartId);
-  const isStockType = selectedType?.kind === "stock";
+  const isStockType = selectedType?.kind === "stock" || (isServiceJob && serviceAddMode === "inventory");
   const showQuantity = isStockType || Boolean(selectedType?.allowQty);
   const showCost = !isStockType || outsidePart;
   const useStockSearch = isStockType && !outsidePart && !customerPart;
@@ -272,11 +311,32 @@ export default function BillDetailPage() {
 
     try {
       await api(`/bills/${id}/items`, { method: "POST", body: JSON.stringify(payload) });
-      resetItemForm(itemTypes[0]?.value);
+      resetItemForm(isServiceJob ? (serviceAddMode === "discount" ? "discount" : "part") : itemTypes[0]?.value);
       load();
       api<{ data: Part[] }>("/parts?per_page=100").then((result) => setParts(result.data)).catch(() => undefined);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not add item.");
+    }
+  }
+
+  async function addAddon(addon: ServiceAddon) {
+    if (isLocked) return;
+    setError("");
+    setAddingAddonId(addon.id);
+    try {
+      await api(`/bills/${id}/items`, {
+        method: "POST",
+        body: JSON.stringify({
+          type: "service_addon",
+          service_addon_id: addon.id,
+          quantity: addonQty || "1",
+        }),
+      });
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not add service.");
+    } finally {
+      setAddingAddonId(null);
     }
   }
 
@@ -402,7 +462,7 @@ export default function BillDetailPage() {
   return (
     <AppShell
       title={bill.bill_number}
-      eyebrow={`${bill.vehicle?.number_plate ?? bill.customer?.name ?? profile.billingSingular} · ${bill.status.replace("_", " ")}`}
+      eyebrow={`${bill.vehicle?.number_plate ?? bill.customer?.name ?? profile.billingSingular}${profile.type === "garage" ? ` · ${bill.job_kind === "service" ? "Service" : "Repair"}` : ""} · ${bill.status.replace("_", " ")}`}
       action={
         <div className="no-print flex items-center gap-2">
           {canSendSms && (
@@ -566,7 +626,10 @@ export default function BillDetailPage() {
             </div>
           </div>
           <div className="flex shrink-0 flex-col items-end text-right text-xs uppercase text-[#6f746e]">
-            <p className="font-bold text-[#167c73]">Tax invoice / {profile.billingSingular.toLowerCase()}</p>
+            <p className="font-bold text-[#167c73]">
+              Tax invoice / {profile.billingSingular.toLowerCase()}
+              {profile.type === "garage" ? ` · ${bill.job_kind === "service" ? "Service" : "Repair"}` : ""}
+            </p>
             <p className="mt-1 normal-case">{new Date().toLocaleString("en-LK")}</p>
             <BillStatusSeal stamp={stamp} paymentDate={paymentDate} />
           </div>
@@ -678,7 +741,9 @@ export default function BillDetailPage() {
                     const showQty = isPartLine || Number(item.quantity) > 1;
                     return (
                       <tr key={item.id} className="border-t border-[#e2ded4] align-top">
-                        <td className="px-4 py-3 font-semibold break-words whitespace-normal">{item.description}</td>
+                        <td className="px-4 py-3 break-words whitespace-normal">
+                          <BillItemDescription item={item} />
+                        </td>
                         <td className="px-3 py-3 text-[#6f746e] break-words whitespace-normal">
                           {billItemLabel(item.type, profile)}
                         </td>
@@ -794,11 +859,66 @@ export default function BillDetailPage() {
             )}
 
             {mode === "item" && !isOweIn ? (
+              isServiceJob && serviceAddMode === "services" ? (
+                <div className="flex max-h-[min(78vh,46rem)] flex-col">
+                  <div className="space-y-3 overflow-y-auto p-4">
+                    <ServiceAddModeToggle
+                      mode={serviceAddMode}
+                      onChange={switchServiceAddMode}
+                    />
+                    <label className="block text-xs font-bold uppercase">
+                      Quantity
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={addonQty}
+                        onChange={(event) => setAddonQty(event.target.value)}
+                        className={`${inputClass} mt-2`}
+                      />
+                    </label>
+                    <p className="text-xs font-bold uppercase">Services</p>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {addons.map((addon) => {
+                        const busy = addingAddonId === addon.id;
+                        return (
+                          <button
+                            key={addon.id}
+                            type="button"
+                            disabled={Boolean(addingAddonId)}
+                            onClick={() => addAddon(addon)}
+                            className={`min-h-16 border px-2 py-2 text-left ${
+                              addon.is_full_service
+                                ? "border-[#167c73] bg-[#167c73] text-white hover:bg-[#12665f]"
+                                : "border-[#d7d3c8] bg-[#fbfaf6] hover:border-[#20221f]"
+                            } disabled:opacity-50`}
+                          >
+                            <span className="block text-[10px] font-bold uppercase leading-tight">{addon.name}</span>
+                            <span className={`mt-1 block text-xs tabular-nums ${addon.is_full_service ? "text-white/80" : "text-[#6f746e]"}`}>
+                              {busy ? "Adding..." : money(addon.price)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {addons.length === 0 && (
+                      <p className="text-sm text-[#6f746e]">No service buttons yet. Ask the owner to add them under Service addons.</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
               <form key={formKey} onSubmit={addItem} className="flex max-h-[min(78vh,46rem)] flex-col">
                 <div className="space-y-3 overflow-y-auto p-4">
+                {isServiceJob && (
+                  <ServiceAddModeToggle
+                    mode={serviceAddMode}
+                    onChange={switchServiceAddMode}
+                  />
+                )}
+                {!isServiceJob && (
                 <div>
                   <p className="mb-2 text-xs font-bold uppercase">Type</p>
-                  <div className="grid grid-cols-2 gap-1.5">
+                  <div className="flex gap-1">
                     {itemTypes.map((option) => {
                       const selected = activeType === option.value;
                       return (
@@ -812,7 +932,7 @@ export default function BillDetailPage() {
                             setOutsidePart(false);
                             setCustomerPart(false);
                           }}
-                          className={`h-9 border px-2 text-left text-[10px] font-bold uppercase leading-tight ${
+                          className={`h-7 min-w-0 flex-1 border px-1 text-center text-[9px] font-bold uppercase leading-none ${
                             selected
                               ? "border-[#20221f] bg-[#20221f] text-white"
                               : "border-[#d7d3c8] bg-[#fbfaf6] text-[#20221f] hover:border-[#20221f]"
@@ -825,6 +945,8 @@ export default function BillDetailPage() {
                   </div>
                   <input type="hidden" name="type" value={activeType} />
                 </div>
+                )}
+                {isServiceJob && <input type="hidden" name="type" value={serviceAddMode === "discount" ? "discount" : "part"} />}
 
                 {isStockType ? (
                   <>
@@ -987,6 +1109,7 @@ export default function BillDetailPage() {
                   </button>
                 </div>
               </form>
+              )
             ) : (
               <form onSubmit={addPayment} className="space-y-4 p-5">
                 <label className="block text-xs font-bold uppercase">
@@ -1040,5 +1163,57 @@ export default function BillDetailPage() {
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function BillItemDescription({ item }: { item: { description: string; included_services?: string[] | null } }) {
+  const { title, inclusions } = billLinePresentation(item);
+  return (
+    <>
+      <p className="font-semibold">{title}</p>
+      {inclusions.length > 0 && (
+        <ul className="mt-1.5 space-y-0.5 text-xs font-normal text-[#6f746e]">
+          {inclusions.map((name) => (
+            <li key={name} className="pl-0.5">– {name}</li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
+function ServiceAddModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: "services" | "inventory" | "discount";
+  onChange: (mode: "services" | "inventory" | "discount") => void;
+}) {
+  const options = [
+    ["services", "Services"],
+    ["inventory", "Inventory"],
+    ["discount", "Discount"],
+  ] as const;
+
+  return (
+    <div>
+      <p className="mb-2 text-xs font-bold uppercase">Add</p>
+      <div className="flex gap-1">
+        {options.map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => onChange(value)}
+            className={`h-7 min-w-0 flex-1 border px-1 text-center text-[9px] font-bold uppercase leading-none ${
+              mode === value
+                ? "border-[#20221f] bg-[#20221f] text-white"
+                : "border-[#d7d3c8] bg-[#fbfaf6] hover:border-[#20221f]"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
