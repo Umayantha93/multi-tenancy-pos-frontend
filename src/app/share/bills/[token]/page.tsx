@@ -43,22 +43,48 @@ function documentCopy(stamp: ReturnType<typeof billStamp>) {
   return { title: "Quotation", label: "Quotation", download: "Download quotation" };
 }
 
+function shareTokenFromParam(token: string | string[] | undefined): string {
+  const raw = Array.isArray(token) ? token[0] : token;
+  return String(raw ?? "").trim().replace(/[^a-zA-Z0-9]/g, "");
+}
+
 export default function SharedBillPage() {
-  const { token } = useParams<{ token: string }>();
+  const params = useParams<{ token: string }>();
+  const token = shareTokenFromParam(params.token);
   const [bill, setBill] = useState<SharedBill | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!token) return;
-    fetch(`${API_URL}/bills/shared/${token}`)
+    if (!token) {
+      setBill(null);
+      setError("This bill link is invalid or no longer available.");
+      return;
+    }
+
+    let cancelled = false;
+    setError("");
+    fetch(`${API_URL}/bills/shared/${encodeURIComponent(token)}`)
       .then(async (response) => {
         if (!response.ok) {
           throw new Error("This bill link is invalid or no longer available.");
         }
         return response.json() as Promise<SharedBill>;
       })
-      .then(setBill)
-      .catch((caught: Error) => setError(caught.message || "Could not load bill."));
+      .then((data) => {
+        if (!cancelled) setBill(data);
+      })
+      .catch((caught: Error) => {
+        if (cancelled) return;
+        if (caught.name === "TypeError") {
+          setError("Could not reach the server. Check your connection and try again.");
+          return;
+        }
+        setError(caught.message || "Could not load bill.");
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   useEffect(() => {
