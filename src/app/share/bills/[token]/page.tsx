@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Download } from "lucide-react";
 import { API_URL, formatDate, mediaUrl, money, PhoneEntry, Tenant } from "@/lib/api";
-import { sortBillItems } from "@/lib/business-profiles";
+import { billLinePresentation, sortBillItems } from "@/lib/business-profiles";
 import { billStamp, billStampDateLabel, latestPaymentAt } from "@/lib/bill-stamp";
 import { BillStatusSeal } from "@/components/bill-status-seal";
 
@@ -20,7 +20,15 @@ type SharedBill = {
   notes?: string | null;
   customer: { name: string; phone: string; address?: string | null } | null;
   vehicle: { number_plate: string; make?: string | null; model?: string | null; chassis_number?: string | null } | null;
-  items: Array<{ id: number; type: string; description: string; quantity: string; unit_price: string; line_total: string }>;
+  items: Array<{
+    id: number;
+    type: string;
+    description: string;
+    included_services?: string[] | null;
+    quantity: string;
+    unit_price: string;
+    line_total: string;
+  }>;
   payments: Array<{ id: number; amount: string; method: string; paid_at: string }>;
   tenant: Tenant | null;
 };
@@ -179,14 +187,26 @@ export default function SharedBillPage() {
               </tr>
             </thead>
             <tbody>
-              {chargeItems.map((item) => (
-                <tr key={item.id} className="border-b border-[#f0ece3]">
-                  <td className="px-5 py-3">{item.description}</td>
+              {chargeItems.map((item) => {
+                const { title, inclusions } = billLinePresentation(item);
+                return (
+                <tr key={item.id} className="border-b border-[#f0ece3] align-top">
+                  <td className="px-5 py-3">
+                    <p className="font-semibold">{title}</p>
+                    {inclusions.length > 0 && (
+                      <ul className="mt-1.5 space-y-0.5 text-xs text-[#6f746e]">
+                        {inclusions.map((name) => (
+                          <li key={name}>– {name}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </td>
                   <td className="px-3 py-3 tabular-nums">{item.quantity}</td>
                   <td className="px-3 py-3 tabular-nums">{money(item.unit_price)}</td>
                   <td className="px-5 py-3 text-right tabular-nums">{money(item.line_total)}</td>
                 </tr>
-              ))}
+                );
+              })}
               {discountItems.length > 0 && (
                 <>
                   <tr className="bill-discount-row border-t-2 border-[#167c73]/35 bg-[#e7f4f2]">

@@ -109,7 +109,6 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
     ],
     billItemTypes: [
       { value: "labor", label: "Labor", kind: "charge" },
-      { value: "charge", label: "Service / charge", kind: "charge" },
       { value: "part", label: "Inventory part", kind: "stock" },
       { value: "discount", label: "Discount", kind: "discount" },
     ],
@@ -284,11 +283,29 @@ export function profileFor(type?: string | null): BusinessProfile {
   return BUSINESS_PROFILES.garage;
 }
 
+export function billLinePresentation(item: {
+  description: string;
+  included_services?: string[] | null;
+}): { title: string; inclusions: string[] } {
+  if (Array.isArray(item.included_services) && item.included_services.length > 0) {
+    return { title: item.description, inclusions: item.included_services };
+  }
+  const match = item.description.match(/^(.*?)\s*\(includes\s+(.+)\)\s*$/i);
+  if (match) {
+    return {
+      title: match[1].trim(),
+      inclusions: match[2].split(/\s*,\s*/).map((name) => name.trim()).filter(Boolean),
+    };
+  }
+  return { title: item.description, inclusions: [] };
+}
+
 export function billItemLabel(type: string, profile?: BusinessProfile | null): string {
   const match = profile?.billItemTypes.find((item) => item.value === type);
   if (match) return match.label;
   if (type === "customer_part") return "Customer part";
-  if (type === "service") return "Service";
+  if (type === "service" || type === "service_addon") return "Service";
+  if (type === "charge") return "Service / charge";
   return type.replaceAll("_", " ");
 }
 

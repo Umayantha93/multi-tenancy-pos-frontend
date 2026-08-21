@@ -19,6 +19,8 @@ type VehicleMatch = {
   customer: { id: number; name: string; phone: string; address?: string | null };
 };
 
+type JobKind = "repair" | "service";
+
 const fields = [
   ["customer_name", "Customer name", "text", true],
   ["customer_phone", "Phone number", "tel", true],
@@ -39,6 +41,7 @@ export default function AdmitVehiclePage() {
   const [lookingUp, setLookingUp] = useState(false);
   const [creatingId, setCreatingId] = useState<number | null>(null);
   const [formPlate, setFormPlate] = useState("");
+  const [jobKind, setJobKind] = useState<JobKind>("repair");
 
   useEffect(() => {
     if (plateQuery.trim().length < 2) {
@@ -61,7 +64,7 @@ export default function AdmitVehiclePage() {
     try {
       const bill = await api<{ id: number }>("/bills/from-vehicle", {
         method: "POST",
-        body: JSON.stringify({ vehicle_id: vehicleId }),
+        body: JSON.stringify({ vehicle_id: vehicleId, job_kind: jobKind }),
       });
       router.push(`/bills/${bill.id}`);
     } catch (caught) {
@@ -96,6 +99,33 @@ export default function AdmitVehiclePage() {
             </p>
           </div>
         </div>
+
+        <Panel className="p-5">
+          <h2 className="font-display text-2xl font-semibold uppercase">Job type</h2>
+          <p className="mt-1 text-sm text-[#6f746e]">Repair uses parts and labor. Service uses the priced addon buttons.</p>
+          <div className="mt-4 grid max-w-md grid-cols-2 gap-2">
+            {([
+              ["repair", "Repair"],
+              ["service", "Service"],
+            ] as const).map(([value, label]) => {
+              const selected = jobKind === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setJobKind(value)}
+                  className={`h-11 border text-sm font-semibold ${
+                    selected
+                      ? "border-[#20221f] bg-[#20221f] text-white"
+                      : "border-[#d7d3c8] bg-white hover:border-[#20221f]"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </Panel>
 
         <Panel className="p-5">
           <h2 className="font-display text-2xl font-semibold uppercase">Search by number plate</h2>
@@ -180,6 +210,7 @@ export default function AdmitVehiclePage() {
                   placeholder="Customer concerns, visible damage, requested work..."
                 />
               </label>
+              <input type="hidden" name="job_kind" value={jobKind} />
             </div>
             <div className="flex justify-end border-t border-[#d7d3c8] p-5">
               <button disabled={saving} className={buttonClass}>
