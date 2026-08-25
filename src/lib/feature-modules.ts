@@ -24,6 +24,7 @@ const FALLBACK_GROUP: Record<string, string> = {
   parts_inventory: "Inventory",
   product_catalog: "Inventory",
   cottage_rooms: "Inventory",
+  suppliers: "Inventory",
   employees_management: "People",
   attendance: "People",
   payroll: "People",

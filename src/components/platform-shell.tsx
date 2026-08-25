@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
-import { Building2, Gauge, LogOut, Menu, Plus, ReceiptText, ShieldCheck, X } from "lucide-react";
+import { Building2, Boxes, Gauge, LogOut, Menu, Plus, ReceiptText, ShieldCheck, X } from "lucide-react";
 import { api, clearSession, currentUser } from "@/lib/api";
 
 const links = [
   { href: "/super-admin/dashboard", label: "Platform pulse", icon: Gauge },
   { href: "/super-admin/tenants", label: "Businesses", icon: Building2 },
   { href: "/super-admin/invoices", label: "Tenants invoices", icon: ReceiptText, prefix: true },
+  { href: "/super-admin/inventory", label: "Tenant inventory", icon: Boxes, prefix: true },
   { href: "/super-admin/tenants/new", label: "Onboard tenant", icon: Plus },
 ];
 

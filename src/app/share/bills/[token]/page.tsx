@@ -14,6 +14,10 @@ type SharedBill = {
   status: string;
   subtotal: string;
   total_deductions: string;
+  vat_rate?: string | number | null;
+  sscl_rate?: string | number | null;
+  vat_amount?: string | number | null;
+  sscl_amount?: string | number | null;
   amount_paid: string;
   balance_due: string;
   mileage?: number | string | null;
@@ -166,6 +170,7 @@ export default function SharedBillPage() {
                 <p className="mt-1 text-sm text-[#6f746e]">Date: {formatDate(bill.admission_date)}</p>
                 <div className="mt-3 space-y-1 text-sm">
                   {bill.tenant?.address && <p>{bill.tenant.address}</p>}
+                  {bill.tenant?.tin && <p>TIN: {bill.tenant.tin}</p>}
                   {contactPhones.map((phone) => (
                     <p key={phone}>{phone}</p>
                   ))}
@@ -270,6 +275,18 @@ export default function SharedBillPage() {
             <div className="bill-discount-row -mx-2 flex justify-between rounded-sm bg-[#e7f4f2] px-2 py-1.5 text-[#167c73]">
               <span>Deductions</span>
               <strong className="tabular-nums">-{money(bill.total_deductions)}</strong>
+            </div>
+          )}
+          {Number(bill.vat_amount) > 0 && (
+            <div className="flex justify-between">
+              <span className="text-[#6f746e]">VAT {bill.vat_rate ? `(${bill.vat_rate}%)` : ""}</span>
+              <strong className="tabular-nums">{money(bill.vat_amount)}</strong>
+            </div>
+          )}
+          {Number(bill.sscl_amount) > 0 && (
+            <div className="flex justify-between">
+              <span className="text-[#6f746e]">SSCL {bill.sscl_rate ? `(${bill.sscl_rate}%)` : ""}</span>
+              <strong className="tabular-nums">{money(bill.sscl_amount)}</strong>
             </div>
           )}
           {paid ? (

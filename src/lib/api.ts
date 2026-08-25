@@ -39,9 +39,10 @@ export type FeatureKey =
   | "retail_pos"
   | "product_catalog"
   | "cottage_rooms"
-  | "cottage_stays";
+  | "cottage_stays"
+  | "suppliers";
 
-export type BusinessType = "garage" | "photography" | "clothing" | "cottage";
+export type BusinessType = "garage" | "tyre" | "device_repair" | "photography" | "clothing" | "salon" | "cottage";
 
 export type PhoneEntry = { label?: string; number: string };
 
@@ -65,6 +66,14 @@ export type Tenant = {
   contact_phone?: string | null;
   contact_phones?: PhoneEntry[] | null;
   address?: string | null;
+  tin?: string | null;
+  vat_registered?: boolean;
+  sscl_registered?: boolean;
+  vat_rate?: number | string | null;
+  sscl_rate?: number | string | null;
+  demo_ends_at?: string | null;
+  demo_days_left?: number | null;
+  is_demo?: boolean;
 };
 export type User = {
   id: number;
@@ -73,6 +82,8 @@ export type User = {
   email: string;
   role: "super_admin" | "business_owner" | "staff";
   status: "active" | "inactive";
+  employee_id?: number | null;
+  employee?: { id: number; name: string; phone?: string; position?: string; nic?: string } | null;
   is_secondary_view?: boolean;
   tenant?: Tenant | null;
 };

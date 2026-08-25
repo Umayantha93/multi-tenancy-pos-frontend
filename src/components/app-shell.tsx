@@ -45,8 +45,14 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
   }, [router]);
 
   useEffect(() => {
-    const required = navigation.find((item) => item.href !== "/dashboard" && pathname.startsWith(item.href));
-    if (user && ((required?.feature && !features.includes(required.feature)) || (required?.owner && user.role !== "business_owner"))) {
+    if (!user) return;
+    const required = navigation.find((item) => {
+      if (item.href === "/dashboard" || !pathname.startsWith(item.href)) return false;
+      if (item.owner && user.role !== "business_owner") return false;
+      if (item.staffSelf && user.role !== "staff") return false;
+      return true;
+    });
+    if (required && ((required.feature && !features.includes(required.feature) && !(required.staffSelf && user.role === "staff")) || (required.owner && user.role !== "business_owner"))) {
       router.replace("/dashboard");
     }
   }, [features, navigation, pathname, router, user]);
@@ -56,7 +62,13 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
     clearSession(); router.replace("/login");
   }
 
-  const links = navigation.filter((item) => (!item.feature || features.includes(item.feature)) && (!item.owner || user?.role === "business_owner"));
+  const links = navigation.filter((item) => {
+    if (item.owner && user?.role !== "business_owner") return false;
+    if (item.staffSelf && user?.role === "staff") return true;
+    if (item.staffSelf && user?.role !== "staff") return false;
+    if (item.feature && !features.includes(item.feature)) return false;
+    return true;
+  });
   const logoUrl = mediaUrl(user?.tenant?.logo_url || user?.tenant?.logo);
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[240px_1fr]">
@@ -76,7 +88,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
           </Link>
           <button onClick={() => setOpen(false)} className="lg:hidden" aria-label="Close navigation"><X /></button>
         </div>
-        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-6">
+        <nav className="sidebar-scroll flex-1 space-y-1 overflow-y-auto overscroll-contain px-3 py-6">
           {links.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
             return (

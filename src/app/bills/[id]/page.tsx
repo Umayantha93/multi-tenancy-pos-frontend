@@ -28,6 +28,10 @@ type Bill = {
   owe_in_due_date?: string | null;
   subtotal: string;
   total_deductions: string;
+  vat_rate?: string | number | null;
+  sscl_rate?: string | number | null;
+  vat_amount?: string | number | null;
+  sscl_amount?: string | number | null;
   amount_paid: string;
   balance_due: string;
   customer_balance?: string | number;
@@ -618,6 +622,7 @@ export default function BillDetailPage() {
               <p className="mt-2 text-sm text-[#6f746e]">{bill.bill_number}</p>
               <div className="mt-3 space-y-1 text-sm">
                 {tenant?.address && <p><span className="text-[#6f746e]">Address:</span> {tenant.address}</p>}
+                {tenant?.tin && <p><span className="text-[#6f746e]">TIN:</span> {tenant.tin}</p>}
                 {contactPhones.map((phone) => (
                   <p key={phone}><span className="text-[#6f746e]">Mobile:</span> {phone}</p>
                 ))}
@@ -1145,6 +1150,12 @@ export default function BillDetailPage() {
                 <span>Deductions</span>
                 <strong className="tabular-nums">- {money(bill.total_deductions)}</strong>
               </div>
+              {Number(bill.vat_amount) > 0 && (
+                <div className="flex justify-between gap-6"><span>VAT {bill.vat_rate ? `(${bill.vat_rate}%)` : ""}</span><strong className="tabular-nums">{money(bill.vat_amount)}</strong></div>
+              )}
+              {Number(bill.sscl_amount) > 0 && (
+                <div className="flex justify-between gap-6"><span>SSCL {bill.sscl_rate ? `(${bill.sscl_rate}%)` : ""}</span><strong className="tabular-nums">{money(bill.sscl_amount)}</strong></div>
+              )}
               <div className="flex justify-between gap-6"><span>Paid</span><strong className="tabular-nums">- {money(bill.amount_paid)}</strong></div>
               <div className="flex justify-between gap-6 border-t border-[#e2ded4] pt-3">
                 <span>Due</span>

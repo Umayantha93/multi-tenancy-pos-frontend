@@ -27,6 +27,10 @@ type Bill = {
   odometer?: number | null;
   subtotal: string;
   total_deductions: string;
+  vat_rate?: string | number | null;
+  sscl_rate?: string | number | null;
+  vat_amount?: string | number | null;
+  sscl_amount?: string | number | null;
   amount_paid: string;
   balance_due: string;
   customer_balance?: string;
@@ -477,6 +481,12 @@ export default function SuperAdminInvoiceDetailPage() {
             <div className="mt-4 space-y-3 text-sm">
               <div className="flex justify-between"><span>Charges</span><strong className="tabular-nums">{money(bill.subtotal)}</strong></div>
               <div className="flex justify-between"><span>Deductions</span><strong className="tabular-nums">- {money(bill.total_deductions)}</strong></div>
+              {Number(bill.vat_amount) > 0 && (
+                <div className="flex justify-between"><span>VAT {bill.vat_rate ? `(${bill.vat_rate}%)` : ""}</span><strong className="tabular-nums">{money(bill.vat_amount)}</strong></div>
+              )}
+              {Number(bill.sscl_amount) > 0 && (
+                <div className="flex justify-between"><span>SSCL {bill.sscl_rate ? `(${bill.sscl_rate}%)` : ""}</span><strong className="tabular-nums">{money(bill.sscl_amount)}</strong></div>
+              )}
               <div className="flex justify-between"><span>Paid</span><strong className="tabular-nums">- {money(bill.amount_paid)}</strong></div>
               <div className="flex justify-between border-t border-[#e2ded4] pt-3">
                 <span>Due</span>

@@ -21,9 +21,12 @@ type PayableItem = {
   id: number;
   description: string;
   amount: number;
+  amount_paid?: number;
+  remaining?: number;
   expense_date?: string | null;
   due_date?: string | null;
   category: string;
+  settlements?: Array<{ id: number; amount: number; settled_on: string | null }>;
 };
 
 type Sheet = {
@@ -61,6 +64,8 @@ export default function BalanceSheetPage() {
   const [partId, setPartId] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("paid");
   const [settlingId, setSettlingId] = useState<number | null>(null);
+  const [settleItem, setSettleItem] = useState<PayableItem | null>(null);
+  const [settleAmount, setSettleAmount] = useState("");
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const businessName = currentUser()?.tenant?.business_name ?? "Business";
 
@@ -140,11 +145,18 @@ export default function BalanceSheetPage() {
   }, [accounts]);
   const dayDetail = dailyAccounts.find((day) => day.date === selectedDay) ?? null;
 
-  async function settlePayable(id: number) {
-    setSettlingId(id);
+  async function settlePayable(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!settleItem) return;
+    setSettlingId(settleItem.id);
     setError("");
     try {
-      await api(`/expenses/${id}/settle`, { method: "POST" });
+      await api(`/expenses/${settleItem.id}/settle`, {
+        method: "POST",
+        body: JSON.stringify({ amount: Number(settleAmount) }),
+      });
+      setSettleItem(null);
+      setSettleAmount("");
       load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not settle this credit purchase.");
@@ -296,23 +308,33 @@ export default function BalanceSheetPage() {
                   Outstanding {money(sheet.inventory_payables?.payables_total ?? 0)}. These do not reduce profit until you pay the supplier.
                 </p>
                 <div className="mt-4 divide-y divide-[#e2ded4]">
-                  {payables.map((item) => (
-                    <div key={item.id} className="flex items-center gap-3 py-3 text-sm">
-                      <div className="min-w-0">
-                        <p className="font-semibold">{item.description}</p>
-                        <p className="text-xs text-[#6f746e]">Due {item.due_date ? formatDate(item.due_date) : "—"}</p>
+                  {payables.map((item) => {
+                    const remaining = item.remaining ?? item.amount;
+                    const paid = item.amount_paid ?? 0;
+                    return (
+                      <div key={item.id} className="py-3 text-sm">
+                        <div className="flex items-center gap-3">
+                          <div className="min-w-0">
+                            <p className="font-semibold">{item.description}</p>
+                            <p className="text-xs text-[#6f746e]">
+                              Due {item.due_date ? formatDate(item.due_date) : "—"} · Paid {money(paid)} of {money(item.amount)}
+                            </p>
+                          </div>
+                          <strong className="ml-auto tabular-nums text-[#b84837]">{money(remaining)}</strong>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSettleItem(item);
+                              setSettleAmount(String(remaining));
+                            }}
+                            className="border border-[#167c73] px-2 py-1 text-[10px] font-bold uppercase text-[#167c73]"
+                          >
+                            Settle
+                          </button>
+                        </div>
                       </div>
-                      <strong className="ml-auto tabular-nums">{money(item.amount)}</strong>
-                      <button
-                        type="button"
-                        disabled={settlingId === item.id}
-                        onClick={() => settlePayable(item.id)}
-                        className="border border-[#167c73] px-2 py-1 text-[10px] font-bold uppercase text-[#167c73] disabled:opacity-50"
-                      >
-                        {settlingId === item.id ? "..." : "Settle"}
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {payables.length === 0 && <p className="py-4 text-sm text-[#6f746e]">No supplier credit purchases open.</p>}
                 </div>
               </Panel>
@@ -460,6 +482,54 @@ export default function BalanceSheetPage() {
               </table>
             </div>
           </div>
+        </div>
+      )}
+
+      {settleItem && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+          <button type="button" aria-label="Close dialog" className="absolute inset-0 bg-[#181b19]/55" onClick={() => setSettleItem(null)} />
+          <form onSubmit={settlePayable} className="relative z-10 w-full max-w-md border border-[#d7d3c8] bg-[#fbfaf6] p-5">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-[#167c73]">Settle supplier credit</p>
+            <h2 className="mt-1 font-display text-2xl font-semibold uppercase">Pay this bill in steps</h2>
+            <p className="mt-2 text-sm text-[#6f746e]">{settleItem.description}</p>
+            <dl className="mt-4 space-y-2 text-sm">
+              <div className="flex justify-between"><dt className="text-[#6f746e]">Original</dt><dd className="font-semibold">{money(settleItem.amount)}</dd></div>
+              <div className="flex justify-between"><dt className="text-[#6f746e]">Paid so far</dt><dd className="font-semibold">{money(settleItem.amount_paid ?? 0)}</dd></div>
+              <div className="flex justify-between"><dt className="text-[#6f746e]">Balance</dt><dd className="font-semibold text-[#b84837]">{money(settleItem.remaining ?? settleItem.amount)}</dd></div>
+            </dl>
+            {(settleItem.settlements?.length ?? 0) > 0 && (
+              <div className="mt-4 border-t border-[#e2ded4] pt-3">
+                <p className="text-[10px] font-bold uppercase text-[#6f746e]">Earlier payments</p>
+                <ul className="mt-2 space-y-1 text-xs">
+                  {settleItem.settlements?.map((row) => (
+                    <li key={row.id} className="flex justify-between">
+                      <span>{row.settled_on ? formatDate(row.settled_on) : "—"}</span>
+                      <span>{money(row.amount)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <label className="mt-4 block text-xs font-bold uppercase">
+              Amount to pay now
+              <input
+                value={settleAmount}
+                onChange={(event) => setSettleAmount(event.target.value)}
+                type="number"
+                min="0.01"
+                max={settleItem.remaining ?? settleItem.amount}
+                step="0.01"
+                required
+                className={`${inputClass} mt-2`}
+              />
+            </label>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setSettleItem(null)} className="h-11 border border-[#d7d3c8] px-4 text-sm">Cancel</button>
+              <button disabled={settlingId === settleItem.id} className={buttonClass}>
+                {settlingId === settleItem.id ? "Saving..." : "Record payment"}
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </AppShell>

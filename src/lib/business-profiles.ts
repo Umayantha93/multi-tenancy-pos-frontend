@@ -15,6 +15,10 @@ import {
   Users,
   ChartNoAxesCombined,
   PieChart,
+  Clock,
+  Target,
+  Truck,
+  UserRound,
   type LucideIcon,
 } from "lucide-react";
 
@@ -24,6 +28,7 @@ export type NavItem = {
   icon: LucideIcon;
   feature?: FeatureKey;
   owner?: boolean;
+  staffSelf?: boolean;
 };
 
 export type BillItemTypeOption = {
@@ -67,11 +72,33 @@ const billProfitsNav: NavItem = { href: "/bill-profits", label: "Bill profits", 
 const sharedNavTail: NavItem[] = [
   { href: "/customers", label: "Customers", icon: Contact, feature: "customers" },
   { href: "/employees", label: "Team", icon: Users, feature: "employees_management" },
+  { href: "/shifts", label: "Shifts", icon: Clock, feature: "employees_management", staffSelf: true },
+  { href: "/leave", label: "Leave", icon: CalendarDays, feature: "employees_management", staffSelf: true },
   { href: "/attendance", label: "Attendance", icon: Fingerprint, feature: "attendance" },
   { href: "/payroll", label: "Payroll", icon: ChartNoAxesCombined, feature: "payroll" },
+  { href: "/reports", label: "Reports", icon: ClipboardList, feature: "reports" },
   { href: "/balance-sheet", label: "Finance", icon: ChartNoAxesCombined, feature: "balance_sheet" },
+  { href: "/profile", label: "Shop details", icon: UserRound, owner: true },
+  { href: "/profile", label: "My details", icon: UserRound, staffSelf: true },
   { href: "/staff", label: "Staff access", icon: ShieldCheck, owner: true },
 ];
+
+const garmentPeopleNav: NavItem[] = [
+  { href: "/customers", label: "Customers", icon: Contact, feature: "customers" },
+  { href: "/employees", label: "Team", icon: Users, feature: "employees_management" },
+  { href: "/shifts", label: "Shifts", icon: Clock, feature: "employees_management", staffSelf: true },
+  { href: "/leave", label: "Leave", icon: CalendarDays, feature: "employees_management", staffSelf: true },
+  { href: "/targets", label: "Targets", icon: Target, feature: "employees_management" },
+  { href: "/attendance", label: "Attendance", icon: Fingerprint, feature: "attendance" },
+  { href: "/payroll", label: "Payroll", icon: ChartNoAxesCombined, feature: "payroll" },
+  { href: "/reports", label: "Reports", icon: ClipboardList, feature: "reports" },
+  { href: "/balance-sheet", label: "Finance", icon: ChartNoAxesCombined, feature: "balance_sheet" },
+  { href: "/profile", label: "Shop details", icon: UserRound, owner: true },
+  { href: "/profile", label: "My details", icon: UserRound, staffSelf: true },
+  { href: "/staff", label: "Staff access", icon: ShieldCheck, owner: true },
+];
+
+const suppliersNav: NavItem = { href: "/suppliers", label: "Suppliers", icon: Truck, feature: "suppliers" };
 
 export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
   garage: {
@@ -91,12 +118,13 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
     ],
     defaultFeatures: [
-      "admit_vehicle", "parts_inventory", "customers", "billing", "bill_sms", "bill_profits",
+      "admit_vehicle", "parts_inventory", "suppliers", "customers", "billing", "bill_sms", "bill_profits",
       "employees_management", "attendance", "payroll", "balance_sheet", "reports",
     ],
     moduleCatalog: [
       { key: "admit_vehicle", name: "Admit vehicle", group: "Service Intake" },
       { key: "parts_inventory", name: "Parts inventory", group: "Inventory" },
+      { key: "suppliers", name: "Suppliers", group: "Inventory" },
       ...sharedPeopleFinance.map((m) => m.key === "billing" ? { ...m, name: "Job cards" } : m),
     ],
     navigation: [
@@ -105,6 +133,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/bills", label: "Job cards", icon: ReceiptText, feature: "billing" },
       billProfitsNav,
       { href: "/parts", label: "Parts", icon: Boxes, feature: "parts_inventory" },
+      suppliersNav,
       ...sharedNavTail,
     ],
     billItemTypes: [
@@ -171,12 +200,13 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
     ],
     defaultFeatures: [
-      "retail_pos", "product_catalog", "customers", "billing", "bill_sms", "bill_profits",
+      "retail_pos", "product_catalog", "suppliers", "customers", "billing", "bill_sms", "bill_profits",
       "employees_management", "attendance", "payroll", "balance_sheet", "reports",
     ],
     moduleCatalog: [
       { key: "retail_pos", name: "Point of sale", group: "Service Intake" },
       { key: "product_catalog", name: "Product catalog", group: "Inventory" },
+      { key: "suppliers", name: "Suppliers", group: "Inventory" },
       ...sharedPeopleFinance.map((m) => m.key === "billing" ? { ...m, name: "Sales" } : m),
     ],
     navigation: [
@@ -185,7 +215,8 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/catalog", label: "Catalog", icon: Package, feature: "product_catalog" },
       { href: "/bills", label: "Sales", icon: ReceiptText, feature: "billing" },
       billProfitsNav,
-      ...sharedNavTail,
+      suppliersNav,
+      ...garmentPeopleNav,
     ],
     billItemTypes: [
       { value: "product", label: "Garment item", kind: "charge", allowQty: true },
@@ -234,12 +265,142 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { value: "discount", label: "Discount", kind: "discount" },
     ],
   },
+  tyre: {
+    type: "tyre",
+    label: "Tyre shops",
+    operationsLabel: "Tyre operations",
+    billingLabel: "Job cards",
+    billingSingular: "Job card",
+    openBillsLabel: "Open job cards",
+    recentBillsTitle: "Latest job cards",
+    recentBillsHint: "Fitments, balancing, and open work",
+    primaryCta: { href: "/vehicles/admit", label: "Admit vehicle", feature: "admit_vehicle" },
+    quickActions: [
+      { href: "/vehicles/admit", label: "New admission", feature: "admit_vehicle" },
+      { href: "/parts", label: "Find a tyre", feature: "parts_inventory" },
+      { href: "/bills", label: "Take payment", feature: "billing" },
+      { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
+    ],
+    defaultFeatures: [
+      "admit_vehicle", "parts_inventory", "suppliers", "customers", "billing", "bill_sms", "bill_profits",
+      "employees_management", "attendance", "payroll", "balance_sheet", "reports",
+    ],
+    moduleCatalog: [
+      { key: "admit_vehicle", name: "Admit vehicle", group: "Service Intake" },
+      { key: "parts_inventory", name: "Tyres / parts", group: "Inventory" },
+      { key: "suppliers", name: "Suppliers", group: "Inventory" },
+      ...sharedPeopleFinance.map((m) => m.key === "billing" ? { ...m, name: "Job cards" } : m),
+    ],
+    navigation: [
+      { href: "/dashboard", label: "Overview", icon: Gauge },
+      { href: "/vehicles/admit", label: "Admit vehicle", icon: ClipboardList, feature: "admit_vehicle" },
+      { href: "/bills", label: "Job cards", icon: ReceiptText, feature: "billing" },
+      billProfitsNav,
+      { href: "/parts", label: "Tyres", icon: Boxes, feature: "parts_inventory" },
+      suppliersNav,
+      ...sharedNavTail,
+    ],
+    billItemTypes: [
+      { value: "labor", label: "Labor", kind: "charge" },
+      { value: "part", label: "Tyre / part", kind: "stock" },
+      { value: "discount", label: "Discount", kind: "discount" },
+    ],
+  },
+  device_repair: {
+    type: "device_repair",
+    label: "Device repair",
+    operationsLabel: "Repair operations",
+    billingLabel: "Repair tickets",
+    billingSingular: "Repair ticket",
+    openBillsLabel: "Open tickets",
+    recentBillsTitle: "Latest tickets",
+    recentBillsHint: "Phones, appliances, and open repairs",
+    primaryCta: { href: "/vehicles/admit", label: "Admit device", feature: "admit_vehicle" },
+    quickActions: [
+      { href: "/vehicles/admit", label: "New ticket", feature: "admit_vehicle" },
+      { href: "/parts", label: "Find a spare", feature: "parts_inventory" },
+      { href: "/bills", label: "Take payment", feature: "billing" },
+      { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
+    ],
+    defaultFeatures: [
+      "admit_vehicle", "parts_inventory", "suppliers", "customers", "billing", "bill_sms", "bill_profits",
+      "employees_management", "attendance", "payroll", "balance_sheet", "reports",
+    ],
+    moduleCatalog: [
+      { key: "admit_vehicle", name: "Admit device", group: "Service Intake" },
+      { key: "parts_inventory", name: "Spares", group: "Inventory" },
+      { key: "suppliers", name: "Suppliers", group: "Inventory" },
+      ...sharedPeopleFinance.map((m) => m.key === "billing" ? { ...m, name: "Repair tickets" } : m),
+    ],
+    navigation: [
+      { href: "/dashboard", label: "Overview", icon: Gauge },
+      { href: "/vehicles/admit", label: "Admit device", icon: ClipboardList, feature: "admit_vehicle" },
+      { href: "/bills", label: "Tickets", icon: ReceiptText, feature: "billing" },
+      billProfitsNav,
+      { href: "/parts", label: "Spares", icon: Boxes, feature: "parts_inventory" },
+      suppliersNav,
+      ...sharedNavTail,
+    ],
+    billItemTypes: [
+      { value: "labor", label: "Labor", kind: "charge" },
+      { value: "part", label: "Spare", kind: "stock" },
+      { value: "discount", label: "Discount", kind: "discount" },
+    ],
+  },
+  salon: {
+    type: "salon",
+    label: "Salons",
+    operationsLabel: "Salon operations",
+    billingLabel: "Orders",
+    billingSingular: "Order",
+    openBillsLabel: "Open orders",
+    recentBillsTitle: "Latest orders",
+    recentBillsHint: "Appointments, retail, and balances due",
+    primaryCta: { href: "/bookings/new", label: "New appointment", feature: "photo_bookings" },
+    quickActions: [
+      { href: "/bookings/new", label: "New appointment", feature: "photo_bookings" },
+      { href: "/pos", label: "Retail sale", feature: "retail_pos" },
+      { href: "/bills", label: "Take payment", feature: "billing" },
+      { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
+    ],
+    defaultFeatures: [
+      "photo_bookings", "photo_packages", "retail_pos", "product_catalog", "customers", "billing", "bill_sms", "bill_profits",
+      "employees_management", "attendance", "payroll", "balance_sheet", "reports",
+    ],
+    moduleCatalog: [
+      { key: "photo_bookings", name: "Appointments", group: "Service Intake" },
+      { key: "photo_packages", name: "Packages", group: "Service Intake" },
+      { key: "retail_pos", name: "Point of sale", group: "Service Intake" },
+      { key: "product_catalog", name: "Retail catalog", group: "Inventory" },
+      ...sharedPeopleFinance.map((m) => m.key === "billing" ? { ...m, name: "Orders" } : m),
+    ],
+    navigation: [
+      { href: "/dashboard", label: "Overview", icon: Gauge },
+      { href: "/bookings", label: "Appointments", icon: CalendarDays, feature: "photo_bookings" },
+      { href: "/packages", label: "Packages", icon: Camera, feature: "photo_packages" },
+      { href: "/pos", label: "Retail sale", icon: ShoppingBag, feature: "retail_pos" },
+      { href: "/catalog", label: "Catalog", icon: Package, feature: "product_catalog" },
+      { href: "/bills", label: "Orders", icon: ReceiptText, feature: "billing" },
+      billProfitsNav,
+      ...garmentPeopleNav,
+    ],
+    billItemTypes: [
+      { value: "session", label: "Service", kind: "charge" },
+      { value: "package", label: "Package", kind: "charge" },
+      { value: "product", label: "Retail product", kind: "charge", allowQty: true },
+      { value: "addon", label: "Add-on", kind: "charge" },
+      { value: "discount", label: "Discount", kind: "discount" },
+    ],
+  },
 };
 
 export const BUSINESS_TYPE_OPTIONS: Array<{ value: BusinessType; label: string }> = [
   { value: "garage", label: "Garages" },
+  { value: "tyre", label: "Tyre shops" },
+  { value: "device_repair", label: "Device repair" },
   { value: "photography", label: "Studios" },
   { value: "clothing", label: "Garments" },
+  { value: "salon", label: "Salons" },
   { value: "cottage", label: "Cottages" },
 ];
 
@@ -249,6 +410,8 @@ export const PLAN_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "studio-pro", label: "Studio Pro" },
   { value: "retail-pro", label: "Retail Pro" },
   { value: "stay-pro", label: "Stay Pro" },
+  { value: "salon-pro", label: "Salon Pro" },
+  { value: "repair-pro", label: "Repair Pro" },
   { value: "Growth", label: "Growth" },
   { value: "Trial", label: "Trial" },
   { value: "Custom", label: "Custom" },
@@ -271,9 +434,17 @@ function matchPlan(type: BusinessType): string {
       return "retail-pro";
     case "cottage":
       return "stay-pro";
+    case "salon":
+      return "salon-pro";
+    case "device_repair":
+      return "repair-pro";
     default:
       return "garage-pro";
   }
+}
+
+export function usesVehicleJobs(type?: string | null): boolean {
+  return type === "garage" || type === "tyre" || type === "device_repair";
 }
 
 export function profileFor(type?: string | null): BusinessProfile {

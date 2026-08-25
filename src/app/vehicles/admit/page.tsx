@@ -1,12 +1,13 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardCheck, Plus, Save, Search } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { AddressField } from "@/components/address-field";
 import { buttonClass, ErrorMessage, inputClass, Panel } from "@/components/ui";
-import { api } from "@/lib/api";
+import { api, currentUser } from "@/lib/api";
+import { profileFor } from "@/lib/business-profiles";
 
 type VehicleMatch = {
   id: number;
@@ -21,19 +22,26 @@ type VehicleMatch = {
 
 type JobKind = "repair" | "service";
 
-const fields = [
-  ["customer_name", "Customer name", "text", true],
-  ["customer_phone", "Phone number", "tel", true],
-  ["number_plate", "Number plate", "text", true],
-  ["chassis_number", "Chassis number", "text", false],
-  ["make", "Make", "text", false],
-  ["model", "Model", "text", false],
-  ["year", "Vehicle year", "number", false],
-  ["odometer", "Odometer (km)", "number", false],
-] as const;
-
 export default function AdmitVehiclePage() {
   const router = useRouter();
+  const profile = useMemo(() => profileFor(currentUser()?.tenant?.business_type), []);
+  const isDevice = profile.type === "device_repair";
+  const isTyre = profile.type === "tyre";
+  const fields: Array<[string, string, string, boolean]> = [
+    ["customer_name", "Customer name", "text", true],
+    ["customer_phone", "Phone number", "tel", true],
+    ["number_plate", isDevice ? "Device ID / serial" : "Number plate", "text", true],
+    [isDevice ? "imei" : "chassis_number", isDevice ? "IMEI" : "Chassis number", "text", false],
+    ["make", isDevice ? "Brand" : "Make", "text", false],
+    ["model", "Model", "text", false],
+    ["year", isDevice ? "Year" : "Vehicle year", "number", false],
+  ];
+  if (!isDevice) fields.push(["odometer", "Odometer (km)", "number", false]);
+  if (isTyre) {
+    fields.push(["tyre_size", "Tyre size", "text", false], ["axle", "Axle", "text", false]);
+  }
+  if (isDevice) fields.push(["fault_description", "Fault", "text", false]);
+
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [plateQuery, setPlateQuery] = useState("");
@@ -78,6 +86,7 @@ export default function AdmitVehiclePage() {
     setSaving(true);
     setError("");
     const data = Object.fromEntries(new FormData(event.currentTarget));
+    if (isDevice) data.asset_kind = "device";
     try {
       const bill = await api<{ id: number }>("/bills", { method: "POST", body: JSON.stringify(data) });
       router.push(`/bills/${bill.id}`);
@@ -88,30 +97,30 @@ export default function AdmitVehiclePage() {
   }
 
   return (
-    <AppShell title="Admit a vehicle" eyebrow="New job card">
+    <AppShell title={isDevice ? "Admit a device" : "Admit a vehicle"} eyebrow="New job card">
       <div className="mx-auto max-w-5xl space-y-5">
         <div className="flex items-start gap-4 border-l-4 border-[#f5c842] bg-[#fbfaf6] p-4">
           <ClipboardCheck className="shrink-0 text-[#167c73]" />
           <div>
-            <p className="font-semibold">Search an existing plate first</p>
+            <p className="font-semibold">{isDevice ? "Search an existing device first" : "Search an existing plate first"}</p>
             <p className="text-sm text-[#6f746e]">
-              If the vehicle already exists, open another job card. Otherwise fill the form below for a new admission.
+              If it already exists, open another job card. Otherwise fill the form below for a new admission.
             </p>
           </div>
         </div>
 
         <Panel className="p-5">
-          <h2 className="font-display text-2xl font-semibold uppercase">Search by number plate</h2>
+          <h2 className="font-display text-2xl font-semibold uppercase">{isDevice ? "Search by device ID" : "Search by number plate"}</h2>
           <label className="relative mt-4 block max-w-xl">
             <Search className="absolute left-3 top-3 text-[#6f746e]" size={18} />
             <input
               value={plateQuery}
               onChange={(event) => setPlateQuery(event.target.value.toUpperCase())}
               className={`${inputClass} pl-10`}
-              placeholder="e.g. CAB-1234"
+              placeholder={isDevice ? "e.g. IMEI or serial" : "e.g. CAB-1234"}
             />
           </label>
-          {lookingUp && <p className="mt-3 text-sm text-[#6f746e]">Searching vehicles...</p>}
+          {lookingUp && <p className="mt-3 text-sm text-[#6f746e]">Searching...</p>}
           {vehicles.length > 0 && (
             <div className="mt-4 divide-y divide-[#e2ded4] border border-[#d7d3c8] bg-white">
               {vehicles.map((vehicle) => (
@@ -175,7 +184,7 @@ export default function AdmitVehiclePage() {
         <form onSubmit={submit}>
           <Panel>
             <div className="border-b border-[#d7d3c8] px-5 py-4">
-              <h2 className="font-display text-2xl font-semibold uppercase">New customer & vehicle</h2>
+              <h2 className="font-display text-2xl font-semibold uppercase">{isDevice ? "New customer & device" : "New customer & vehicle"}</h2>
             </div>
             <div className="grid gap-5 p-5 sm:grid-cols-2">
               {fields.map(([name, label, type, required]) => (
