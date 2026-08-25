@@ -127,6 +127,21 @@ export default function TenantDetailPage() {
     });
   }
 
+  async function grantDemo() {
+    if (!tenant) return;
+    setStatusSaving(true);
+    setError("");
+    try {
+      const updated = await api<Detail>(`/super-admin/tenants/${id}/demo`, { method: "POST", body: JSON.stringify({ days: 21 }) });
+      setTenant((current) => (current ? { ...current, ...updated } : updated));
+      setNotice(`${tenant.business_name} has 21-day demo access. It will deactivate automatically when the days end. Activate to convert to a live shop.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to grant demo access.");
+    } finally {
+      setStatusSaving(false);
+    }
+  }
+
   function requestDualChange(enable: boolean) {
     if (!tenant) return;
     if (enable) {
@@ -321,6 +336,8 @@ export default function TenantDetailPage() {
     const form = event.currentTarget;
     const formData = new FormData(form);
     formData.set("address", address);
+    formData.set("vat_registered", formData.get("vat_registered") ? "1" : "0");
+    formData.set("sscl_registered", formData.get("sscl_registered") ? "1" : "0");
     formData.set("contact_phones", JSON.stringify(contactPhones.filter((p) => p.number.trim())));
     if (contactPhones.find((p) => p.number.trim())) {
       formData.set("contact_phone", contactPhones.find((p) => p.number.trim())!.number);
@@ -353,6 +370,12 @@ export default function TenantDetailPage() {
             className={`flex h-10 items-center gap-2 px-4 text-sm font-semibold text-white ${tenant.status === "active" ? "bg-[#b84837]" : "bg-[#167c73]"}`}
           >
             <Power size={17} />{tenant.status === "active" ? "Deactivate" : "Activate"}
+          </button>
+          <button
+            onClick={grantDemo}
+            className="flex h-10 items-center gap-2 border border-[#167c73] bg-white px-4 text-sm font-semibold text-[#167c73]"
+          >
+            Grant 21-day demo
           </button>
           <button
             onClick={requestDelete}
@@ -393,7 +416,7 @@ export default function TenantDetailPage() {
                   </div>
                 </div>
                 <span className={`px-2 py-1 text-[10px] font-bold uppercase ${tenant.status === "active" ? "bg-[#167c73]/10 text-[#167c73]" : "bg-[#b84837]/10 text-[#b84837]"}`}>
-                  {tenant.status}
+                  {tenant.status}{tenant.is_demo ? " · demo" : ""}
                 </span>
               </div>
               <dl className="mt-7 space-y-3 text-sm">
@@ -403,6 +426,7 @@ export default function TenantDetailPage() {
                   <dt className="shrink-0 text-[#6f746e]">Address</dt>
                   <dd className="text-right">{tenant.address || "—"}</dd>
                 </div>
+                <div className="flex justify-between border-b border-[#e2ded4] pb-3"><dt className="text-[#6f746e]">Demo ends</dt><dd className="text-right">{tenant.demo_ends_at ? new Date(tenant.demo_ends_at).toLocaleString("en-LK") : "Live access"}{tenant.demo_days_left != null ? ` · ${tenant.demo_days_left} days left` : ""}</dd></div>
                 <div className="flex justify-between border-b border-[#e2ded4] pb-3"><dt className="text-[#6f746e]">Plan</dt><dd>{tenant.plan ?? "Custom"}</dd></div>
                 <div className="flex justify-between border-b border-[#e2ded4] pb-3"><dt className="text-[#6f746e]">Payment plan</dt><dd className="capitalize">{tenant.payment_plan ?? "monthly"}</dd></div>
                 <div className="flex justify-between border-b border-[#e2ded4] pb-3"><dt className="text-[#6f746e]">Amount</dt><dd>{tenant.plan_amount != null ? `LKR ${Number(tenant.plan_amount).toLocaleString("en-LK", { minimumFractionDigits: 2 })}` : "—"}</dd></div>
@@ -413,6 +437,9 @@ export default function TenantDetailPage() {
               </Link>
               <Link href={`/super-admin/invoices?tenant=${id}`} className="mt-2 inline-flex h-11 w-full items-center justify-center border border-[#20221f] bg-white px-4 text-sm font-semibold hover:bg-[#20221f] hover:text-white">
                 Tenants invoices
+              </Link>
+              <Link href={`/super-admin/inventory?tenant=${id}`} className="mt-2 inline-flex h-11 w-full items-center justify-center border border-[#20221f] bg-white px-4 text-sm font-semibold hover:bg-[#20221f] hover:text-white">
+                Tenant inventory
               </Link>
             </Panel>
 
@@ -559,6 +586,18 @@ export default function TenantDetailPage() {
                   onChange={setAddress}
                   placeholder="Shown on printed bills"
                 />
+                <label className="block text-xs font-bold uppercase">
+                  TIN
+                  <input name="tin" defaultValue={tenant.tin || ""} className={`${inputClass} mt-2`} />
+                </label>
+                <label className="flex items-center gap-2 text-xs font-bold uppercase">
+                  <input name="vat_registered" type="checkbox" value="1" defaultChecked={Boolean(tenant.vat_registered)} />
+                  VAT registered (default 18%)
+                </label>
+                <label className="flex items-center gap-2 text-xs font-bold uppercase">
+                  <input name="sscl_registered" type="checkbox" value="1" defaultChecked={Boolean(tenant.sscl_registered)} />
+                  SSCL registered (default 2.5%)
+                </label>
                 <div>
                   <div className="mb-2 flex items-center justify-between">
                     <p className="text-xs font-bold uppercase">Business phones</p>

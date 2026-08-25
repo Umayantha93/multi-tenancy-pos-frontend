@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { FormEvent, useEffect, useState } from "react";
+import { ArrowLeft, ArrowRight, Pencil } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { ErrorMessage, PageState, Panel } from "@/components/ui";
+import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { api, formatDate, money } from "@/lib/api";
 import { billStatusClass, billStatusLabel } from "@/lib/bill-stamp";
 
@@ -32,12 +32,30 @@ export default function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [error, setError] = useState("");
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     api<CustomerDetail>(`/customers/${id}`)
       .then(setCustomer)
       .catch((caught) => setError(caught.message));
   }, [id]);
+
+  async function saveCustomer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!customer) return;
+    const data = Object.fromEntries(new FormData(event.currentTarget));
+    try {
+      const updated = await api<CustomerDetail>(`/customers/${customer.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ name: data.name, phone: data.phone, address: data.address || null }),
+      });
+      setCustomer((current) => current ? { ...current, ...updated } : current);
+      setEditing(false);
+      setError("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save customer.");
+    }
+  }
 
   if (!customer && !error) {
     return <AppShell title="Customer" eyebrow="Details"><PageState message="Loading customer..." /></AppShell>;
@@ -58,8 +76,23 @@ export default function CustomerDetailPage() {
       <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
         <div className="space-y-5">
           <Panel className="p-5">
-            <p className="text-[10px] font-bold uppercase text-[#167c73]">Customer</p>
-            <h2 className="mt-1 font-display text-3xl font-semibold uppercase">{customer.name}</h2>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase text-[#167c73]">Customer</p>
+                <h2 className="mt-1 font-display text-3xl font-semibold uppercase">{customer.name}</h2>
+              </div>
+              <button type="button" onClick={() => setEditing((value) => !value)} className="flex h-9 items-center gap-1 border border-[#d7d3c8] px-3 text-xs font-bold uppercase">
+                <Pencil size={13} /> {editing ? "Cancel" : "Edit"}
+              </button>
+            </div>
+            {editing ? (
+              <form onSubmit={saveCustomer} className="mt-6 grid gap-3">
+                <label className="text-xs font-bold uppercase">Name<input name="name" defaultValue={customer.name} required className={`${inputClass} mt-2`} /></label>
+                <label className="text-xs font-bold uppercase">Phone<input name="phone" defaultValue={customer.phone} required className={`${inputClass} mt-2`} /></label>
+                <label className="text-xs font-bold uppercase">Address<input name="address" defaultValue={customer.address ?? ""} className={`${inputClass} mt-2`} /></label>
+                <button className={buttonClass}>Save customer</button>
+              </form>
+            ) : (
             <dl className="mt-6 space-y-3 text-sm">
               <div className="flex justify-between border-b border-[#e2ded4] pb-3">
                 <dt className="text-[#6f746e]">Phone</dt>
@@ -78,6 +111,7 @@ export default function CustomerDetailPage() {
                 <dd className="font-semibold">{customer.bills_count}</dd>
               </div>
             </dl>
+            )}
           </Panel>
 
           <Panel>

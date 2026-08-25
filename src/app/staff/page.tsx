@@ -8,11 +8,12 @@ import { api } from "@/lib/api";
 import { groupModules } from "@/lib/feature-modules";
 
 type Feature = { id: number; key: string; name: string; group?: string | null; pivot?: { can_access: boolean } };
-type Staff = { id: number; name: string; email: string; status: "active" | "inactive"; permissions: Feature[] };
+type Staff = { id: number; name: string; email: string; status: "active" | "inactive"; employee_id?: number | null; employee?: { id: number; name: string } | null; permissions: Feature[] };
 type PermissionResponse = { available: Feature[]; permissions: Feature[] };
 
 export default function StaffPage() {
   const [staff, setStaff] = useState<Staff[] | null>(null);
+  const [employees, setEmployees] = useState<Array<{ id: number; name: string }>>([]);
   const [selected, setSelected] = useState<Staff | null>(null);
   const [available, setAvailable] = useState<Feature[]>([]);
   const [enabled, setEnabled] = useState<string[]>([]);
@@ -21,6 +22,9 @@ export default function StaffPage() {
 
   function load() {
     api<Staff[]>("/tenant/staff").then(setStaff).catch((caught) => setError(caught.message));
+    api<{ data: Array<{ id: number; name: string }> }>("/employees?active_only=1&per_page=100")
+      .then((result) => setEmployees(result.data))
+      .catch(() => setEmployees([]));
   }
 
   useEffect(load, []);
@@ -72,6 +76,15 @@ export default function StaffPage() {
     }
   }
 
+  async function activate(user: Staff) {
+    try {
+      await api(`/tenant/staff/${user.id}/activate`, { method: "POST" });
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to activate staff.");
+    }
+  }
+
   async function deactivate(user: Staff) {
     try {
       await api(`/tenant/staff/${user.id}/deactivate`, { method: "POST" });
@@ -101,15 +114,19 @@ export default function StaffPage() {
                   <span className="grid size-10 place-items-center bg-[#e7e4db] font-bold">{user.name.charAt(0)}</span>
                   <div className="min-w-44 flex-1">
                     <strong className="block text-sm">{user.name}</strong>
-                    <span className="text-xs text-[#6f746e]">{user.email}</span>
+                    <span className="text-xs text-[#6f746e]">{user.email}{user.employee ? ` · ${user.employee.name}` : ""}</span>
                   </div>
                   <span className={`px-2 py-1 text-[10px] font-bold uppercase ${user.status === "active" ? "bg-[#167c73]/10 text-[#167c73]" : "bg-[#b84837]/10 text-[#b84837]"}`}>
                     {user.status}
                   </span>
                   <button onClick={() => edit(user)} className="h-9 border border-[#cbc7bc] px-3 text-xs font-semibold hover:bg-[#f5c842]">Permissions</button>
-                  {user.status === "active" && (
+                  {user.status === "active" ? (
                     <button onClick={() => deactivate(user)} title="Deactivate staff" className="grid size-9 place-items-center border border-[#cbc7bc] text-[#b84837]">
                       <Power size={16} />
+                    </button>
+                  ) : (
+                    <button onClick={() => activate(user)} title="Activate staff" className="h-9 border border-[#167c73] px-3 text-xs font-semibold text-[#167c73]">
+                      Activate
                     </button>
                   )}
                 </div>
@@ -127,6 +144,23 @@ export default function StaffPage() {
             <label className="block text-sm font-semibold">Name<input required name="name" className={`mt-2 ${inputClass}`} /></label>
             <label className="block text-sm font-semibold">Email<input required name="email" type="email" className={`mt-2 ${inputClass}`} /></label>
             <label className="block text-sm font-semibold">Temporary password<input required name="password" type="password" minLength={8} className={`mt-2 ${inputClass}`} /></label>
+            <label className="block text-sm font-semibold">
+              Link to team member
+              <select name="employee_id" className={`mt-2 ${inputClass}`} defaultValue="">
+                <option value="">Not linked</option>
+                {employees.map((employee) => (
+                  <option key={employee.id} value={employee.id}>{employee.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm font-semibold">
+              Access preset
+              <select name="preset" className={`mt-2 ${inputClass}`} defaultValue="shop_floor">
+                <option value="shop_floor">Billing + inventory (shop floor)</option>
+                <option value="custom">Custom — set permissions after create</option>
+              </select>
+            </label>
+            <p className="text-xs text-[#6f746e]">Shop floor can bill, restock, edit own details, apply for leave, and view own shifts. You approve leave.</p>
             <button disabled={loading} className={`${buttonClass} w-full`}>{loading ? "Creating..." : "Create staff account"}</button>
           </form>
         </Panel>

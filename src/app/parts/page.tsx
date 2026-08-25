@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Boxes, Download, PackagePlus, Pencil, Plus, Search, Upload, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, PageState, Panel, SuccessMessage } from "@/components/ui";
-import { API_URL, api, currentUser, mediaUrl, money } from "@/lib/api";
+import { API_URL, api, currentFeatures, currentUser, mediaUrl, money } from "@/lib/api";
 
 type Part = {
   id: number;
@@ -24,6 +24,7 @@ type Part = {
 };
 
 type Mode = "add" | "edit" | "restock" | null;
+type Supplier = { id: number; name: string };
 
 type ImportResult = {
   message: string;
@@ -42,8 +43,12 @@ export default function PartsPage() {
   const [mode, setMode] = useState<Mode>(null);
   const [selected, setSelected] = useState<Part | null>(null);
   const [admin, setAdmin] = useState(false);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [importing, setImporting] = useState(false);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importPayment, setImportPayment] = useState("paid");
+  const [importDue, setImportDue] = useState("");
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback((term = search) => {
@@ -56,6 +61,11 @@ export default function PartsPage() {
     const frame = requestAnimationFrame(() => {
       setAdmin(currentUser()?.role === "business_owner");
       load("");
+      if (currentFeatures().includes("suppliers")) {
+        api<{ data: Supplier[] }>("/suppliers?per_page=100")
+          .then((result) => setSuppliers(result.data))
+          .catch(() => setSuppliers([]));
+      }
     });
     return () => cancelAnimationFrame(frame);
   }, [load]);
@@ -117,7 +127,7 @@ export default function PartsPage() {
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-      setNotice("Template downloaded. Fill the Parts sheet, delete the sample row, then import.");
+      setNotice("Template downloaded. Fill the Parts sheet, delete both SAMPLE rows (paid + credit), then import.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not download template.");
     } finally {
@@ -131,11 +141,16 @@ export default function PartsPage() {
     setNotice("");
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("payment_status", importPayment);
+    if (importPayment === "credit" && importDue) {
+      formData.append("due_date", importDue);
+    }
     try {
       const result = await api<ImportResult>("/parts/import", { method: "POST", body: formData });
       setNotice(
-        `${result.message} ${result.created} created, ${result.updated} updated, ${result.expenses_created} expenses (${money(result.expense_total)}).`,
+        `${result.message} ${result.created} created, ${result.updated} updated, ${result.expenses_created} expenses (${money(result.expense_total)}). Default: ${importPayment === "credit" ? "credit (supplier owe)" : "paid (debit)"}.`,
       );
+      setImportOpen(false);
       load("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not import spreadsheet.");
@@ -178,6 +193,9 @@ export default function PartsPage() {
       if (!payload.due_date || payload.payment_status !== "credit") {
         delete payload.due_date;
       }
+      if (!payload.supplier_id) {
+        delete payload.supplier_id;
+      }
       await api(`/parts/${selected.id}/restock`, {
         method: "POST",
         body: JSON.stringify(payload),
@@ -207,7 +225,7 @@ export default function PartsPage() {
           </button>
           <button
             type="button"
-            onClick={() => importInputRef.current?.click()}
+            onClick={() => setImportOpen(true)}
             disabled={importing}
             className="flex h-10 items-center gap-2 border border-[#167c73] bg-white px-3 text-sm font-semibold text-[#167c73]"
           >
@@ -254,7 +272,7 @@ export default function PartsPage() {
             const image = mediaUrl(part.image_urls?.[0] || part.images?.[0]);
             return (
               <Panel key={part.id} className="flex h-full flex-col overflow-hidden">
-                <button type="button" onClick={() => openEdit(part)} className="block w-full flex-1 text-left">
+                <button type="button" onClick={() => (admin ? openEdit(part) : openRestock(part))} className="block w-full flex-1 text-left">
                   <div className="relative aspect-[16/10] w-full overflow-hidden bg-[#e8e5dc]">
                     {image ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -286,16 +304,16 @@ export default function PartsPage() {
                     <p className="mt-2 font-display text-lg font-semibold">{money(part.price)}</p>
                   </div>
                 </button>
-                {admin && (
-                  <div className="mt-auto flex border-t border-[#d7d3c8]">
-                    <button type="button" onClick={() => openEdit(part)} className="flex flex-1 items-center justify-center gap-1.5 py-2 text-[10px] font-bold uppercase hover:bg-[#eeece5]">
-                      <Pencil size={12} /> Edit
-                    </button>
-                    <button type="button" onClick={() => openRestock(part)} className="flex flex-1 items-center justify-center gap-1.5 border-l border-[#d7d3c8] py-2 text-[10px] font-bold uppercase text-[#167c73] hover:bg-[#eeece5]">
+                <div className="mt-auto flex border-t border-[#d7d3c8]">
+                    {admin && (
+                      <button type="button" onClick={() => openEdit(part)} className="flex flex-1 items-center justify-center gap-1.5 py-2 text-[10px] font-bold uppercase hover:bg-[#eeece5]">
+                        <Pencil size={12} /> Edit
+                      </button>
+                    )}
+                    <button type="button" onClick={() => openRestock(part)} className={`flex flex-1 items-center justify-center gap-1.5 py-2 text-[10px] font-bold uppercase text-[#167c73] hover:bg-[#eeece5] ${admin ? "border-l border-[#d7d3c8]" : ""}`}>
                       <PackagePlus size={12} /> Restock
                     </button>
                   </div>
-                )}
               </Panel>
             );
           })}
@@ -395,7 +413,8 @@ export default function PartsPage() {
             </div>
             <div className="space-y-4 p-5">
               <p className="text-sm text-[#6f746e]">
-                Adding stock for <strong>{selected.name}</strong> (now {selected.stock_qty}). Paid purchases hit finance immediately; credit purchases stay as payables until settled.
+                Adding stock for <strong>{selected.name}</strong> (now {selected.stock_qty} @ cost {selected.cost_price || "0"}).
+                New unit cost is blended as a weighted average with existing stock. The purchase expense still uses this restock’s unit cost × qty. Paid hits finance now; credit stays as a payable until settled.
               </p>
               <label className="block text-xs font-bold uppercase">
                 Quantity to add
@@ -405,6 +424,17 @@ export default function PartsPage() {
                 Unit cost
                 <input name="unit_cost" type="number" min="0" step="0.01" defaultValue={selected.cost_price || ""} className={`${inputClass} mt-2`} />
               </label>
+              {suppliers.length > 0 && (
+                <label className="block text-xs font-bold uppercase">
+                  Supplier (optional)
+                  <select name="supplier_id" className={`${inputClass} mt-2`} defaultValue="">
+                    <option value="">No supplier — same as today</option>
+                    {suppliers.map((supplier) => (
+                      <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <label className="block text-xs font-bold uppercase">
                 Supplier payment
                 <select name="payment_status" className={`${inputClass} mt-2`} defaultValue="paid">
@@ -425,6 +455,37 @@ export default function PartsPage() {
               <button className={buttonClass}>Add to stock</button>
             </div>
           </form>
+        </div>
+      )}
+      {importOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4" onClick={() => setImportOpen(false)}>
+          <div className="w-full max-w-md bg-[#f3f0e8] p-5" onClick={(event) => event.stopPropagation()}>
+            <h2 className="font-display text-2xl font-semibold uppercase">Import parts</h2>
+            <p className="mt-2 text-sm text-[#6f746e]">
+              Choose paid (debit) or credit for rows that do not set payment_status in the sheet. A credit row also needs a due date.
+            </p>
+            <label className="mt-4 block text-xs font-bold uppercase">
+              Default payment
+              <select value={importPayment} onChange={(event) => setImportPayment(event.target.value)} className={`${inputClass} mt-2`}>
+                <option value="paid">Paid now (debit)</option>
+                <option value="credit">On credit (supplier owe)</option>
+              </select>
+            </label>
+            {importPayment === "credit" && (
+              <label className="mt-3 block text-xs font-bold uppercase">
+                Default supplier due date
+                <input value={importDue} onChange={(event) => setImportDue(event.target.value)} type="date" required className={`${inputClass} mt-2`} />
+              </label>
+            )}
+            <button
+              type="button"
+              disabled={importing || (importPayment === "credit" && !importDue)}
+              onClick={() => importInputRef.current?.click()}
+              className={`${buttonClass} mt-5 w-full`}
+            >
+              {importing ? "Importing..." : "Choose spreadsheet"}
+            </button>
+          </div>
         </div>
       )}
     </AppShell>

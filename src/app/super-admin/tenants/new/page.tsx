@@ -45,6 +45,9 @@ export default function NewTenantPage() {
     formData.set("owner_phones", JSON.stringify(ownerPhones.filter((p) => p.number.trim())));
     formData.set("contact_phones", JSON.stringify(contactPhones.filter((p) => p.number.trim())));
     formData.set("owner_phone", ownerPhones.find((p) => p.number.trim())?.number ?? "");
+    formData.set("vat_registered", formData.get("vat_registered") ? "1" : "0");
+    formData.set("sscl_registered", formData.get("sscl_registered") ? "1" : "0");
+    formData.set("demo_access", formData.get("demo_access") ? "1" : "0");
     const primaryContact = contactPhones.find((p) => p.number.trim())?.number;
     if (primaryContact) formData.set("contact_phone", primaryContact);
     try {
@@ -125,6 +128,10 @@ export default function NewTenantPage() {
                   className={`mt-2 ${inputClass}`}
                 />
               </label>
+              <label className="flex items-center gap-2 text-sm font-semibold sm:col-span-2">
+                <input name="demo_access" type="checkbox" className="size-4" />
+                21-day demo access (auto-deactivates when the days end)
+              </label>
               <label className="text-sm font-semibold sm:col-span-2">
                 Business logo
                 <input
@@ -185,6 +192,18 @@ export default function NewTenantPage() {
                 <input name="contact_email" type="email" placeholder="Shown on printed bills" className={`mt-2 ${inputClass}`} />
               </label>
               <AddressField name="address" label="Business address" className="sm:col-span-2" placeholder="Shown on printed bills" />
+              <label className="text-sm font-semibold">
+                TIN
+                <input name="tin" className={`mt-2 ${inputClass}`} placeholder="Optional" />
+              </label>
+              <label className="flex items-center gap-2 text-sm font-semibold">
+                <input name="vat_registered" type="checkbox" value="1" className="size-4" />
+                VAT registered (18%)
+              </label>
+              <label className="flex items-center gap-2 text-sm font-semibold">
+                <input name="sscl_registered" type="checkbox" value="1" className="size-4" />
+                SSCL registered (2.5%)
+              </label>
               <label className="text-sm font-semibold">
                 Owner name
                 <input name="owner_name" required className={`mt-2 ${inputClass}`} />
