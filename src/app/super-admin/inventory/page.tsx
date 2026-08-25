@@ -237,7 +237,7 @@ function InventoryPageInner() {
                       </p>
                     </td>
                     <td className="tabular-nums font-semibold">{row.stock_qty}</td>
-                    <td className="tabular-nums">{money(row.cost_price)}</td>
+                    <td className="tabular-nums">{money(row.cost_price ?? 0)}</td>
                     <td className="tabular-nums">{money(row.price)}</td>
                     <td className="pr-4 text-right">
                       <button

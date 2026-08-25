@@ -280,13 +280,13 @@ export default function SharedBillPage() {
           {Number(bill.vat_amount) > 0 && (
             <div className="flex justify-between">
               <span className="text-[#6f746e]">VAT {bill.vat_rate ? `(${bill.vat_rate}%)` : ""}</span>
-              <strong className="tabular-nums">{money(bill.vat_amount)}</strong>
+              <strong className="tabular-nums">{money(bill.vat_amount ?? 0)}</strong>
             </div>
           )}
           {Number(bill.sscl_amount) > 0 && (
             <div className="flex justify-between">
               <span className="text-[#6f746e]">SSCL {bill.sscl_rate ? `(${bill.sscl_rate}%)` : ""}</span>
-              <strong className="tabular-nums">{money(bill.sscl_amount)}</strong>
+              <strong className="tabular-nums">{money(bill.sscl_amount ?? 0)}</strong>
             </div>
           )}
           {paid ? (

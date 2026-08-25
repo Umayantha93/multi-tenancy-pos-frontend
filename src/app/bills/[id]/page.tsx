@@ -1151,10 +1151,10 @@ export default function BillDetailPage() {
                 <strong className="tabular-nums">- {money(bill.total_deductions)}</strong>
               </div>
               {Number(bill.vat_amount) > 0 && (
-                <div className="flex justify-between gap-6"><span>VAT {bill.vat_rate ? `(${bill.vat_rate}%)` : ""}</span><strong className="tabular-nums">{money(bill.vat_amount)}</strong></div>
+                <div className="flex justify-between gap-6"><span>VAT {bill.vat_rate ? `(${bill.vat_rate}%)` : ""}</span><strong className="tabular-nums">{money(bill.vat_amount ?? 0)}</strong></div>
               )}
               {Number(bill.sscl_amount) > 0 && (
-                <div className="flex justify-between gap-6"><span>SSCL {bill.sscl_rate ? `(${bill.sscl_rate}%)` : ""}</span><strong className="tabular-nums">{money(bill.sscl_amount)}</strong></div>
+                <div className="flex justify-between gap-6"><span>SSCL {bill.sscl_rate ? `(${bill.sscl_rate}%)` : ""}</span><strong className="tabular-nums">{money(bill.sscl_amount ?? 0)}</strong></div>
               )}
               <div className="flex justify-between gap-6"><span>Paid</span><strong className="tabular-nums">- {money(bill.amount_paid)}</strong></div>
               <div className="flex justify-between gap-6 border-t border-[#e2ded4] pt-3">
