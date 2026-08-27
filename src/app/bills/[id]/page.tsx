@@ -98,6 +98,9 @@ export default function BillDetailPage() {
   const selectedType = itemTypes.find((option) => option.value === type) ?? itemTypes[0];
   const activeType = type || selectedType?.value || "labor";
   const isServiceJob = profile.type === "garage" && bill?.job_kind === "service";
+  const jobKindLabel =
+    bill?.job_kind === "service" ? "Service" : bill?.job_kind === "parts_sale" ? "Instant" : "Repair";
+  const showJobKind = ["garage", "tyre", "device_repair"].includes(profile.type);
   const billItems = useMemo(() => sortBillItems(bill?.items ?? []), [bill?.items]);
   const chargeItems = useMemo(() => billItems.filter((item) => item.type !== "discount"), [billItems]);
   const discountItems = useMemo(() => billItems.filter((item) => item.type === "discount"), [billItems]);
@@ -466,7 +469,7 @@ export default function BillDetailPage() {
   return (
     <AppShell
       title={bill.bill_number}
-      eyebrow={`${bill.vehicle?.number_plate ?? bill.customer?.name ?? profile.billingSingular}${profile.type === "garage" ? ` · ${bill.job_kind === "service" ? "Service" : "Repair"}` : ""} · ${bill.status.replace("_", " ")}`}
+      eyebrow={`${bill.vehicle?.number_plate ?? bill.customer?.name ?? profile.billingSingular}${showJobKind ? ` · ${jobKindLabel}` : ""} · ${bill.status.replace("_", " ")}`}
       action={
         <div className="no-print flex items-center gap-2">
           {canSendSms && (
@@ -633,7 +636,7 @@ export default function BillDetailPage() {
           <div className="flex shrink-0 flex-col items-end text-right text-xs uppercase text-[#6f746e]">
             <p className="font-bold text-[#167c73]">
               Tax invoice / {profile.billingSingular.toLowerCase()}
-              {profile.type === "garage" ? ` · ${bill.job_kind === "service" ? "Service" : "Repair"}` : ""}
+              {showJobKind ? ` · ${jobKindLabel}` : ""}
             </p>
             <p className="mt-1 normal-case">{new Date().toLocaleString("en-LK")}</p>
             <BillStatusSeal stamp={stamp} paymentDate={paymentDate} />
@@ -689,8 +692,12 @@ export default function BillDetailPage() {
                 </>
               ) : (
                 <div className="sm:col-span-2">
-                  <p className="text-[10px] font-bold uppercase text-[#6f746e]">Type</p>
-                  <p className="mt-1 font-semibold">{profile.label}</p>
+                  <p className="text-[10px] font-bold uppercase text-[#6f746e]">
+                    {bill.job_kind === "parts_sale" ? "Instant bill" : "Type"}
+                  </p>
+                  <p className="mt-1 font-semibold">
+                    {bill.job_kind === "parts_sale" ? "No vehicle · walk-in" : profile.label}
+                  </p>
                 </div>
               )}
             </div>

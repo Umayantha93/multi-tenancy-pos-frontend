@@ -113,8 +113,8 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
     primaryCta: { href: "/vehicles/admit", label: "Admit vehicle", feature: "admit_vehicle" },
     quickActions: [
       { href: "/vehicles/admit", label: "New admission", feature: "admit_vehicle" },
+      { href: "/parts-pos", label: "Instant bill", feature: "billing" },
       { href: "/parts", label: "Find a part", feature: "parts_inventory" },
-      { href: "/bills", label: "Take payment", feature: "billing" },
       { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
     ],
     defaultFeatures: [
@@ -131,6 +131,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/dashboard", label: "Overview", icon: Gauge },
       { href: "/vehicles/admit", label: "Admit vehicle", icon: ClipboardList, feature: "admit_vehicle" },
       { href: "/bills", label: "Job cards", icon: ReceiptText, feature: "billing" },
+      { href: "/parts-pos", label: "Instant bill", icon: ShoppingBag, feature: "billing" },
       billProfitsNav,
       { href: "/parts", label: "Parts", icon: Boxes, feature: "parts_inventory" },
       suppliersNav,
@@ -277,8 +278,8 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
     primaryCta: { href: "/vehicles/admit", label: "Admit vehicle", feature: "admit_vehicle" },
     quickActions: [
       { href: "/vehicles/admit", label: "New admission", feature: "admit_vehicle" },
+      { href: "/parts-pos", label: "Instant bill", feature: "billing" },
       { href: "/parts", label: "Find a tyre", feature: "parts_inventory" },
-      { href: "/bills", label: "Take payment", feature: "billing" },
       { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
     ],
     defaultFeatures: [
@@ -295,6 +296,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/dashboard", label: "Overview", icon: Gauge },
       { href: "/vehicles/admit", label: "Admit vehicle", icon: ClipboardList, feature: "admit_vehicle" },
       { href: "/bills", label: "Job cards", icon: ReceiptText, feature: "billing" },
+      { href: "/parts-pos", label: "Instant bill", icon: ShoppingBag, feature: "billing" },
       billProfitsNav,
       { href: "/parts", label: "Tyres", icon: Boxes, feature: "parts_inventory" },
       suppliersNav,
@@ -318,8 +320,8 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
     primaryCta: { href: "/vehicles/admit", label: "Admit device", feature: "admit_vehicle" },
     quickActions: [
       { href: "/vehicles/admit", label: "New ticket", feature: "admit_vehicle" },
+      { href: "/parts-pos", label: "Instant bill", feature: "billing" },
       { href: "/parts", label: "Find a spare", feature: "parts_inventory" },
-      { href: "/bills", label: "Take payment", feature: "billing" },
       { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
     ],
     defaultFeatures: [
@@ -336,6 +338,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/dashboard", label: "Overview", icon: Gauge },
       { href: "/vehicles/admit", label: "Admit device", icon: ClipboardList, feature: "admit_vehicle" },
       { href: "/bills", label: "Tickets", icon: ReceiptText, feature: "billing" },
+      { href: "/parts-pos", label: "Instant bill", icon: ShoppingBag, feature: "billing" },
       billProfitsNav,
       { href: "/parts", label: "Spares", icon: Boxes, feature: "parts_inventory" },
       suppliersNav,
