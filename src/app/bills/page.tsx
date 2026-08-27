@@ -159,7 +159,7 @@ export default function BillsPage() {
                     <td>
                       {profile.type === "garage" ? (
                         <span className="px-2 py-1 text-[10px] font-bold uppercase bg-[#eeece5] text-[#6f746e]">
-                          {bill.job_kind === "service" ? "Service" : "Repair"}
+                          {bill.job_kind === "service" ? "Service" : bill.job_kind === "parts_sale" ? "Instant" : bill.job_kind === "repair" || !bill.job_kind ? "Repair" : bill.job_kind}
                         </span>
                       ) : "—"}
                     </td>

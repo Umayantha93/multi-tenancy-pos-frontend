@@ -7,7 +7,7 @@ import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/compo
 import { api, currentUser, formatDate, money } from "@/lib/api";
 import { billStatusClass, billStatusLabel } from "@/lib/bill-stamp";
 
-type JobKindFilter = "service" | "repair" | null;
+type JobKindFilter = "service" | "repair" | "parts_sale" | null;
 
 type ProfitLine = {
   id: number;
@@ -38,14 +38,14 @@ type ProfitBill = {
   margin: number;
   billing_type: "instant" | "credit";
   payment_status: string;
-  job_kind?: "service" | "repair";
+  job_kind?: "service" | "repair" | "parts_sale";
   lines?: ProfitLine[];
   payments?: Array<{ id: number; amount: string; method: string; paid_at: string }>;
 };
 
 type Report = {
   period: { date_from: string; date_to: string };
-  job_kind?: "service" | "repair" | null;
+  job_kind?: "service" | "repair" | "parts_sale" | null;
   total_revenue: number;
   total_cogs: number;
   gross_profit: number;
@@ -60,6 +60,11 @@ type Report = {
   repair_gross_profit: number;
   repair_margin: number;
   repair_count: number;
+  parts_sale_revenue: number;
+  parts_sale_cogs: number;
+  parts_sale_gross_profit: number;
+  parts_sale_margin: number;
+  parts_sale_count: number;
   credit_count: number;
   credit_generated: number;
   credit_collected: number;
@@ -103,10 +108,11 @@ export default function BillProfitsPage() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    setIsGarage(currentUser()?.tenant?.business_type === "garage");
+    const type = currentUser()?.tenant?.business_type;
+    setIsGarage(type === "garage" || type === "tyre" || type === "device_repair");
   }, []);
 
-  function toggleKind(kind: "service" | "repair") {
+  function toggleKind(kind: "service" | "repair" | "parts_sale") {
     setJobKind((current) => (current === kind ? null : kind));
   }
 
@@ -149,17 +155,27 @@ export default function BillProfitsPage() {
         count: report.repair_count,
       };
     }
+    if (jobKind === "parts_sale") {
+      return {
+        title: "Instant bills",
+        revenue: report.parts_sale_revenue,
+        cogs: report.parts_sale_cogs,
+        profit: report.parts_sale_gross_profit,
+        margin: report.parts_sale_margin,
+        count: report.parts_sale_count,
+      };
+    }
     return {
       title: "All",
       revenue: report.total_revenue,
       cogs: report.total_cogs,
       profit: report.gross_profit,
       margin: report.margin,
-      count: report.service_count + report.repair_count,
+      count: report.service_count + report.repair_count + (report.parts_sale_count || 0),
     };
   }, [jobKind, report]);
 
-  const kindButton = (kind: "service" | "repair", label: string) => {
+  const kindButton = (kind: "service" | "repair" | "parts_sale", label: string) => {
     const selected = jobKind === kind;
     return (
       <button
@@ -190,8 +206,9 @@ export default function BillProfitsPage() {
         <button type="button" onClick={load} className={buttonClass}>Apply period</button>
         {isGarage && (
           <div className="flex flex-wrap gap-2">
-            {kindButton("service", "Services Profits")}
-            {kindButton("repair", "Repair Profits")}
+            {kindButton("service", "Services")}
+            {kindButton("repair", "Repair")}
+            {kindButton("parts_sale", "Instant bills")}
           </div>
         )}
       </div>

@@ -108,12 +108,23 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
       {open && <button aria-label="Close navigation overlay" onClick={() => setOpen(false)} className="no-print fixed inset-0 z-30 bg-black/45 lg:hidden" />}
       <main className="min-w-0">
         {showPaymentReminder && (
-          <div className="no-print border-b border-[#f0c9a0] bg-[#fff4e5] px-4 py-3 text-sm text-[#735a00] sm:px-7">
-            <strong className="font-semibold">Monthly payment due.</strong>{" "}
-            Please pay {paymentAmount != null ? money(paymentAmount) : "your plan amount"} before month end.
+          <div className="no-print flex min-h-20 items-center justify-center bg-[#c62828] px-4 py-5 text-center sm:min-h-24 sm:px-7 sm:py-6">
+            <p className="max-w-3xl font-display text-xl font-semibold uppercase leading-snug text-white sm:text-2xl md:text-3xl">
+              Monthly payment due — please pay{" "}
+              <span className="underline decoration-white/40 underline-offset-4">
+                {paymentAmount != null ? money(paymentAmount) : "your plan amount"}
+              </span>{" "}
+              before month end
+            </p>
           </div>
         )}
-        <header className="no-print flex min-h-20 items-center justify-between border-b border-[#d7d3c8] bg-[#f3f0e8]/90 px-4 backdrop-blur sm:px-7"><div className="flex items-center gap-3"><button onClick={() => setOpen(true)} className="grid size-10 place-items-center border border-[#d7d3c8] lg:hidden" aria-label="Open navigation"><Menu size={20} /></button><div>{eyebrow && <p className="text-[10px] font-bold uppercase text-[#167c73]">{eyebrow}</p>}<h1 className="font-display text-3xl font-semibold uppercase leading-none sm:text-4xl">{title}</h1></div></div>{action}</header>
+        <header className="no-print flex min-h-20 items-center justify-between gap-3 border-b border-[#d7d3c8] bg-[#f3f0e8]/90 px-4 backdrop-blur sm:px-7">
+          <div className="flex min-w-0 items-center gap-3">
+            <button onClick={() => setOpen(true)} className="grid size-10 place-items-center border border-[#d7d3c8] lg:hidden" aria-label="Open navigation"><Menu size={20} /></button>
+            <div className="min-w-0">{eyebrow && <p className="text-[10px] font-bold uppercase text-[#167c73]">{eyebrow}</p>}<h1 className="font-display text-3xl font-semibold uppercase leading-none sm:text-4xl">{title}</h1></div>
+          </div>
+          {action ? <div className="flex shrink-0 items-center gap-2">{action}</div> : null}
+        </header>
         <div className="page-enter p-4 sm:p-7">{children}</div>
       </main>
     </div>
