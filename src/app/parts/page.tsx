@@ -249,7 +249,7 @@ export default function PartsPage() {
     >
       <div className="mb-5 flex max-w-3xl gap-2">
         <label className="relative flex-1">
-          <Search className="absolute left-3 top-3 text-[#6f746e]" size={18} />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f746e]" size={16} />
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}

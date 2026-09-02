@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { useParams } from "next/navigation";
 import { ChevronDown, CreditCard, Lock, MessageSquare, Plus, Printer, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { EmployeePicker } from "@/components/employee-picker";
 import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { api, currentFeatures, currentUser, formatDate, mediaUrl, money, storeSession, Tenant, User } from "@/lib/api";
 import { billItemLabel, billLinePresentation, profileFor, sortBillItems } from "@/lib/business-profiles";
@@ -37,8 +38,11 @@ type Bill = {
   customer_balance?: string | number;
   mileage?: number | string | null;
   odometer?: number | string | null;
+  notes?: string | null;
+  internal_notes?: string | null;
   customer: { name: string; phone: string; address?: string | null } | null;
   vehicle: { number_plate: string; chassis_number?: string | null; make?: string; model?: string } | null;
+  employees?: Array<{ id: number; name: string; position?: string | null }>;
   items: Array<{
     id: number;
     type: string;
@@ -85,8 +89,14 @@ export default function BillDetailPage() {
   const [smsNotice, setSmsNotice] = useState("");
   const [mileageDraft, setMileageDraft] = useState("");
   const [savingMileage, setSavingMileage] = useState(false);
+  const [internalNotes, setInternalNotes] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [employees, setEmployees] = useState<Array<{ id: number; name: string; position?: string | null }>>([]);
+  const [employeeIds, setEmployeeIds] = useState<number[]>([]);
+  const [savingEmployees, setSavingEmployees] = useState(false);
   const [features, setFeatures] = useState<string[]>(() => currentFeatures());
   const canSendSms = features.includes("bill_sms");
+  const canAssignEmployees = features.includes("employees_management") || features.includes("attendance");
 
   const logoUrl = mediaUrl(tenant?.logo_url || tenant?.logo);
   const contactEmail = tenant?.contact_email || tenant?.owner_email || "";
@@ -104,6 +114,13 @@ export default function BillDetailPage() {
   const billItems = useMemo(() => sortBillItems(bill?.items ?? []), [bill?.items]);
   const chargeItems = useMemo(() => billItems.filter((item) => item.type !== "discount"), [billItems]);
   const discountItems = useMemo(() => billItems.filter((item) => item.type === "discount"), [billItems]);
+  const employeeOptions = useMemo(() => {
+    const byId = new Map(employees.map((employee) => [employee.id, employee]));
+    for (const assigned of bill?.employees ?? []) {
+      if (!byId.has(assigned.id)) byId.set(assigned.id, assigned);
+    }
+    return [...byId.values()];
+  }, [employees, bill?.employees]);
   const isClosed = bill?.status === "closed";
   const isOweIn = bill?.status === "owe_in";
   const isLocked = isClosed || isOweIn;
@@ -182,6 +199,8 @@ export default function BillDetailPage() {
       .then((result) => {
         setBill(result);
         setMileageDraft(result.mileage != null && result.mileage !== "" ? String(result.mileage) : "");
+        setInternalNotes(result.internal_notes || result.notes || "");
+        setEmployeeIds((result.employees ?? []).map((employee) => employee.id));
       })
       .catch((caught) => setError(caught.message));
   }, [id]);
@@ -205,6 +224,13 @@ export default function BillDetailPage() {
       })
       .catch(() => undefined);
   }, [load]);
+
+  useEffect(() => {
+    if (!canAssignEmployees) return;
+    api<{ data: Array<{ id: number; name: string; position?: string | null }> }>("/employees?active_only=1&per_page=100")
+      .then((result) => setEmployees(result.data))
+      .catch(() => undefined);
+  }, [canAssignEmployees]);
 
   const filteredParts = useMemo(() => {
     const query = partQuery.trim().toLowerCase();
@@ -424,6 +450,44 @@ export default function BillDetailPage() {
       setError(caught instanceof Error ? caught.message : "Could not save mileage.");
     } finally {
       setSavingMileage(false);
+    }
+  }
+
+  async function saveInternalNotes(event: FormEvent) {
+    event.preventDefault();
+    if (!bill) return;
+    setSavingNotes(true);
+    setError("");
+    try {
+      const updated = await api<Bill>(`/bills/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ internal_notes: internalNotes || null }),
+      });
+      setBill(updated);
+      setInternalNotes(updated.internal_notes || updated.notes || "");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save internal note.");
+    } finally {
+      setSavingNotes(false);
+    }
+  }
+
+  async function saveEmployees(ids: number[]) {
+    if (!bill) return;
+    setEmployeeIds(ids);
+    setSavingEmployees(true);
+    setError("");
+    try {
+      const updated = await api<Bill>(`/bills/${id}/employees`, {
+        method: "PUT",
+        body: JSON.stringify({ employee_ids: ids }),
+      });
+      setBill(updated);
+      setEmployeeIds((updated.employees ?? []).map((employee) => employee.id));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not assign employees.");
+    } finally {
+      setSavingEmployees(false);
     }
   }
 
@@ -651,7 +715,9 @@ export default function BillDetailPage() {
               <div>
                 <p className="text-[10px] font-bold uppercase text-[#6f746e]">Customer</p>
                 <p className="mt-1 font-semibold">{bill.customer?.name ?? "Walk-in"}</p>
-                <p className="text-sm text-[#6f746e]">{bill.customer?.phone}</p>
+                {bill.customer?.phone && (
+                  <p className="text-sm text-[#6f746e]">{bill.customer.phone}</p>
+                )}
                 {bill.customer?.address && (
                   <p className="mt-1 text-sm text-[#6f746e]">{bill.customer.address}</p>
                 )}
@@ -673,7 +739,7 @@ export default function BillDetailPage() {
                       {bill.mileage != null && bill.mileage !== "" ? `${Number(bill.mileage).toLocaleString()} km` : "—"}
                     </p>
                     {!isLocked && (
-                      <form onSubmit={saveMileage} className="no-print mt-2 flex h-11 items-stretch gap-2">
+                      <form onSubmit={saveMileage} className="no-print mt-2 flex h-9 items-stretch gap-2">
                         <input
                           type="number"
                           min="0"
@@ -683,7 +749,7 @@ export default function BillDetailPage() {
                           className={inputClass}
                           placeholder="km"
                         />
-                        <button type="submit" disabled={savingMileage} className="inline-flex h-11 shrink-0 items-center justify-center border border-[#20221f] px-3 text-[10px] font-bold uppercase">
+                        <button type="submit" disabled={savingMileage} className="inline-flex h-9 shrink-0 items-center justify-center border border-[#20221f] px-3 text-[10px] font-bold uppercase">
                           {savingMileage ? "..." : "Save"}
                         </button>
                       </form>
@@ -698,6 +764,42 @@ export default function BillDetailPage() {
                   <p className="mt-1 font-semibold">
                     {bill.job_kind === "parts_sale" ? "No vehicle · walk-in" : profile.label}
                   </p>
+                </div>
+              )}
+            </div>
+          </Panel>
+
+          <Panel className="staff-only no-print">
+            <div className="border-b border-[#d7d3c8] px-5 py-3">
+              <h2 className="font-display text-xl font-semibold uppercase">Staff only</h2>
+              <p className="text-[11px] text-[#6f746e]">Hidden from the customer bill, print, and SMS link.</p>
+            </div>
+            <div className="grid gap-5 p-5 lg:grid-cols-2">
+              <form onSubmit={saveInternalNotes} className="space-y-2">
+                <label className="block text-[11px] font-bold uppercase">
+                  Internal note
+                  <textarea
+                    value={internalNotes}
+                    onChange={(event) => setInternalNotes(event.target.value)}
+                    rows={4}
+                    className={`${inputClass} mt-2`}
+                    placeholder="Workshop notes the customer should not see"
+                  />
+                </label>
+                <button type="submit" disabled={savingNotes} className={buttonClass}>
+                  {savingNotes ? "Saving..." : "Save note"}
+                </button>
+              </form>
+              {canAssignEmployees && (
+                <div className="space-y-2">
+                  <p className="text-[11px] font-bold uppercase">Assigned employees <span className="font-normal text-[#6f746e]">optional</span></p>
+                  <EmployeePicker
+                    employees={employeeOptions}
+                    selectedIds={employeeIds}
+                    onChange={(ids) => { void saveEmployees(ids); }}
+                    disabled={savingEmployees}
+                  />
+                  {savingEmployees && <p className="text-[11px] text-[#6f746e]">Saving…</p>}
                 </div>
               )}
             </div>
@@ -856,10 +958,10 @@ export default function BillDetailPage() {
           <Panel className="no-print xl:sticky xl:top-4">
             {!isOweIn && (
             <div className="grid grid-cols-2 border-b border-[#d7d3c8]">
-              <button onClick={() => setMode("item")} className={`h-11 text-sm font-semibold ${mode === "item" ? "bg-[#20221f] text-white" : ""}`}>
+              <button onClick={() => setMode("item")} className={`h-9 text-[13px] font-semibold ${mode === "item" ? "bg-[#20221f] text-white" : ""}`}>
                 <Plus className="inline" size={16} /> Add item
               </button>
-              <button onClick={() => setMode("payment")} className={`h-11 text-sm font-semibold ${mode === "payment" ? "bg-[#167c73] text-white" : ""}`}>
+              <button onClick={() => setMode("payment")} className={`h-9 text-[13px] font-semibold ${mode === "payment" ? "bg-[#167c73] text-white" : ""}`}>
                 <CreditCard className="inline" size={16} /> Payment
               </button>
             </div>

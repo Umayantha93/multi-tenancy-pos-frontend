@@ -171,7 +171,7 @@ export default function TargetsPage() {
               <input name="notes" placeholder="Notes" className={inputClass} />
             </div>
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setProgressTarget(null)} className="h-11 border border-[#d7d3c8] px-4 text-sm">Cancel</button>
+              <button type="button" onClick={() => setProgressTarget(null)} className="h-9 border border-[#d7d3c8] px-3 text-[13px]">Cancel</button>
               <button className={buttonClass}>Save day</button>
             </div>
           </form>

@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { ClipboardCheck, Plus, Save, Search } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { AddressField } from "@/components/address-field";
+import { EmployeePicker } from "@/components/employee-picker";
 import { buttonClass, ErrorMessage, inputClass, Panel } from "@/components/ui";
-import { api, currentUser } from "@/lib/api";
+import { api, currentFeatures, currentUser } from "@/lib/api";
 import { profileFor } from "@/lib/business-profiles";
 
 type VehicleMatch = {
@@ -21,6 +22,7 @@ type VehicleMatch = {
 };
 
 type JobKind = "repair" | "service";
+type EmployeeOption = { id: number; name: string; position?: string | null };
 
 export default function AdmitVehiclePage() {
   const router = useRouter();
@@ -28,8 +30,8 @@ export default function AdmitVehiclePage() {
   const isDevice = profile.type === "device_repair";
   const isTyre = profile.type === "tyre";
   const fields: Array<[string, string, string, boolean]> = [
-    ["customer_name", "Customer name", "text", true],
-    ["customer_phone", "Phone number", "tel", true],
+    ["customer_name", "Customer name", "text", false],
+    ["customer_phone", "Phone number", "tel", false],
     ["number_plate", isDevice ? "Device ID / serial" : "Number plate", "text", true],
     [isDevice ? "imei" : "chassis_number", isDevice ? "IMEI" : "Chassis number", "text", false],
     ["make", isDevice ? "Brand" : "Make", "text", false],
@@ -50,6 +52,21 @@ export default function AdmitVehiclePage() {
   const [creatingId, setCreatingId] = useState<number | null>(null);
   const [formPlate, setFormPlate] = useState("");
   const [jobKind, setJobKind] = useState<JobKind>("repair");
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+  const [employeeIds, setEmployeeIds] = useState<number[]>([]);
+  const [canAssignEmployees, setCanAssignEmployees] = useState(false);
+
+  useEffect(() => {
+    const features = currentFeatures();
+    setCanAssignEmployees(features.includes("employees_management") || features.includes("attendance"));
+  }, []);
+
+  useEffect(() => {
+    if (!canAssignEmployees) return;
+    api<{ data: EmployeeOption[] }>("/employees?active_only=1&per_page=100")
+      .then((result) => setEmployees(result.data))
+      .catch(() => setEmployees([]));
+  }, [canAssignEmployees]);
 
   useEffect(() => {
     if (plateQuery.trim().length < 2) {
@@ -72,7 +89,7 @@ export default function AdmitVehiclePage() {
     try {
       const bill = await api<{ id: number }>("/bills/from-vehicle", {
         method: "POST",
-        body: JSON.stringify({ vehicle_id: vehicleId, job_kind: jobKind }),
+        body: JSON.stringify({ vehicle_id: vehicleId, job_kind: jobKind, employee_ids: employeeIds }),
       });
       router.push(`/bills/${bill.id}`);
     } catch (caught) {
@@ -85,10 +102,11 @@ export default function AdmitVehiclePage() {
     event.preventDefault();
     setSaving(true);
     setError("");
-    const data = Object.fromEntries(new FormData(event.currentTarget));
-    if (isDevice) data.asset_kind = "device";
+    const form = Object.fromEntries(new FormData(event.currentTarget));
+    const payload: Record<string, unknown> = { ...form, employee_ids: employeeIds };
+    if (isDevice) payload.asset_kind = "device";
     try {
-      const bill = await api<{ id: number }>("/bills", { method: "POST", body: JSON.stringify(data) });
+      const bill = await api<{ id: number }>("/bills", { method: "POST", body: JSON.stringify(payload) });
       router.push(`/bills/${bill.id}`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Admission failed.");
@@ -112,7 +130,7 @@ export default function AdmitVehiclePage() {
         <Panel className="p-5">
           <h2 className="font-display text-2xl font-semibold uppercase">{isDevice ? "Search by device ID" : "Search by number plate"}</h2>
           <label className="relative mt-4 block max-w-xl">
-            <Search className="absolute left-3 top-3 text-[#6f746e]" size={18} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f746e]" size={16} />
             <input
               value={plateQuery}
               onChange={(event) => setPlateQuery(event.target.value.toUpperCase())}
@@ -166,7 +184,7 @@ export default function AdmitVehiclePage() {
                   key={value}
                   type="button"
                   onClick={() => setJobKind(value)}
-                  className={`h-11 border text-sm font-semibold ${
+                  className={`h-9 border text-[13px] font-semibold ${
                     selected
                       ? "border-[#20221f] bg-[#20221f] text-white"
                       : "border-[#d7d3c8] bg-white hover:border-[#20221f]"
@@ -177,6 +195,12 @@ export default function AdmitVehiclePage() {
               );
             })}
           </div>
+          {canAssignEmployees && (
+            <div className="mt-5">
+              <p className="mb-2 text-sm font-semibold">Assign employees <span className="font-normal text-[#6f746e]">(optional — applies to new and existing vehicles)</span></p>
+              <EmployeePicker employees={employees} selectedIds={employeeIds} onChange={setEmployeeIds} />
+            </div>
+          )}
         </Panel>
 
         {error && <ErrorMessage message={error} />}
@@ -211,19 +235,20 @@ export default function AdmitVehiclePage() {
                 placeholder="Home or business address"
               />
               <label className="text-sm font-semibold sm:col-span-2">
-                Admission notes
+                Internal note
+                <span className="ml-2 text-[11px] font-normal uppercase text-[#6f746e]">Staff only — not printed or sent to the customer</span>
                 <textarea
-                  name="notes"
-                  rows={4}
-                  className="mt-2 w-full border border-[#c9c5b9] bg-white p-3 text-sm outline-none focus:border-[#167c73]"
-                  placeholder="Customer concerns, visible damage, requested work..."
+                  name="internal_notes"
+                  rows={3}
+                  className={`${inputClass} mt-2`}
+                  placeholder="Workshop notes, customer concerns, damage, requested work..."
                 />
               </label>
               <input type="hidden" name="job_kind" value={jobKind} />
             </div>
             <div className="flex justify-end border-t border-[#d7d3c8] p-5">
               <button disabled={saving} className={buttonClass}>
-                <Save size={18} />{saving ? "Opening job card..." : "Open job card"}
+                <Save size={16} />{saving ? "Opening job card..." : "Open job card"}
               </button>
             </div>
           </Panel>

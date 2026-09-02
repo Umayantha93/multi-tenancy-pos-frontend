@@ -10,7 +10,7 @@ import { api } from "@/lib/api";
 type Customer = {
   id: number;
   name: string;
-  phone: string;
+  phone?: string | null;
   address?: string | null;
   vehicles_count: number;
   bills_count: number;
@@ -39,7 +39,7 @@ export default function CustomersPage() {
     <AppShell title="Customers" eyebrow="Search by phone or name">
       <div className="mb-5 max-w-xl">
         <label className="relative block">
-          <Search className="absolute left-3 top-3 text-[#6f746e]" size={18} />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f746e]" size={16} />
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -62,7 +62,7 @@ export default function CustomersPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h2 className="font-display text-2xl font-semibold uppercase">{customer.name}</h2>
-                    <p className="mt-1 text-sm text-[#167c73]">{customer.phone}</p>
+                    <p className="mt-1 text-sm text-[#167c73]">{customer.phone || "No phone"}</p>
                     {customer.address && <p className="mt-2 text-xs text-[#6f746e]">{customer.address}</p>}
                   </div>
                   <ArrowRight className="text-[#6f746e]" size={18} />

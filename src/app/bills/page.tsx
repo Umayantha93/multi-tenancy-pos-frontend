@@ -91,7 +91,7 @@ export default function BillsPage() {
         <label className="relative block min-w-56 max-w-md flex-1">
           <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">Search</span>
           <span className="relative block">
-            <Search className="absolute left-3 top-3 text-[#6f746e]" size={18} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f746e]" size={16} />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -124,7 +124,7 @@ export default function BillsPage() {
           <button
             type="button"
             onClick={clearDates}
-            className="inline-flex h-11 items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-sm font-semibold text-[#6f746e] hover:border-[#167c73] hover:text-[#167c73]"
+            className="inline-flex h-9 items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-[13px] font-semibold text-[#6f746e] hover:border-[#167c73] hover:text-[#167c73]"
           >
             <X size={16} />
             Clear dates

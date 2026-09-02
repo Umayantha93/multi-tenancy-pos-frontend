@@ -178,7 +178,7 @@ export default function NewTenantPage() {
                         className={inputClass}
                       />
                       {contactPhones.length > 1 && (
-                        <button type="button" aria-label="Remove phone" onClick={() => setContactPhones((rows) => rows.filter((_, i) => i !== index))} className="grid size-11 place-items-center border border-[#d7d3c8] text-[#b84837]">
+                        <button type="button" aria-label="Remove phone" onClick={() => setContactPhones((rows) => rows.filter((_, i) => i !== index))} className="grid size-9 place-items-center border border-[#d7d3c8] text-[#b84837]">
                           <Trash2 size={16} />
                         </button>
                       )}
@@ -242,7 +242,7 @@ export default function NewTenantPage() {
                         className={inputClass}
                       />
                       {ownerPhones.length > 1 && (
-                        <button type="button" aria-label="Remove phone" onClick={() => setOwnerPhones((rows) => rows.filter((_, i) => i !== index))} className="grid size-11 place-items-center border border-[#d7d3c8] text-[#b84837]">
+                        <button type="button" aria-label="Remove phone" onClick={() => setOwnerPhones((rows) => rows.filter((_, i) => i !== index))} className="grid size-9 place-items-center border border-[#d7d3c8] text-[#b84837]">
                           <Trash2 size={16} />
                         </button>
                       )}

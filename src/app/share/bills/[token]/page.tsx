@@ -189,7 +189,7 @@ export default function SharedBillPage() {
           <div>
             <p className="text-[10px] font-bold uppercase text-[#6f746e]">Customer</p>
             <p className="mt-1 font-semibold">{bill.customer?.name ?? "Customer"}</p>
-            <p className="text-sm text-[#6f746e]">{bill.customer?.phone}</p>
+            {bill.customer?.phone && <p className="text-sm text-[#6f746e]">{bill.customer.phone}</p>}
             {bill.customer?.address && <p className="mt-1 text-sm text-[#6f746e]">{bill.customer.address}</p>}
           </div>
           {bill.vehicle && (

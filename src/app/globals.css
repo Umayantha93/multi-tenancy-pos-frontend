@@ -67,7 +67,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .page-enter > *:nth-child(4) { animation-delay: 210ms; }
 
 @media print {
-  .no-print { display: none !important; }
+  .no-print, .staff-only { display: none !important; }
   body {
     background: white !important;
     background-image: none !important;

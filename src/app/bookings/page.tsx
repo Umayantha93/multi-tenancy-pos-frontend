@@ -46,7 +46,7 @@ export default function BookingsPage() {
     >
       <div className="mb-5 max-w-md">
         <label className="relative block">
-          <Search className="absolute left-3 top-3 text-[#6f746e]" size={18} />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f746e]" size={16} />
           <input value={search} onChange={(e) => setSearch(e.target.value)} className={`${inputClass} pl-10`} placeholder="Search client name or phone" />
         </label>
       </div>
