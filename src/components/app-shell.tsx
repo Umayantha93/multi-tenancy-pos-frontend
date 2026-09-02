@@ -108,10 +108,10 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
       {open && <button aria-label="Close navigation overlay" onClick={() => setOpen(false)} className="no-print fixed inset-0 z-30 bg-black/45 lg:hidden" />}
       <main className="min-w-0">
         {showPaymentReminder && (
-          <div className="no-print flex min-h-20 items-center justify-center bg-[#c62828] px-4 py-5 text-center sm:min-h-24 sm:px-7 sm:py-6">
-            <p className="max-w-3xl font-display text-xl font-semibold uppercase leading-snug text-white sm:text-2xl md:text-3xl">
+          <div className="no-print flex min-h-20 items-center justify-center bg-[#6b1e2a] px-4 py-5 text-center sm:min-h-24 sm:px-7 sm:py-6">
+            <p className="max-w-3xl font-display text-xl font-semibold uppercase leading-snug text-[#f8ebea] sm:text-2xl md:text-3xl">
               Monthly payment due — please pay{" "}
-              <span className="underline decoration-white/40 underline-offset-4">
+              <span className="underline decoration-[#f8ebea]/40 underline-offset-4">
                 {paymentAmount != null ? money(paymentAmount) : "your plan amount"}
               </span>{" "}
               before month end
