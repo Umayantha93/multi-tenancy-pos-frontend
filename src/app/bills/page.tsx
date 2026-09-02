@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, ClipboardPlus, Search, Wrench, X } from "lucide-react";
+import { ArrowRight, ClipboardPlus, Hammer, Search, Wrench, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, inputClass } from "@/components/ui";
 import { api, currentUser, formatDate, money } from "@/lib/api";
@@ -74,12 +74,20 @@ export default function BillsPage() {
       action={
         <div className="flex items-center gap-2">
           {profile.type === "garage" && isOwner && (
-            <Link
-              href="/service-addons"
-              className="flex h-10 items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-sm font-semibold hover:border-[#167c73]"
-            >
-              <Wrench size={16} /><span className="hidden sm:inline">Service addons</span>
-            </Link>
+            <>
+              <Link
+                href="/labor-catalog"
+                className="flex h-9 items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-[13px] font-semibold hover:border-[#167c73]"
+              >
+                <Hammer size={16} /><span className="hidden sm:inline">Repair addons</span>
+              </Link>
+              <Link
+                href="/service-addons"
+                className="flex h-9 items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-[13px] font-semibold hover:border-[#167c73]"
+              >
+                <Wrench size={16} /><span className="hidden sm:inline">Service addons</span>
+              </Link>
+            </>
           )}
           <Link href={profile.primaryCta.href} className="flex h-10 items-center gap-2 bg-[#f5c842] px-3 text-sm font-semibold">
             <ClipboardPlus size={18} /><span className="hidden sm:inline">{profile.primaryCta.label}</span>

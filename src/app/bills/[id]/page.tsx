@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { ChevronDown, CreditCard, Lock, MessageSquare, Plus, Printer, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { EmployeePicker } from "@/components/employee-picker";
+import { LaborCatalogPicker, type LaborCategory } from "@/components/labor-catalog-picker";
 import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { api, currentFeatures, currentUser, formatDate, mediaUrl, money, storeSession, Tenant, User } from "@/lib/api";
 import { billItemLabel, billLinePresentation, profileFor, sortBillItems } from "@/lib/business-profiles";
@@ -94,6 +95,10 @@ export default function BillDetailPage() {
   const [employees, setEmployees] = useState<Array<{ id: number; name: string; position?: string | null }>>([]);
   const [employeeIds, setEmployeeIds] = useState<number[]>([]);
   const [savingEmployees, setSavingEmployees] = useState(false);
+  const [laborCategories, setLaborCategories] = useState<LaborCategory[]>([]);
+  const [selectedLaborId, setSelectedLaborId] = useState("");
+  const [laborHours, setLaborHours] = useState("1");
+  const [savingLaborHours, setSavingLaborHours] = useState<number | null>(null);
   const [features, setFeatures] = useState<string[]>(() => currentFeatures());
   const canSendSms = features.includes("bill_sms");
   const canAssignEmployees = features.includes("employees_management") || features.includes("attendance");
@@ -108,6 +113,17 @@ export default function BillDetailPage() {
   const selectedType = itemTypes.find((option) => option.value === type) ?? itemTypes[0];
   const activeType = type || selectedType?.value || "labor";
   const isServiceJob = profile.type === "garage" && bill?.job_kind === "service";
+  const isLaborType = activeType === "labor" && profile.type === "garage";
+  const selectedLabor = useMemo(() => {
+    for (const category of laborCategories) {
+      const match = (category.items ?? []).find((item) => String(item.id) === selectedLaborId);
+      if (match) return match;
+    }
+    return null;
+  }, [laborCategories, selectedLaborId]);
+  const laborAmount = selectedLabor
+    ? Number(selectedLabor.hourly_rate) * Number(laborHours || 0)
+    : 0;
   const jobKindLabel =
     bill?.job_kind === "service" ? "Service" : bill?.job_kind === "parts_sale" ? "Instant" : "Repair";
   const showJobKind = ["garage", "tyre", "device_repair"].includes(profile.type);
@@ -155,6 +171,8 @@ export default function BillDetailPage() {
     setSelectedPartId("");
     setOutsidePart(false);
     setCustomerPart(false);
+    setSelectedLaborId("");
+    setLaborHours("1");
     setFormKey((value) => value + 1);
   }
 
@@ -213,6 +231,9 @@ export default function BillDetailPage() {
     if (profile.type === "garage") {
       api<ServiceAddon[]>("/service-addons")
         .then((result) => setAddons(result.filter((addon) => addon.active !== false)))
+        .catch(() => undefined);
+      api<LaborCategory[]>("/labor-catalog")
+        .then((result) => setLaborCategories(result))
         .catch(() => undefined);
     }
     api<{ user: User; features: string[] }>("/user")
@@ -317,6 +338,14 @@ export default function BillDetailPage() {
       type: String(formData.get("type") || lineType),
     };
 
+    if (isLaborType) {
+      const hours = Number(laborHours);
+      if (!Number.isFinite(hours) || hours <= 0) {
+        setError("Enter hours greater than 0.");
+        return;
+      }
+    }
+
     if (isStockType) {
       if (customerPart) {
         payload.type = "customer_part";
@@ -336,6 +365,14 @@ export default function BillDetailPage() {
         payload.part_id = selectedPartId;
         payload.quantity = String(formData.get("quantity") || "1");
       }
+    } else if (isLaborType && selectedLaborId) {
+      payload.type = "labor";
+      payload.labor_item_id = selectedLaborId;
+      payload.quantity = laborHours || "1";
+    } else if (isLaborType) {
+      payload.description = String(formData.get("description") || "");
+      payload.unit_price = String(formData.get("unit_price") || "");
+      payload.quantity = laborHours || "1";
     } else {
       payload.description = String(formData.get("description") || "");
       payload.unit_price = String(formData.get("unit_price") || "");
@@ -370,6 +407,25 @@ export default function BillDetailPage() {
       setError(caught instanceof Error ? caught.message : "Could not add service.");
     } finally {
       setAddingAddonId(null);
+    }
+  }
+
+  async function saveLaborHours(itemId: number, hours: string) {
+    if (isLocked) return;
+    const quantity = Number(hours);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setError("Hours must be greater than 0.");
+      return;
+    }
+    setSavingLaborHours(itemId);
+    setError("");
+    try {
+      await api(`/bills/${id}/items/${itemId}`, { method: "PUT", body: JSON.stringify({ quantity: hours }) });
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not update hours.");
+    } finally {
+      setSavingLaborHours(null);
     }
   }
 
@@ -851,6 +907,7 @@ export default function BillDetailPage() {
                 <tbody>
                   {chargeItems.map((item) => {
                     const fromCustomer = item.type === "customer_part";
+                    const isLaborLine = item.type === "labor";
                     const isPartLine = item.type === "part" || fromCustomer;
                     const showQty = isPartLine || Number(item.quantity) > 1;
                     return (
@@ -862,11 +919,42 @@ export default function BillDetailPage() {
                           {billItemLabel(item.type, profile)}
                         </td>
                         <td className="px-3 py-3 text-right tabular-nums">
-                          {showQty ? Number(item.quantity) : "—"}
+                          {isLaborLine ? (
+                            <>
+                              {!isLocked ? (
+                                <span className="no-print inline-flex items-center justify-end gap-1">
+                                  <input
+                                    key={`${item.id}-${item.quantity}`}
+                                    type="number"
+                                    min="0.01"
+                                    step="0.01"
+                                    defaultValue={Number(item.quantity)}
+                                    disabled={savingLaborHours === item.id}
+                                    onBlur={(event) => {
+                                      if (event.target.value !== String(Number(item.quantity))) {
+                                        void saveLaborHours(item.id, event.target.value);
+                                      }
+                                    }}
+                                    className="h-8 w-[4.5rem] border border-[#c9c5b9] bg-white px-1.5 text-right text-[13px] tabular-nums"
+                                    aria-label="Labor hours"
+                                  />
+                                  <span className="text-[11px] text-[#6f746e]">h</span>
+                                </span>
+                              ) : (
+                                <span className="no-print">{Number(item.quantity)} h</span>
+                              )}
+                              <span className="hidden print:inline">—</span>
+                            </>
+                          ) : showQty ? Number(item.quantity) : "—"}
                         </td>
                         <td className="px-3 py-3 text-right break-words whitespace-normal">
                           {fromCustomer ? (
                             <span className="font-semibold text-[#167c73]">—</span>
+                          ) : isLaborLine ? (
+                            <>
+                              <span className="no-print tabular-nums">{money(item.unit_price)}/h</span>
+                              <span className="hidden print:inline">—</span>
+                            </>
                           ) : (
                             <span className="tabular-nums">{money(item.unit_price)}</span>
                           )}
@@ -1186,6 +1274,63 @@ export default function BillDetailPage() {
                         Part description
                         <input name="description" required className={`${inputClass} mt-2`} placeholder="e.g. Customer brought brake pads" />
                       </label>
+                    )}
+                  </>
+                ) : isLaborType ? (
+                  <>
+                    <LaborCatalogPicker
+                      categories={laborCategories}
+                      selectedId={selectedLaborId}
+                      onSelect={(item) => {
+                        setSelectedLaborId(item ? String(item.id) : "");
+                        if (item) setLaborHours(String(Number(item.standard_hours)));
+                      }}
+                    />
+                    {selectedLabor ? (
+                      <>
+                        <label className="block text-xs font-bold uppercase">
+                          Hours
+                          <input
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            value={laborHours}
+                            onChange={(event) => setLaborHours(event.target.value)}
+                            required
+                            className={`${inputClass} mt-2`}
+                          />
+                        </label>
+                        <p className="text-sm text-[#167c73]">
+                          Amount {money(laborAmount)}
+                          <span className="ml-2 text-xs text-[#6f746e]">{money(selectedLabor.hourly_rate)}/h</span>
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-[11px] text-[#6f746e]">Pick from the catalog, or enter a custom labor line.</p>
+                        <label className="block text-xs font-bold uppercase">
+                          Description
+                          <input name="description" required className={`${inputClass} mt-2`} placeholder="e.g. Front brake pads replacement" />
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <label className="block text-xs font-bold uppercase">
+                            Hourly rate
+                            <input name="unit_price" type="number" min="0" step="0.01" required className={`${inputClass} mt-2`} />
+                          </label>
+                          <label className="block text-xs font-bold uppercase">
+                            Hours
+                            <input
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              value={laborHours}
+                              onChange={(event) => setLaborHours(event.target.value)}
+                              required
+                              className={`${inputClass} mt-2`}
+                            />
+                          </label>
+                        </div>
+                      </>
                     )}
                   </>
                 ) : (

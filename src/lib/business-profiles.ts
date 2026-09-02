@@ -138,7 +138,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       ...sharedNavTail,
     ],
     billItemTypes: [
-      { value: "labor", label: "Labor", kind: "charge" },
+      { value: "labor", label: "Labor", kind: "charge", allowQty: true },
       { value: "part", label: "Inventory", kind: "stock" },
       { value: "discount", label: "Discount", kind: "discount" },
     ],
