@@ -265,7 +265,7 @@ function AddonRow({
             type="button"
             disabled={busy || price === String(Number(addon.price))}
             onClick={() => onSavePrice(addon, price)}
-            className="h-11 border border-[#c9c5b9] bg-white px-3 text-sm font-semibold disabled:opacity-40"
+            className="h-9 border border-[#c9c5b9] bg-white px-3 text-[13px] font-semibold disabled:opacity-40"
           >
             Save
           </button>

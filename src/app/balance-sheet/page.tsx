@@ -524,7 +524,7 @@ export default function BalanceSheetPage() {
               />
             </label>
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setSettleItem(null)} className="h-11 border border-[#d7d3c8] px-4 text-sm">Cancel</button>
+              <button type="button" onClick={() => setSettleItem(null)} className="h-9 border border-[#d7d3c8] px-3 text-[13px]">Cancel</button>
               <button disabled={settlingId === settleItem.id} className={buttonClass}>
                 {settlingId === settleItem.id ? "Saving..." : "Record payment"}
               </button>

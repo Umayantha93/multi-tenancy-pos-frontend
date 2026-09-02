@@ -88,7 +88,7 @@ export default function TenantsPage() {
     >
       <form onSubmit={submit} className="mb-5 grid gap-3 sm:grid-cols-[1fr_180px_auto]">
         <label className="relative">
-          <Search size={17} className="absolute left-3 top-3 text-[#6f746e]" />
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f746e]" />
           <input
             aria-label="Search tenants"
             value={search}
@@ -107,7 +107,7 @@ export default function TenantsPage() {
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
         </select>
-        <button className="h-11 bg-[#20221f] px-5 text-sm font-semibold text-white">Filter</button>
+        <button className="h-9 bg-[#20221f] px-4 text-[13px] font-semibold text-white">Filter</button>
       </form>
       {error && <ErrorMessage message={error} />}
       {!page && !error ? (

@@ -29,9 +29,10 @@ type SharedBill = {
     type: string;
     description: string;
     included_services?: string[] | null;
-    quantity: string;
-    unit_price: string;
+    quantity: string | number | null;
+    unit_price: string | number | null;
     line_total: string;
+    hide_hours?: boolean;
   }>;
   payments: Array<{ id: number; amount: string; method: string; paid_at: string }>;
   tenant: Tenant | null;
@@ -189,7 +190,7 @@ export default function SharedBillPage() {
           <div>
             <p className="text-[10px] font-bold uppercase text-[#6f746e]">Customer</p>
             <p className="mt-1 font-semibold">{bill.customer?.name ?? "Customer"}</p>
-            <p className="text-sm text-[#6f746e]">{bill.customer?.phone}</p>
+            {bill.customer?.phone && <p className="text-sm text-[#6f746e]">{bill.customer.phone}</p>}
             {bill.customer?.address && <p className="mt-1 text-sm text-[#6f746e]">{bill.customer.address}</p>}
           </div>
           {bill.vehicle && (
@@ -220,6 +221,7 @@ export default function SharedBillPage() {
             <tbody>
               {chargeItems.map((item) => {
                 const { title, inclusions } = billLinePresentation(item);
+                const hideHours = item.type === "labor" || Boolean(item.hide_hours);
                 return (
                 <tr key={item.id} className="border-b border-[#f0ece3] align-top">
                   <td className="px-5 py-3">
@@ -232,8 +234,8 @@ export default function SharedBillPage() {
                       </ul>
                     )}
                   </td>
-                  <td className="px-3 py-3 tabular-nums">{item.quantity}</td>
-                  <td className="px-3 py-3 tabular-nums">{money(item.unit_price)}</td>
+                  <td className="px-3 py-3 tabular-nums">{hideHours ? "—" : item.quantity}</td>
+                  <td className="px-3 py-3 tabular-nums">{hideHours ? "—" : money(item.unit_price)}</td>
                   <td className="px-5 py-3 text-right tabular-nums">{money(item.line_total)}</td>
                 </tr>
                 );

@@ -4,6 +4,8 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { useParams } from "next/navigation";
 import { ChevronDown, CreditCard, Lock, MessageSquare, Plus, Printer, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { EmployeePicker } from "@/components/employee-picker";
+import { LaborCatalogPicker, type LaborCategory } from "@/components/labor-catalog-picker";
 import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { api, currentFeatures, currentUser, formatDate, mediaUrl, money, storeSession, Tenant, User } from "@/lib/api";
 import { billItemLabel, billLinePresentation, profileFor, sortBillItems } from "@/lib/business-profiles";
@@ -37,8 +39,11 @@ type Bill = {
   customer_balance?: string | number;
   mileage?: number | string | null;
   odometer?: number | string | null;
+  notes?: string | null;
+  internal_notes?: string | null;
   customer: { name: string; phone: string; address?: string | null } | null;
   vehicle: { number_plate: string; chassis_number?: string | null; make?: string; model?: string } | null;
+  employees?: Array<{ id: number; name: string; position?: string | null }>;
   items: Array<{
     id: number;
     type: string;
@@ -85,8 +90,18 @@ export default function BillDetailPage() {
   const [smsNotice, setSmsNotice] = useState("");
   const [mileageDraft, setMileageDraft] = useState("");
   const [savingMileage, setSavingMileage] = useState(false);
+  const [internalNotes, setInternalNotes] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [employees, setEmployees] = useState<Array<{ id: number; name: string; position?: string | null }>>([]);
+  const [employeeIds, setEmployeeIds] = useState<number[]>([]);
+  const [savingEmployees, setSavingEmployees] = useState(false);
+  const [laborCategories, setLaborCategories] = useState<LaborCategory[]>([]);
+  const [selectedLaborId, setSelectedLaborId] = useState("");
+  const [laborHours, setLaborHours] = useState("1");
+  const [savingLaborHours, setSavingLaborHours] = useState<number | null>(null);
   const [features, setFeatures] = useState<string[]>(() => currentFeatures());
   const canSendSms = features.includes("bill_sms");
+  const canAssignEmployees = features.includes("employees_management") || features.includes("attendance");
 
   const logoUrl = mediaUrl(tenant?.logo_url || tenant?.logo);
   const contactEmail = tenant?.contact_email || tenant?.owner_email || "";
@@ -98,12 +113,30 @@ export default function BillDetailPage() {
   const selectedType = itemTypes.find((option) => option.value === type) ?? itemTypes[0];
   const activeType = type || selectedType?.value || "labor";
   const isServiceJob = profile.type === "garage" && bill?.job_kind === "service";
+  const isLaborType = activeType === "labor" && profile.type === "garage";
+  const selectedLabor = useMemo(() => {
+    for (const category of laborCategories) {
+      const match = (category.items ?? []).find((item) => String(item.id) === selectedLaborId);
+      if (match) return match;
+    }
+    return null;
+  }, [laborCategories, selectedLaborId]);
+  const laborAmount = selectedLabor
+    ? Number(selectedLabor.hourly_rate) * Number(laborHours || 0)
+    : 0;
   const jobKindLabel =
     bill?.job_kind === "service" ? "Service" : bill?.job_kind === "parts_sale" ? "Instant" : "Repair";
   const showJobKind = ["garage", "tyre", "device_repair"].includes(profile.type);
   const billItems = useMemo(() => sortBillItems(bill?.items ?? []), [bill?.items]);
   const chargeItems = useMemo(() => billItems.filter((item) => item.type !== "discount"), [billItems]);
   const discountItems = useMemo(() => billItems.filter((item) => item.type === "discount"), [billItems]);
+  const employeeOptions = useMemo(() => {
+    const byId = new Map(employees.map((employee) => [employee.id, employee]));
+    for (const assigned of bill?.employees ?? []) {
+      if (!byId.has(assigned.id)) byId.set(assigned.id, assigned);
+    }
+    return [...byId.values()];
+  }, [employees, bill?.employees]);
   const isClosed = bill?.status === "closed";
   const isOweIn = bill?.status === "owe_in";
   const isLocked = isClosed || isOweIn;
@@ -138,6 +171,8 @@ export default function BillDetailPage() {
     setSelectedPartId("");
     setOutsidePart(false);
     setCustomerPart(false);
+    setSelectedLaborId("");
+    setLaborHours("1");
     setFormKey((value) => value + 1);
   }
 
@@ -182,6 +217,8 @@ export default function BillDetailPage() {
       .then((result) => {
         setBill(result);
         setMileageDraft(result.mileage != null && result.mileage !== "" ? String(result.mileage) : "");
+        setInternalNotes(result.internal_notes || result.notes || "");
+        setEmployeeIds((result.employees ?? []).map((employee) => employee.id));
       })
       .catch((caught) => setError(caught.message));
   }, [id]);
@@ -195,6 +232,9 @@ export default function BillDetailPage() {
       api<ServiceAddon[]>("/service-addons")
         .then((result) => setAddons(result.filter((addon) => addon.active !== false)))
         .catch(() => undefined);
+      api<LaborCategory[]>("/labor-catalog")
+        .then((result) => setLaborCategories(result))
+        .catch(() => undefined);
     }
     api<{ user: User; features: string[] }>("/user")
       .then((result) => {
@@ -205,6 +245,13 @@ export default function BillDetailPage() {
       })
       .catch(() => undefined);
   }, [load]);
+
+  useEffect(() => {
+    if (!canAssignEmployees) return;
+    api<{ data: Array<{ id: number; name: string; position?: string | null }> }>("/employees?active_only=1&per_page=100")
+      .then((result) => setEmployees(result.data))
+      .catch(() => undefined);
+  }, [canAssignEmployees]);
 
   const filteredParts = useMemo(() => {
     const query = partQuery.trim().toLowerCase();
@@ -291,6 +338,14 @@ export default function BillDetailPage() {
       type: String(formData.get("type") || lineType),
     };
 
+    if (isLaborType) {
+      const hours = Number(laborHours);
+      if (!Number.isFinite(hours) || hours <= 0) {
+        setError("Enter hours greater than 0.");
+        return;
+      }
+    }
+
     if (isStockType) {
       if (customerPart) {
         payload.type = "customer_part";
@@ -310,6 +365,14 @@ export default function BillDetailPage() {
         payload.part_id = selectedPartId;
         payload.quantity = String(formData.get("quantity") || "1");
       }
+    } else if (isLaborType && selectedLaborId) {
+      payload.type = "labor";
+      payload.labor_item_id = selectedLaborId;
+      payload.quantity = laborHours || "1";
+    } else if (isLaborType) {
+      payload.description = String(formData.get("description") || "");
+      payload.unit_price = String(formData.get("unit_price") || "");
+      payload.quantity = laborHours || "1";
     } else {
       payload.description = String(formData.get("description") || "");
       payload.unit_price = String(formData.get("unit_price") || "");
@@ -344,6 +407,25 @@ export default function BillDetailPage() {
       setError(caught instanceof Error ? caught.message : "Could not add service.");
     } finally {
       setAddingAddonId(null);
+    }
+  }
+
+  async function saveLaborHours(itemId: number, hours: string) {
+    if (isLocked) return;
+    const quantity = Number(hours);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setError("Hours must be greater than 0.");
+      return;
+    }
+    setSavingLaborHours(itemId);
+    setError("");
+    try {
+      await api(`/bills/${id}/items/${itemId}`, { method: "PUT", body: JSON.stringify({ quantity: hours }) });
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not update hours.");
+    } finally {
+      setSavingLaborHours(null);
     }
   }
 
@@ -424,6 +506,44 @@ export default function BillDetailPage() {
       setError(caught instanceof Error ? caught.message : "Could not save mileage.");
     } finally {
       setSavingMileage(false);
+    }
+  }
+
+  async function saveInternalNotes(event: FormEvent) {
+    event.preventDefault();
+    if (!bill) return;
+    setSavingNotes(true);
+    setError("");
+    try {
+      const updated = await api<Bill>(`/bills/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ internal_notes: internalNotes || null }),
+      });
+      setBill(updated);
+      setInternalNotes(updated.internal_notes || updated.notes || "");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save internal note.");
+    } finally {
+      setSavingNotes(false);
+    }
+  }
+
+  async function saveEmployees(ids: number[]) {
+    if (!bill) return;
+    setEmployeeIds(ids);
+    setSavingEmployees(true);
+    setError("");
+    try {
+      const updated = await api<Bill>(`/bills/${id}/employees`, {
+        method: "PUT",
+        body: JSON.stringify({ employee_ids: ids }),
+      });
+      setBill(updated);
+      setEmployeeIds((updated.employees ?? []).map((employee) => employee.id));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not assign employees.");
+    } finally {
+      setSavingEmployees(false);
     }
   }
 
@@ -651,7 +771,9 @@ export default function BillDetailPage() {
               <div>
                 <p className="text-[10px] font-bold uppercase text-[#6f746e]">Customer</p>
                 <p className="mt-1 font-semibold">{bill.customer?.name ?? "Walk-in"}</p>
-                <p className="text-sm text-[#6f746e]">{bill.customer?.phone}</p>
+                {bill.customer?.phone && (
+                  <p className="text-sm text-[#6f746e]">{bill.customer.phone}</p>
+                )}
                 {bill.customer?.address && (
                   <p className="mt-1 text-sm text-[#6f746e]">{bill.customer.address}</p>
                 )}
@@ -673,7 +795,7 @@ export default function BillDetailPage() {
                       {bill.mileage != null && bill.mileage !== "" ? `${Number(bill.mileage).toLocaleString()} km` : "—"}
                     </p>
                     {!isLocked && (
-                      <form onSubmit={saveMileage} className="no-print mt-2 flex h-11 items-stretch gap-2">
+                      <form onSubmit={saveMileage} className="no-print mt-2 flex h-9 items-stretch gap-2">
                         <input
                           type="number"
                           min="0"
@@ -683,7 +805,7 @@ export default function BillDetailPage() {
                           className={inputClass}
                           placeholder="km"
                         />
-                        <button type="submit" disabled={savingMileage} className="inline-flex h-11 shrink-0 items-center justify-center border border-[#20221f] px-3 text-[10px] font-bold uppercase">
+                        <button type="submit" disabled={savingMileage} className="inline-flex h-9 shrink-0 items-center justify-center border border-[#20221f] px-3 text-[10px] font-bold uppercase">
                           {savingMileage ? "..." : "Save"}
                         </button>
                       </form>
@@ -698,6 +820,42 @@ export default function BillDetailPage() {
                   <p className="mt-1 font-semibold">
                     {bill.job_kind === "parts_sale" ? "No vehicle · walk-in" : profile.label}
                   </p>
+                </div>
+              )}
+            </div>
+          </Panel>
+
+          <Panel className="staff-only no-print">
+            <div className="border-b border-[#d7d3c8] px-5 py-3">
+              <h2 className="font-display text-xl font-semibold uppercase">Staff only</h2>
+              <p className="text-[11px] text-[#6f746e]">Hidden from the customer bill, print, and SMS link.</p>
+            </div>
+            <div className="grid gap-5 p-5 lg:grid-cols-2">
+              <form onSubmit={saveInternalNotes} className="space-y-2">
+                <label className="block text-[11px] font-bold uppercase">
+                  Internal note
+                  <textarea
+                    value={internalNotes}
+                    onChange={(event) => setInternalNotes(event.target.value)}
+                    rows={4}
+                    className={`${inputClass} mt-2`}
+                    placeholder="Workshop notes the customer should not see"
+                  />
+                </label>
+                <button type="submit" disabled={savingNotes} className={buttonClass}>
+                  {savingNotes ? "Saving..." : "Save note"}
+                </button>
+              </form>
+              {canAssignEmployees && (
+                <div className="space-y-2">
+                  <p className="text-[11px] font-bold uppercase">Assigned employees <span className="font-normal text-[#6f746e]">optional</span></p>
+                  <EmployeePicker
+                    employees={employeeOptions}
+                    selectedIds={employeeIds}
+                    onChange={(ids) => { void saveEmployees(ids); }}
+                    disabled={savingEmployees}
+                  />
+                  {savingEmployees && <p className="text-[11px] text-[#6f746e]">Saving…</p>}
                 </div>
               )}
             </div>
@@ -749,6 +907,7 @@ export default function BillDetailPage() {
                 <tbody>
                   {chargeItems.map((item) => {
                     const fromCustomer = item.type === "customer_part";
+                    const isLaborLine = item.type === "labor";
                     const isPartLine = item.type === "part" || fromCustomer;
                     const showQty = isPartLine || Number(item.quantity) > 1;
                     return (
@@ -760,11 +919,42 @@ export default function BillDetailPage() {
                           {billItemLabel(item.type, profile)}
                         </td>
                         <td className="px-3 py-3 text-right tabular-nums">
-                          {showQty ? Number(item.quantity) : "—"}
+                          {isLaborLine ? (
+                            <>
+                              {!isLocked ? (
+                                <span className="no-print inline-flex items-center justify-end gap-1">
+                                  <input
+                                    key={`${item.id}-${item.quantity}`}
+                                    type="number"
+                                    min="0.01"
+                                    step="0.01"
+                                    defaultValue={Number(item.quantity)}
+                                    disabled={savingLaborHours === item.id}
+                                    onBlur={(event) => {
+                                      if (event.target.value !== String(Number(item.quantity))) {
+                                        void saveLaborHours(item.id, event.target.value);
+                                      }
+                                    }}
+                                    className="h-8 w-[4.5rem] border border-[#c9c5b9] bg-white px-1.5 text-right text-[13px] tabular-nums"
+                                    aria-label="Labor hours"
+                                  />
+                                  <span className="text-[11px] text-[#6f746e]">h</span>
+                                </span>
+                              ) : (
+                                <span className="no-print">{Number(item.quantity)} h</span>
+                              )}
+                              <span className="hidden print:inline">—</span>
+                            </>
+                          ) : showQty ? Number(item.quantity) : "—"}
                         </td>
                         <td className="px-3 py-3 text-right break-words whitespace-normal">
                           {fromCustomer ? (
                             <span className="font-semibold text-[#167c73]">—</span>
+                          ) : isLaborLine ? (
+                            <>
+                              <span className="no-print tabular-nums">{money(item.unit_price)}/h</span>
+                              <span className="hidden print:inline">—</span>
+                            </>
                           ) : (
                             <span className="tabular-nums">{money(item.unit_price)}</span>
                           )}
@@ -856,10 +1046,10 @@ export default function BillDetailPage() {
           <Panel className="no-print xl:sticky xl:top-4">
             {!isOweIn && (
             <div className="grid grid-cols-2 border-b border-[#d7d3c8]">
-              <button onClick={() => setMode("item")} className={`h-11 text-sm font-semibold ${mode === "item" ? "bg-[#20221f] text-white" : ""}`}>
+              <button onClick={() => setMode("item")} className={`h-9 text-[13px] font-semibold ${mode === "item" ? "bg-[#20221f] text-white" : ""}`}>
                 <Plus className="inline" size={16} /> Add item
               </button>
-              <button onClick={() => setMode("payment")} className={`h-11 text-sm font-semibold ${mode === "payment" ? "bg-[#167c73] text-white" : ""}`}>
+              <button onClick={() => setMode("payment")} className={`h-9 text-[13px] font-semibold ${mode === "payment" ? "bg-[#167c73] text-white" : ""}`}>
                 <CreditCard className="inline" size={16} /> Payment
               </button>
             </div>
@@ -1084,6 +1274,63 @@ export default function BillDetailPage() {
                         Part description
                         <input name="description" required className={`${inputClass} mt-2`} placeholder="e.g. Customer brought brake pads" />
                       </label>
+                    )}
+                  </>
+                ) : isLaborType ? (
+                  <>
+                    <LaborCatalogPicker
+                      categories={laborCategories}
+                      selectedId={selectedLaborId}
+                      onSelect={(item) => {
+                        setSelectedLaborId(item ? String(item.id) : "");
+                        if (item) setLaborHours(String(Number(item.standard_hours)));
+                      }}
+                    />
+                    {selectedLabor ? (
+                      <>
+                        <label className="block text-xs font-bold uppercase">
+                          Hours
+                          <input
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            value={laborHours}
+                            onChange={(event) => setLaborHours(event.target.value)}
+                            required
+                            className={`${inputClass} mt-2`}
+                          />
+                        </label>
+                        <p className="text-sm text-[#167c73]">
+                          Amount {money(laborAmount)}
+                          <span className="ml-2 text-xs text-[#6f746e]">{money(selectedLabor.hourly_rate)}/h</span>
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-[11px] text-[#6f746e]">Pick from the catalog, or enter a custom labor line.</p>
+                        <label className="block text-xs font-bold uppercase">
+                          Description
+                          <input name="description" required className={`${inputClass} mt-2`} placeholder="e.g. Front brake pads replacement" />
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <label className="block text-xs font-bold uppercase">
+                            Hourly rate
+                            <input name="unit_price" type="number" min="0" step="0.01" required className={`${inputClass} mt-2`} />
+                          </label>
+                          <label className="block text-xs font-bold uppercase">
+                            Hours
+                            <input
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              value={laborHours}
+                              onChange={(event) => setLaborHours(event.target.value)}
+                              required
+                              className={`${inputClass} mt-2`}
+                            />
+                          </label>
+                        </div>
+                      </>
                     )}
                   </>
                 ) : (

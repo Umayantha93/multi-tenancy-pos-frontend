@@ -23,6 +23,7 @@ type Bill = {
   bill_number: string;
   status: string;
   notes?: string | null;
+  internal_notes?: string | null;
   mileage?: number | string | null;
   odometer?: number | null;
   subtotal: string;
@@ -56,6 +57,7 @@ export default function SuperAdminInvoiceDetailPage() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [notes, setNotes] = useState("");
+  const [internalNotes, setInternalNotes] = useState("");
   const [mileage, setMileage] = useState("");
   const [itemType, setItemType] = useState("labor");
   const [itemDescription, setItemDescription] = useState("");
@@ -77,6 +79,7 @@ export default function SuperAdminInvoiceDetailPage() {
       .then((result) => {
         setBill(result);
         setNotes(result.notes ?? "");
+        setInternalNotes(result.internal_notes ?? "");
         setMileage(result.mileage != null && result.mileage !== "" ? String(result.mileage) : "");
         setDrafts(
           Object.fromEntries(
@@ -124,6 +127,7 @@ export default function SuperAdminInvoiceDetailPage() {
       if ("bill_number" in result) {
         setBill(result);
         setNotes(result.notes ?? "");
+        setInternalNotes(result.internal_notes ?? "");
         setMileage(result.mileage != null && result.mileage !== "" ? String(result.mileage) : "");
         setDrafts(
           Object.fromEntries(
@@ -150,7 +154,7 @@ export default function SuperAdminInvoiceDetailPage() {
     event.preventDefault();
     await run(
       `/super-admin/tenants/${tenantId}/bills/${billId}`,
-      { method: "PUT", body: JSON.stringify({ notes, mileage: mileage === "" ? null : Number(mileage) }) },
+      { method: "PUT", body: JSON.stringify({ notes, internal_notes: internalNotes, mileage: mileage === "" ? null : Number(mileage) }) },
       "Bill details saved.",
     );
   }
@@ -470,7 +474,11 @@ export default function SuperAdminInvoiceDetailPage() {
               </label>
               <label className="block text-xs font-bold uppercase text-[#6f746e]">
                 Notes
-                <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={4} className={`${inputClass} mt-2 h-auto py-2`} />
+                <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} className={`${inputClass} mt-2`} />
+              </label>
+              <label className="block text-xs font-bold uppercase text-[#6f746e]">
+                Internal note (staff only)
+                <textarea value={internalNotes} onChange={(event) => setInternalNotes(event.target.value)} rows={3} className={`${inputClass} mt-2`} />
               </label>
               <button className={`${buttonClass} w-full`} disabled={busy}>Save details</button>
             </form>

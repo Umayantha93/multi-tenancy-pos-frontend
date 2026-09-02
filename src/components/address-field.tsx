@@ -97,7 +97,7 @@ export function AddressField({
           type="button"
           onClick={useLocation}
           disabled={locating}
-          className="flex items-center gap-1 text-xs font-bold uppercase text-[#167c73] disabled:opacity-60"
+          className="flex items-center gap-1 text-[11px] font-bold uppercase text-[#167c73] disabled:opacity-60"
         >
           <MapPin size={14} />
           {locating ? "Locating..." : "Use location"}

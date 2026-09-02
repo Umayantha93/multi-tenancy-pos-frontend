@@ -12,7 +12,7 @@ import { billStatusClass, billStatusLabel } from "@/lib/bill-stamp";
 type CustomerDetail = {
   id: number;
   name: string;
-  phone: string;
+  phone?: string | null;
   address?: string | null;
   vehicles_count: number;
   bills_count: number;
@@ -66,7 +66,7 @@ export default function CustomerDetailPage() {
   }
 
   return (
-    <AppShell title={customer.name} eyebrow={customer.phone}>
+    <AppShell title={customer.name} eyebrow={customer.phone || "No phone"}>
       <div className="mb-5">
         <Link href="/customers" className="inline-flex items-center gap-2 text-xs font-bold uppercase text-[#6f746e] hover:text-[#167c73]">
           <ArrowLeft size={14} /> All customers
@@ -87,8 +87,8 @@ export default function CustomerDetailPage() {
             </div>
             {editing ? (
               <form onSubmit={saveCustomer} className="mt-6 grid gap-3">
-                <label className="text-xs font-bold uppercase">Name<input name="name" defaultValue={customer.name} required className={`${inputClass} mt-2`} /></label>
-                <label className="text-xs font-bold uppercase">Phone<input name="phone" defaultValue={customer.phone} required className={`${inputClass} mt-2`} /></label>
+                <label className="text-xs font-bold uppercase">Name<input name="name" defaultValue={customer.name} className={`${inputClass} mt-2`} /></label>
+                <label className="text-xs font-bold uppercase">Phone<input name="phone" defaultValue={customer.phone ?? ""} className={`${inputClass} mt-2`} /></label>
                 <label className="text-xs font-bold uppercase">Address<input name="address" defaultValue={customer.address ?? ""} className={`${inputClass} mt-2`} /></label>
                 <button className={buttonClass}>Save customer</button>
               </form>
@@ -96,7 +96,7 @@ export default function CustomerDetailPage() {
             <dl className="mt-6 space-y-3 text-sm">
               <div className="flex justify-between border-b border-[#e2ded4] pb-3">
                 <dt className="text-[#6f746e]">Phone</dt>
-                <dd className="font-semibold">{customer.phone}</dd>
+                <dd className="font-semibold">{customer.phone || "—"}</dd>
               </div>
               <div className="flex justify-between border-b border-[#e2ded4] pb-3">
                 <dt className="text-[#6f746e]">Address</dt>

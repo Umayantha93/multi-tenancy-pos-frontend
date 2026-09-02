@@ -626,7 +626,7 @@ export default function TenantDetailPage() {
                           className={inputClass}
                         />
                         {contactPhones.length > 1 && (
-                          <button type="button" onClick={() => setContactPhones((rows) => rows.filter((_, i) => i !== index))} className="grid size-11 place-items-center border border-[#d7d3c8] text-[#b84837]" aria-label="Remove">
+                          <button type="button" onClick={() => setContactPhones((rows) => rows.filter((_, i) => i !== index))} className="grid size-9 place-items-center border border-[#d7d3c8] text-[#b84837]" aria-label="Remove">
                             <Trash2 size={16} />
                           </button>
                         )}
