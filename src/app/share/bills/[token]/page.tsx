@@ -234,8 +234,8 @@ export default function SharedBillPage() {
                       </ul>
                     )}
                   </td>
-                  <td className="px-3 py-3 tabular-nums">{hideHours ? "—" : item.quantity}</td>
-                  <td className="px-3 py-3 tabular-nums">{hideHours ? "—" : money(item.unit_price)}</td>
+                  <td className="px-3 py-3 tabular-nums">{hideHours || item.quantity == null ? "—" : item.quantity}</td>
+                  <td className="px-3 py-3 tabular-nums">{hideHours || item.unit_price == null ? "—" : money(item.unit_price)}</td>
                   <td className="px-5 py-3 text-right tabular-nums">{money(item.line_total)}</td>
                 </tr>
                 );
@@ -250,8 +250,8 @@ export default function SharedBillPage() {
                   {discountItems.map((item) => (
                     <tr key={item.id} className="bill-discount-row border-t border-[#167c73]/20 bg-[#e7f4f2] text-[#167c73]">
                       <td className="px-5 py-3">{item.description}</td>
-                      <td className="px-3 py-3 tabular-nums">{item.quantity}</td>
-                      <td className="px-3 py-3 tabular-nums">{money(item.unit_price)}</td>
+                      <td className="px-3 py-3 tabular-nums">{item.quantity == null ? "—" : item.quantity}</td>
+                      <td className="px-3 py-3 tabular-nums">{item.unit_price == null ? "—" : money(item.unit_price)}</td>
                       <td className="px-5 py-3 text-right font-semibold tabular-nums">-{money(item.line_total)}</td>
                     </tr>
                   ))}
