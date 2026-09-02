@@ -1190,11 +1190,11 @@ export default function BillDetailPage() {
                     </div>
 
                     {useStockSearch ? (
-                      <>
+                      <div key="stock-search" className="space-y-3">
                         <label className="block text-xs font-bold uppercase">
                           Search / scan barcode
                           <input
-                            value={partQuery ?? ""}
+                            value={partQuery}
                             onChange={(event) => {
                               const value = event.target.value;
                               setPartQuery(value);
@@ -1226,7 +1226,7 @@ export default function BillDetailPage() {
                                 key={part.id}
                                 onClick={() => {
                                   setSelectedPartId(String(part.id));
-                                  setPartQuery(part.name);
+                                  setPartQuery(part.name || "");
                                   setError("");
                                 }}
                                 className={`flex w-full items-center justify-between border-b border-[#eeeae1] px-3 py-2 text-left text-sm ${selectedPartId === String(part.id) ? "bg-[#167c73]/10" : "hover:bg-[#f7f5ef]"}`}
@@ -1248,9 +1248,9 @@ export default function BillDetailPage() {
                             {selectedPart.barcode ? ` · ${selectedPart.barcode}` : ""}
                           </p>
                         )}
-                      </>
+                      </div>
                     ) : outsidePart ? (
-                      <>
+                      <div key="outside-part" className="space-y-3">
                         <label className="block text-xs font-bold uppercase">
                           Part description
                           <input name="description" required className={`${inputClass} mt-2`} placeholder="e.g. Oil filter bought outside" />
@@ -1268,12 +1268,14 @@ export default function BillDetailPage() {
                         <p className="text-[11px] text-[#6f746e]">
                           Purchase cost is added to inventory expenses for profit calculation.
                         </p>
-                      </>
+                      </div>
                     ) : (
-                      <label className="block text-xs font-bold uppercase">
-                        Part description
-                        <input name="description" required className={`${inputClass} mt-2`} placeholder="e.g. Customer brought brake pads" />
-                      </label>
+                      <div key="customer-part">
+                        <label className="block text-xs font-bold uppercase">
+                          Part description
+                          <input name="description" required className={`${inputClass} mt-2`} placeholder="e.g. Customer brought brake pads" />
+                        </label>
+                      </div>
                     )}
                   </>
                 ) : isLaborType ? (
@@ -1355,7 +1357,7 @@ export default function BillDetailPage() {
                 )}
 
                 {isStockType && showQuantity && (selectedPartId || outsidePart || customerPart) && (
-                  <label className="block text-xs font-bold uppercase">
+                  <label key={`qty-${outsidePart ? "outside" : customerPart ? "customer" : "stock"}`} className="block text-xs font-bold uppercase">
                     Quantity
                     <input name="quantity" type="number" min="1" step="1" defaultValue="1" required className={`${inputClass} mt-2`} />
                   </label>
