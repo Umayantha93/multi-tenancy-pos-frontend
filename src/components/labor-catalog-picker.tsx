@@ -25,11 +25,13 @@ export function LaborCatalogPicker({
   selectedId,
   onSelect,
   disabled = false,
+  placeholder = "Search brakes, clutch, oil change…",
 }: {
   categories: LaborCategory[];
   selectedId: string;
   onSelect: (item: LaborCatalogItem | null) => void;
   disabled?: boolean;
+  placeholder?: string;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -118,7 +120,7 @@ export function LaborCatalogPicker({
               <span className="font-semibold">{item.name}</span>
             </span>
             <span className="shrink-0 text-right text-xs text-[#6f746e]">
-              {Number(item.standard_hours)}h · {money(item.standard_price ?? Number(item.hourly_rate) * Number(item.standard_hours))}
+              {`${Number(item.standard_hours)}h · ${money(item.standard_price ?? Number(item.hourly_rate) * Number(item.standard_hours))}`}
             </span>
           </button>
         ))
@@ -145,14 +147,14 @@ export function LaborCatalogPicker({
             setQuery("");
           }}
           className={`${inputClass} mt-2`}
-          placeholder="Search brakes, clutch, oil change…"
+          placeholder={placeholder}
           autoComplete="off"
         />
       </label>
       {list}
       {selected && !open && (
         <p className="mt-1 text-xs text-[#167c73]">
-          {selected.category} · {money(selected.hourly_rate)}/h · standard {money(selected.standard_price ?? Number(selected.hourly_rate) * Number(selected.standard_hours))}
+          {`${selected.category} · ${money(selected.hourly_rate)}/h · standard ${money(selected.standard_price ?? Number(selected.hourly_rate) * Number(selected.standard_hours))}`}
         </p>
       )}
     </div>

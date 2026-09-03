@@ -8,11 +8,14 @@ import { AddressField } from "@/components/address-field";
 import { EmployeePicker } from "@/components/employee-picker";
 import { buttonClass, ErrorMessage, inputClass, Panel } from "@/components/ui";
 import { api, currentFeatures } from "@/lib/api";
+import { useBusinessProfile } from "@/lib/use-business-profile";
 
 type EmployeeOption = { id: number; name: string; position?: string | null };
 
 export default function InstantBillPage() {
   const router = useRouter();
+  const profile = useBusinessProfile();
+  const isPaint = profile.type === "paint";
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
@@ -49,14 +52,16 @@ export default function InstantBillPage() {
   }
 
   return (
-    <AppShell title="Instant bill" eyebrow="Quick billing">
+    <AppShell title={isPaint ? "Counter sale" : "Instant bill"} eyebrow="Quick billing">
       <div className="mx-auto max-w-3xl space-y-5">
         <div className="flex items-start gap-4 border-l-4 border-[#f5c842] bg-[#fbfaf6] p-4">
           <ClipboardCheck className="shrink-0 text-[#167c73]" />
           <div>
-            <p className="font-semibold">Bill without a vehicle</p>
+            <p className="font-semibold">{isPaint ? "Sell without a vehicle" : "Bill without a vehicle"}</p>
             <p className="text-sm text-[#6f746e]">
-              For walk-in customers who need parts or services quickly. Opens the same billing screen as a job card — add labor, services, inventory, discounts, and payments.
+              {isPaint
+                ? "For walk-in cans, touch-up, or materials. Opens the same billing screen as a paint job."
+                : "For walk-in customers who need parts or services quickly. Opens the same billing screen as a job card — add labor, services, inventory, discounts, and payments."}
             </p>
           </div>
         </div>

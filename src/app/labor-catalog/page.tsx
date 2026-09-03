@@ -5,6 +5,7 @@ import { ChevronDown, Plus, Save, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ConfirmModal, ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
 import { api, currentUser, money } from "@/lib/api";
+import { useBusinessProfile } from "@/lib/use-business-profile";
 
 type LaborItem = {
   id: number;
@@ -33,6 +34,7 @@ export default function LaborCatalogPage() {
   const [openId, setOpenId] = useState<number | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const isPaint = useBusinessProfile().type === "paint";
 
   function load() {
     setLoading(true);
@@ -134,7 +136,7 @@ export default function LaborCatalogPage() {
   }
 
   return (
-    <AppShell title="Repair addons" eyebrow="Labor catalog for repair job cards">
+    <AppShell title={isPaint ? "Paint labor" : "Repair addons"} eyebrow={isPaint ? "Hourly catalog for panel-work jobs" : "Labor catalog for repair job cards"}>
       <ConfirmModal
         open={Boolean(pendingDelete)}
         title={pendingDelete?.kind === "category" ? "Delete category" : "Delete labor item"}
@@ -150,16 +152,20 @@ export default function LaborCatalogPage() {
         onConfirm={confirmDelete}
       />
       {!isOwner && (
-        <p className="mb-5 text-sm text-[#6f746e]">Only the garage owner can add, edit, or remove labor categories and items.</p>
+        <p className="mb-5 text-sm text-[#6f746e]">Only the owner can add, edit, or remove labor categories and items.</p>
       )}
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
 
       {isOwner && (
         <Panel className="mb-5 p-5">
           <h2 className="font-display text-2xl font-semibold uppercase">Add category</h2>
-          <p className="mt-1 text-sm text-[#6f746e]">Group labor jobs (Brakes, Engine, Electrical…). Staff search these on repair bills.</p>
+          <p className="mt-1 text-sm text-[#6f746e]">
+            {isPaint
+              ? "Group paint labor (Prep, Paint, Finish…). Staff search these on panel jobs."
+              : "Group labor jobs (Brakes, Engine, Electrical…). Staff search these on repair bills."}
+          </p>
           <form onSubmit={createCategory} className="mt-4 flex max-w-xl items-stretch gap-2">
-            <input name="name" required placeholder="e.g. Brakes" className={inputClass} />
+            <input name="name" required placeholder={isPaint ? "e.g. Prep" : "e.g. Brakes"} className={inputClass} />
             <button className={`${buttonClass} shrink-0`}><Plus size={14} /> Add</button>
           </form>
         </Panel>
@@ -229,7 +235,7 @@ export default function LaborCatalogPage() {
                     </div>
                     {isOwner && (
                       <form onSubmit={(event) => createItem(event, category.id)} className="mt-4 grid gap-2 sm:grid-cols-[1.4fr_0.8fr_0.6fr_auto]">
-                        <input name="name" required placeholder="New labor item" className={inputClass} />
+                        <input name="name" required placeholder={isPaint ? "New paint labor" : "New labor item"} className={inputClass} />
                         <input name="hourly_rate" required type="number" min="0" step="0.01" placeholder="Hourly rate" defaultValue="3000" className={inputClass} />
                         <input name="standard_hours" required type="number" min="0.01" step="0.01" placeholder="Hours" defaultValue="1" className={inputClass} />
                         <button className={buttonClass}><Plus size={14} /> Add item</button>

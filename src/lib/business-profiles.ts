@@ -143,6 +143,48 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { value: "discount", label: "Discount", kind: "discount" },
     ],
   },
+  paint: {
+    type: "paint",
+    label: "Paint shops",
+    operationsLabel: "Paint operations",
+    billingLabel: "Paint jobs",
+    billingSingular: "Paint job",
+    openBillsLabel: "Open paint jobs",
+    recentBillsTitle: "Latest paint jobs",
+    recentBillsHint: "Open jobs and colour work across the booth",
+    primaryCta: { href: "/vehicles/admit", label: "Admit vehicle", feature: "admit_vehicle" },
+    quickActions: [
+      { href: "/vehicles/admit", label: "New admission", feature: "admit_vehicle" },
+      { href: "/parts-pos", label: "Counter sale", feature: "billing" },
+      { href: "/parts", label: "Find a colour", feature: "parts_inventory" },
+      { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
+    ],
+    defaultFeatures: [
+      "admit_vehicle", "parts_inventory", "suppliers", "customers", "billing", "bill_sms", "bill_profits",
+      "employees_management", "attendance", "payroll", "balance_sheet", "reports",
+    ],
+    moduleCatalog: [
+      { key: "admit_vehicle", name: "Admit vehicle", group: "Service Intake" },
+      { key: "parts_inventory", name: "Color stock", group: "Inventory" },
+      { key: "suppliers", name: "Suppliers", group: "Inventory" },
+      ...sharedPeopleFinance.map((m) => m.key === "billing" ? { ...m, name: "Paint jobs" } : m),
+    ],
+    navigation: [
+      { href: "/dashboard", label: "Overview", icon: Gauge },
+      { href: "/vehicles/admit", label: "Admit vehicle", icon: ClipboardList, feature: "admit_vehicle" },
+      { href: "/bills", label: "Paint jobs", icon: ReceiptText, feature: "billing" },
+      { href: "/parts-pos", label: "Counter sale", icon: ShoppingBag, feature: "billing" },
+      billProfitsNav,
+      { href: "/parts", label: "Color stock", icon: Boxes, feature: "parts_inventory" },
+      suppliersNav,
+      ...sharedNavTail,
+    ],
+    billItemTypes: [
+      { value: "labor", label: "Panel", kind: "charge", allowQty: true },
+      { value: "part", label: "Color", kind: "stock" },
+      { value: "discount", label: "Discount", kind: "discount" },
+    ],
+  },
   photography: {
     type: "photography",
     label: "Studios",
@@ -401,6 +443,7 @@ export const BUSINESS_TYPE_OPTIONS: Array<{ value: BusinessType; label: string }
   { value: "garage", label: "Garages" },
   { value: "tyre", label: "Tyre shops" },
   { value: "device_repair", label: "Device repair" },
+  { value: "paint", label: "Paint shops" },
   { value: "photography", label: "Studios" },
   { value: "clothing", label: "Garments" },
   { value: "salon", label: "Salons" },
@@ -410,6 +453,7 @@ export const BUSINESS_TYPE_OPTIONS: Array<{ value: BusinessType; label: string }
 /** Display-only labels stored on tenants.plan — does not gate features. */
 export const PLAN_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "garage-pro", label: "Garage Pro" },
+  { value: "paint-pro", label: "Paint Pro" },
   { value: "studio-pro", label: "Studio Pro" },
   { value: "retail-pro", label: "Retail Pro" },
   { value: "stay-pro", label: "Stay Pro" },
@@ -441,13 +485,23 @@ function matchPlan(type: BusinessType): string {
       return "salon-pro";
     case "device_repair":
       return "repair-pro";
+    case "paint":
+      return "paint-pro";
     default:
       return "garage-pro";
   }
 }
 
 export function usesVehicleJobs(type?: string | null): boolean {
-  return type === "garage" || type === "tyre" || type === "device_repair";
+  return type === "garage" || type === "tyre" || type === "device_repair" || type === "paint";
+}
+
+export function usesLaborCatalog(type?: string | null): boolean {
+  return type === "garage" || type === "paint";
+}
+
+export function usesServiceAddonWorkspace(type?: string | null): boolean {
+  return type === "garage" || type === "paint";
 }
 
 export function profileFor(type?: string | null): BusinessProfile {
@@ -483,8 +537,30 @@ export function billItemLabel(type: string, profile?: BusinessProfile | null): s
   return type.replaceAll("_", " ");
 }
 
-/** Inventory / parts first, other charges, labor, discount last. */
-export function sortBillItems<T extends { id: number; type: string }>(items: T[]): T[] {
+export const PAINT_PANEL_NAMES = [
+  "Front bumper",
+  "Rear bumper",
+  "Bonnet",
+  "Roof",
+  "Boot lid",
+  "Door",
+  "Front fender",
+  "Rear quarter",
+  "Pillar",
+  "Mirror cover",
+  "Sill",
+  "Alloy wheel",
+] as const;
+
+/** Inventory / parts first, other charges, labor, discount last. Panel groups stay together. */
+export function sortBillItems<T extends { id: number; type: string; panel_group_id?: string | null }>(items: T[]): T[] {
+  const firstId = new Map<string, number>();
+  for (const item of items) {
+    const key = item.panel_group_id || `item-${item.id}`;
+    const current = firstId.get(key);
+    if (current === undefined || item.id < current) firstId.set(key, item.id);
+  }
+
   const rank = (type: string) => {
     if (type === "part" || type === "customer_part") return 1;
     if (type === "labor") return 3;
@@ -493,6 +569,12 @@ export function sortBillItems<T extends { id: number; type: string }>(items: T[]
   };
 
   return [...items].sort((a, b) => {
+    const aKey = a.panel_group_id || `item-${a.id}`;
+    const bKey = b.panel_group_id || `item-${b.id}`;
+    const aFirst = firstId.get(aKey) ?? a.id;
+    const bFirst = firstId.get(bKey) ?? b.id;
+    if (aFirst !== bFirst) return aFirst - bFirst;
+    if (a.panel_group_id && a.panel_group_id === b.panel_group_id) return a.id - b.id;
     const byType = rank(a.type) - rank(b.type);
     return byType !== 0 ? byType : a.id - b.id;
   });

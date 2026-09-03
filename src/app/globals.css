@@ -91,6 +91,10 @@ button, a { -webkit-tap-highlight-color: transparent; }
     background: #e7f4f2 !important;
     color: #167c73;
   }
+  .bill-additional-note {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
   .bill-items-table {
     table-layout: fixed;
     width: 100% !important;

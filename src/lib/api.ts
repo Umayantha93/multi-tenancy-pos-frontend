@@ -42,7 +42,7 @@ export type FeatureKey =
   | "cottage_stays"
   | "suppliers";
 
-export type BusinessType = "garage" | "tyre" | "device_repair" | "photography" | "clothing" | "salon" | "cottage";
+export type BusinessType = "garage" | "tyre" | "device_repair" | "paint" | "photography" | "clothing" | "salon" | "cottage";
 
 export type PhoneEntry = { label?: string; number: string };
 

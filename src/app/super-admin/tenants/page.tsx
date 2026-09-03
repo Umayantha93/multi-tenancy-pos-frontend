@@ -6,6 +6,7 @@ import { ArrowRight, Plus, Search } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
 import { ErrorMessage, PageState, Panel, inputClass } from "@/components/ui";
 import { api, Tenant } from "@/lib/api";
+import { BUSINESS_TYPE_OPTIONS } from "@/lib/business-profiles";
 
 type TenantRow = Tenant & {
   owner_name: string;
@@ -143,16 +144,9 @@ export default function TenantsPage() {
                         <strong className="block">{tenant.business_name}</strong>
                         <span className="text-xs text-[#6f746e]">{tenant.owner_email}</span>
                       </td>
-                      <td className="capitalize">
-                        {tenant.business_type === "cottage"
-                          ? "Cottages"
-                          : tenant.business_type === "clothing"
-                            ? "Garments"
-                            : tenant.business_type === "photography"
-                              ? "Studios"
-                              : tenant.business_type === "garage"
-                                ? "Garages"
-                                : tenant.business_type}
+                      <td>
+                        {BUSINESS_TYPE_OPTIONS.find((option) => option.value === tenant.business_type)?.label
+                          ?? tenant.business_type}
                       </td>
                       <td>{tenant.plan ?? "Custom"}</td>
                       <td>

@@ -7,6 +7,7 @@ import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, inputClass } from "@/components/ui";
 import { api, formatDate, money } from "@/lib/api";
 import { billStatusClass, billStatusLabel } from "@/lib/bill-stamp";
+import { useBusinessProfile } from "@/lib/use-business-profile";
 
 type EmployeeOption = { id: number; name: string; position?: string | null };
 type EmployeeJob = {
@@ -76,6 +77,7 @@ export default function ReportsPage() {
   const [employeeId, setEmployeeId] = useState("");
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState("");
+  const isPaint = useBusinessProfile().type === "paint";
 
   const load = useCallback(() => {
     const range = period === "year" ? yearBounds(year) : monthBounds(month, year);
@@ -226,7 +228,7 @@ export default function ReportsPage() {
                     {report.stock.low_stock.map((item) => (
                       <tr key={`${item.id}-${item.name}`} className="border-t border-[#e2ded4]">
                         <td className="px-5 py-3 font-semibold">{item.name}</td>
-                        <td className="pr-5 text-right">{item.stock_qty}</td>
+                        <td className="pr-5 text-right">{item.stock_qty}{isPaint ? " ml" : ""}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -80,6 +80,7 @@ function daysAgo(days: number) {
 
 export default function BillProfitsPage() {
   const [isGarage, setIsGarage] = useState(false);
+  const [isPaint, setIsPaint] = useState(false);
   const [dateFrom, setDateFrom] = useState(() => daysAgo(29));
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [jobKind, setJobKind] = useState<JobKindFilter>(null);
@@ -109,7 +110,8 @@ export default function BillProfitsPage() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     const type = currentUser()?.tenant?.business_type;
-    setIsGarage(type === "garage" || type === "tyre" || type === "device_repair");
+    setIsGarage(type === "garage" || type === "tyre" || type === "device_repair" || type === "paint");
+    setIsPaint(type === "paint");
   }, []);
 
   function toggleKind(kind: "service" | "repair" | "parts_sale") {
@@ -137,7 +139,7 @@ export default function BillProfitsPage() {
     if (!report) return null;
     if (jobKind === "service") {
       return {
-        title: "Service",
+        title: isPaint ? "Packages" : "Service",
         revenue: report.service_revenue,
         cogs: report.service_cogs,
         profit: report.service_gross_profit,
@@ -147,7 +149,7 @@ export default function BillProfitsPage() {
     }
     if (jobKind === "repair") {
       return {
-        title: "Repair",
+        title: isPaint ? "Panel work" : "Repair",
         revenue: report.repair_revenue,
         cogs: report.repair_cogs,
         profit: report.repair_gross_profit,
@@ -157,7 +159,7 @@ export default function BillProfitsPage() {
     }
     if (jobKind === "parts_sale") {
       return {
-        title: "Instant bills",
+        title: isPaint ? "Counter sales" : "Instant bills",
         revenue: report.parts_sale_revenue,
         cogs: report.parts_sale_cogs,
         profit: report.parts_sale_gross_profit,
@@ -173,7 +175,7 @@ export default function BillProfitsPage() {
       margin: report.margin,
       count: report.service_count + report.repair_count + (report.parts_sale_count || 0),
     };
-  }, [jobKind, report]);
+  }, [jobKind, report, isPaint]);
 
   const kindButton = (kind: "service" | "repair" | "parts_sale", label: string) => {
     const selected = jobKind === kind;
@@ -206,9 +208,9 @@ export default function BillProfitsPage() {
         <button type="button" onClick={load} className={buttonClass}>Apply period</button>
         {isGarage && (
           <div className="flex flex-wrap gap-2">
-            {kindButton("service", "Services")}
-            {kindButton("repair", "Repair")}
-            {kindButton("parts_sale", "Instant bills")}
+            {kindButton("service", isPaint ? "Packages" : "Services")}
+            {kindButton("repair", isPaint ? "Panel work" : "Repair")}
+            {kindButton("parts_sale", isPaint ? "Counter sales" : "Instant bills")}
           </div>
         )}
       </div>
@@ -218,7 +220,7 @@ export default function BillProfitsPage() {
         <>
           <p className="mb-3 text-xs font-bold uppercase text-[#6f746e]">
             {periodLabel}
-            {jobKind === "service" ? " · Service bills" : jobKind === "repair" ? " · Repair bills" : ""}
+            {jobKind === "service" ? (isPaint ? " · Package jobs" : " · Service bills") : jobKind === "repair" ? (isPaint ? " · Panel jobs" : " · Repair bills") : jobKind === "parts_sale" ? (isPaint ? " · Counter sales" : " · Instant bills") : ""}
           </p>
           <div className="grid gap-3 sm:grid-cols-3">
             <Panel className="p-5">
@@ -266,7 +268,7 @@ export default function BillProfitsPage() {
           <Panel className="mt-5 overflow-hidden">
             <div className="border-b border-[#d7d3c8] px-5 py-4">
               <h2 className="font-display text-2xl font-semibold uppercase">
-                {jobKind === "service" ? "Service bills" : jobKind === "repair" ? "Repair bills" : "Bills"}
+                {jobKind === "service" ? (isPaint ? "Package jobs" : "Service bills") : jobKind === "repair" ? (isPaint ? "Panel jobs" : "Repair bills") : jobKind === "parts_sale" ? (isPaint ? "Counter sales" : "Instant bills") : "Bills"}
               </h2>
             </div>
             <div className="overflow-x-auto">
@@ -291,7 +293,13 @@ export default function BillProfitsPage() {
                       <td className="px-5 py-4 font-semibold">{bill.bill_number}</td>
                       <td>{formatDate(bill.admission_date)}</td>
                       {isGarage && (
-                        <td className="capitalize">{bill.job_kind === "service" ? "Service" : "Repair"}</td>
+                        <td className="capitalize">
+                          {bill.job_kind === "service"
+                            ? (isPaint ? "Package" : "Service")
+                            : bill.job_kind === "parts_sale"
+                              ? (isPaint ? "Counter" : "Instant")
+                              : (isPaint ? "Panel" : "Repair")}
+                        </td>
                       )}
                       <td>{bill.customer?.name ?? "Walk-in"}</td>
                       <td>

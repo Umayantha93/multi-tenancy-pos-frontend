@@ -1,14 +1,14 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardCheck, Plus, Save, Search } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { AddressField } from "@/components/address-field";
 import { EmployeePicker } from "@/components/employee-picker";
 import { buttonClass, ErrorMessage, inputClass, Panel } from "@/components/ui";
-import { api, currentFeatures, currentUser } from "@/lib/api";
-import { profileFor } from "@/lib/business-profiles";
+import { api, currentFeatures } from "@/lib/api";
+import { useBusinessProfile } from "@/lib/use-business-profile";
 
 type VehicleMatch = {
   id: number;
@@ -26,9 +26,11 @@ type EmployeeOption = { id: number; name: string; position?: string | null };
 
 export default function AdmitVehiclePage() {
   const router = useRouter();
-  const profile = useMemo(() => profileFor(currentUser()?.tenant?.business_type), []);
+  const profile = useBusinessProfile();
   const isDevice = profile.type === "device_repair";
   const isTyre = profile.type === "tyre";
+  const isPaint = profile.type === "paint";
+  const isGarage = profile.type === "garage";
   const fields: Array<[string, string, string, boolean]> = [
     ["customer_name", "Customer name", "text", false],
     ["customer_phone", "Phone number", "tel", false],
@@ -115,14 +117,16 @@ export default function AdmitVehiclePage() {
   }
 
   return (
-    <AppShell title={isDevice ? "Admit a device" : "Admit a vehicle"} eyebrow="New job card">
+    <AppShell title={isDevice ? "Admit a device" : "Admit a vehicle"} eyebrow={isPaint ? "New paint job" : "New job card"}>
       <div className="mx-auto max-w-5xl space-y-5">
         <div className="flex items-start gap-4 border-l-4 border-[#f5c842] bg-[#fbfaf6] p-4">
           <ClipboardCheck className="shrink-0 text-[#167c73]" />
           <div>
             <p className="font-semibold">{isDevice ? "Search an existing device first" : "Search an existing plate first"}</p>
             <p className="text-sm text-[#6f746e]">
-              If it already exists, open another job card. Otherwise fill the form below for a new admission.
+              {isPaint
+                ? "If it already exists, open another paint job. Otherwise fill the form below for a new admission."
+                : "If it already exists, open another job card. Otherwise fill the form below for a new admission."}
             </p>
           </div>
         </div>
@@ -150,7 +154,7 @@ export default function AdmitVehiclePage() {
                       {(vehicle.make || vehicle.model) ? ` · ${vehicle.make ?? ""} ${vehicle.model ?? ""}` : ""}
                     </p>
                     <p className="text-xs text-[#167c73]">
-                      {vehicle.bills_count} previous job card{vehicle.bills_count === 1 ? "" : "s"}
+                      {vehicle.bills_count} previous {isPaint ? "paint job" : "job card"}{vehicle.bills_count === 1 ? "" : "s"}
                     </p>
                   </div>
                   <button
@@ -159,7 +163,7 @@ export default function AdmitVehiclePage() {
                     onClick={() => openNewCard(vehicle.id)}
                     className={buttonClass}
                   >
-                    <Plus size={16} />{creatingId === vehicle.id ? "Opening..." : "New job card"}
+                    <Plus size={16} />{creatingId === vehicle.id ? "Opening..." : (isPaint ? "New paint job" : "New job card")}
                   </button>
                 </div>
               ))}
@@ -172,11 +176,15 @@ export default function AdmitVehiclePage() {
 
         <Panel className="p-5">
           <h2 className="font-display text-2xl font-semibold uppercase">Job type</h2>
-          <p className="mt-1 text-sm text-[#6f746e]">Repair uses parts and labor. Service uses the priced addon buttons.</p>
+          <p className="mt-1 text-sm text-[#6f746e]">
+            {isPaint
+              ? "Panel work is labor hours plus color stock. Paint package uses the priced buttons."
+              : "Repair uses parts and labor. Service uses the priced addon buttons."}
+          </p>
           <div className="mt-4 grid max-w-md grid-cols-2 gap-2">
             {([
-              ["repair", "Repair"],
-              ["service", "Service"],
+              ["repair", isPaint ? "Panel work" : "Repair"],
+              ["service", isPaint ? "Paint package" : "Service"],
             ] as const).map(([value, label]) => {
               const selected = jobKind === value;
               return (
@@ -235,20 +243,43 @@ export default function AdmitVehiclePage() {
                 placeholder="Home or business address"
               />
               <label className="text-sm font-semibold sm:col-span-2">
-                Internal note
-                <span className="ml-2 text-[11px] font-normal uppercase text-[#6f746e]">Staff only — not printed or sent to the customer</span>
+                {isGarage ? "Additional note" : "Internal note"}
+                <span className="ml-2 text-[11px] font-normal uppercase text-[#6f746e]">
+                  {isGarage ? "Prints at the end of the bill" : "Staff only — not printed or sent to the customer"}
+                </span>
                 <textarea
                   name="internal_notes"
                   rows={3}
                   className={`${inputClass} mt-2`}
-                  placeholder="Workshop notes, customer concerns, damage, requested work..."
+                  placeholder={isPaint
+                    ? "Paint code, finish (solid / metallic / pearl), existing colour, requested work..."
+                    : isGarage
+                      ? "Note for the customer at the end of this bill..."
+                      : "Workshop notes, customer concerns, damage, requested work..."}
                 />
               </label>
+              {isGarage && (
+                <div className="sm:col-span-2">
+                  <p className="text-[11px] font-bold uppercase">Note background</p>
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <label className="cursor-pointer">
+                      <input type="radio" name="additional_note_color" value="blue" defaultChecked className="peer sr-only" />
+                      <span className="block size-7 border border-transparent bg-[#1b365d] peer-checked:border-[#20221f] peer-checked:ring-2 peer-checked:ring-[#20221f] peer-checked:ring-offset-1" aria-hidden />
+                      <span className="sr-only">Navy</span>
+                    </label>
+                    <label className="cursor-pointer">
+                      <input type="radio" name="additional_note_color" value="red" className="peer sr-only" />
+                      <span className="block size-7 border border-transparent bg-[#7a1c2e] peer-checked:border-[#20221f] peer-checked:ring-2 peer-checked:ring-[#20221f] peer-checked:ring-offset-1" aria-hidden />
+                      <span className="sr-only">Maroon</span>
+                    </label>
+                  </div>
+                </div>
+              )}
               <input type="hidden" name="job_kind" value={jobKind} />
             </div>
             <div className="flex justify-end border-t border-[#d7d3c8] p-5">
               <button disabled={saving} className={buttonClass}>
-                <Save size={16} />{saving ? "Opening job card..." : "Open job card"}
+                <Save size={16} />{saving ? "Opening job card..." : (isPaint ? "Open paint job" : "Open job card")}
               </button>
             </div>
           </Panel>

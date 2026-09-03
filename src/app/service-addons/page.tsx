@@ -5,6 +5,7 @@ import { Plus, Save, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
 import { api, currentUser, money } from "@/lib/api";
+import { useBusinessProfile } from "@/lib/use-business-profile";
 
 type ServiceAddon = {
   id: number;
@@ -28,6 +29,7 @@ export default function ServiceAddonsPage() {
 
   const regularAddons = useMemo(() => addons.filter((addon) => !addon.is_full_service), [addons]);
   const fullService = useMemo(() => addons.find((addon) => addon.is_full_service) ?? null, [addons]);
+  const isPaint = useBusinessProfile().type === "paint";
 
   function load() {
     setLoading(true);
@@ -138,18 +140,22 @@ export default function ServiceAddonsPage() {
   }
 
   return (
-    <AppShell title="Service addons" eyebrow="Buttons on service job cards">
+    <AppShell title={isPaint ? "Paint packages" : "Service addons"} eyebrow={isPaint ? "Buttons on paint-package jobs" : "Buttons on service job cards"}>
       {!isOwner && (
-        <p className="mb-5 text-sm text-[#6f746e]">Only the garage owner can add, price, or remove these buttons.</p>
+        <p className="mb-5 text-sm text-[#6f746e]">Only the owner can add, price, or remove these buttons.</p>
       )}
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
       <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
         {isOwner && (
           <Panel className="p-5">
             <h2 className="font-display text-2xl font-semibold uppercase">Add a button</h2>
-            <p className="mt-1 text-sm text-[#6f746e]">This appears on service job cards. Staff tap it to add the priced line.</p>
+            <p className="mt-1 text-sm text-[#6f746e]">
+              {isPaint
+                ? "This appears on paint-package jobs. Staff tap it to add the priced line."
+                : "This appears on service job cards. Staff tap it to add the priced line."}
+            </p>
             <form onSubmit={create} className="mt-4 space-y-3">
-              <input name="name" required placeholder="e.g. Under wash" className={inputClass} />
+              <input name="name" required placeholder={isPaint ? "e.g. Bumper respray" : "e.g. Under wash"} className={inputClass} />
               <input name="price" required type="number" min="0" step="0.01" placeholder="Amount" className={inputClass} />
               <button className={buttonClass}><Plus size={16} /> Save addon</button>
             </form>
@@ -169,13 +175,14 @@ export default function ServiceAddonsPage() {
                 />
               ))}
               {regularAddons.length === 0 && (
-                <p className="p-8 text-center text-sm text-[#6f746e]">No service buttons yet.</p>
+                <p className="p-8 text-center text-sm text-[#6f746e]">{isPaint ? "No paint packages yet." : "No service buttons yet."}</p>
               )}
             </div>
           )}
         </Panel>
       </div>
 
+      {!isPaint && (
       <Panel className="mt-5 p-5">
         <h2 className="font-display text-2xl font-semibold uppercase">Full service</h2>
         <p className="mt-1 text-sm text-[#6f746e]">
@@ -222,6 +229,7 @@ export default function ServiceAddonsPage() {
           )}
         </form>
       </Panel>
+      )}
     </AppShell>
   );
 }

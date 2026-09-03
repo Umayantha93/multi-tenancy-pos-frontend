@@ -21,6 +21,8 @@ type SharedBill = {
   amount_paid: string;
   balance_due: string;
   mileage?: number | string | null;
+  additional_note?: string | null;
+  additional_note_color?: string | null;
   notes?: string | null;
   customer: { name: string; phone: string; address?: string | null } | null;
   vehicle: { number_plate: string; make?: string | null; model?: string | null; chassis_number?: string | null } | null;
@@ -221,7 +223,7 @@ export default function SharedBillPage() {
             <tbody>
               {chargeItems.map((item) => {
                 const { title, inclusions } = billLinePresentation(item);
-                const hideHours = item.type === "labor" || Boolean(item.hide_hours);
+                const hideHours = Boolean(item.hide_hours);
                 return (
                 <tr key={item.id} className="border-b border-[#f0ece3] align-top">
                   <td className="px-5 py-3">
@@ -322,6 +324,12 @@ export default function SharedBillPage() {
             </>
           )}
         </div>
+        {bill.additional_note?.trim() && (
+          <div className={`bill-additional-note px-5 py-4 text-sm ${bill.additional_note_color === "red" ? "bg-[#7a1c2e]/20 text-[#7a1c2e]" : "bg-[#1b365d]/20 text-[#1b365d]"}`}>
+            <p className="text-[10px] font-bold uppercase tracking-wide opacity-80">Additional note</p>
+            <p className="mt-2 whitespace-pre-wrap">{bill.additional_note}</p>
+          </div>
+        )}
       </div>
     </main>
   );
