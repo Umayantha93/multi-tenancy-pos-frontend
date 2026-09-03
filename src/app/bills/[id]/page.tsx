@@ -1,18 +1,20 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { ChevronDown, CreditCard, Lock, MessageSquare, Plus, Printer, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { EmployeePicker } from "@/components/employee-picker";
 import { LaborCatalogPicker, type LaborCategory } from "@/components/labor-catalog-picker";
 import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
-import { api, currentFeatures, currentUser, formatDate, mediaUrl, money, storeSession, Tenant, User } from "@/lib/api";
-import { billItemLabel, billLinePresentation, profileFor, sortBillItems } from "@/lib/business-profiles";
+import { api, formatDate, mediaUrl, money, storeSession, Tenant, User } from "@/lib/api";
+import { billItemLabel, billLinePresentation, PAINT_PANEL_NAMES, profileFor, sortBillItems, usesLaborCatalog, usesServiceAddonWorkspace, usesVehicleJobs } from "@/lib/business-profiles";
 import { billStamp, billStampDateLabel, latestPaymentAt } from "@/lib/bill-stamp";
 import { BillStatusSeal } from "@/components/bill-status-seal";
 
 type Part = { id: number; name: string; price: string; stock_qty: number; sku?: string | null; barcode?: string | null; brand?: string };
+type ComposerLabor = { key: string; laborItemId: string; name: string; hours: string; rate: number };
+type ComposerMaterial = { key: string; partId: number; name: string; qty: string; unitPrice: number; stock: number };
 type ServiceAddon = {
   id: number;
   name: string;
@@ -41,6 +43,7 @@ type Bill = {
   odometer?: number | string | null;
   notes?: string | null;
   internal_notes?: string | null;
+  additional_note_color?: string | null;
   customer: { name: string; phone: string; address?: string | null } | null;
   vehicle: { number_plate: string; chassis_number?: string | null; make?: string; model?: string } | null;
   employees?: Array<{ id: number; name: string; position?: string | null }>;
@@ -52,6 +55,8 @@ type Bill = {
     quantity: string;
     unit_price: string;
     line_total: string;
+    panel_group_id?: string | null;
+    panel_name?: string | null;
   }>;
   payments: Array<{ id: number; amount: string; method: string; paid_at: string }>;
 };
@@ -68,7 +73,7 @@ export default function BillDetailPage() {
   const [addonQty, setAddonQty] = useState("1");
   const [addingAddonId, setAddingAddonId] = useState<number | null>(null);
   const [serviceAddMode, setServiceAddMode] = useState<"services" | "inventory" | "discount">("services");
-  const [tenant, setTenant] = useState<Tenant | null>(currentUser()?.tenant ?? null);
+  const [tenant, setTenant] = useState<Tenant | null>(null);
   const [error, setError] = useState("");
   const [mode, setMode] = useState<"item" | "payment">("item");
   const [type, setType] = useState<string>("");
@@ -91,6 +96,7 @@ export default function BillDetailPage() {
   const [mileageDraft, setMileageDraft] = useState("");
   const [savingMileage, setSavingMileage] = useState(false);
   const [internalNotes, setInternalNotes] = useState("");
+  const [noteColor, setNoteColor] = useState<"blue" | "red">("blue");
   const [savingNotes, setSavingNotes] = useState(false);
   const [employees, setEmployees] = useState<Array<{ id: number; name: string; position?: string | null }>>([]);
   const [employeeIds, setEmployeeIds] = useState<number[]>([]);
@@ -98,8 +104,16 @@ export default function BillDetailPage() {
   const [laborCategories, setLaborCategories] = useState<LaborCategory[]>([]);
   const [selectedLaborId, setSelectedLaborId] = useState("");
   const [laborHours, setLaborHours] = useState("1");
+  const [panelName, setPanelName] = useState("");
+  const [panelCustom, setPanelCustom] = useState(false);
+  const [composerLabor, setComposerLabor] = useState<ComposerLabor[]>([]);
+  const [composerMaterials, setComposerMaterials] = useState<ComposerMaterial[]>([]);
+  const [mixQuery, setMixQuery] = useState("");
+  const [addingPanel, setAddingPanel] = useState(false);
+  const [expandedPanels, setExpandedPanels] = useState<Record<string, boolean>>({});
+  const composerKey = useRef(0);
   const [savingLaborHours, setSavingLaborHours] = useState<number | null>(null);
-  const [features, setFeatures] = useState<string[]>(() => currentFeatures());
+  const [features, setFeatures] = useState<string[]>([]);
   const canSendSms = features.includes("bill_sms");
   const canAssignEmployees = features.includes("employees_management") || features.includes("attendance");
 
@@ -109,11 +123,17 @@ export default function BillDetailPage() {
     ? tenant.contact_phones.map((p) => p.number)
     : [tenant?.contact_phone || tenant?.owner_phone].filter(Boolean)) as string[];
   const profile = profileFor(tenant?.business_type);
-  const itemTypes = profile.billItemTypes.filter((option) => option.value !== "charge");
+  const isPaint = profile.type === "paint";
+  const isGarage = profile.type === "garage";
+  const itemTypes = profile.billItemTypes.filter((option) => {
+    if (option.value === "charge") return false;
+    if (isPaint && option.value === "part" && bill?.job_kind !== "parts_sale") return false;
+    return true;
+  });
   const selectedType = itemTypes.find((option) => option.value === type) ?? itemTypes[0];
   const activeType = type || selectedType?.value || "labor";
-  const isServiceJob = profile.type === "garage" && bill?.job_kind === "service";
-  const isLaborType = activeType === "labor" && profile.type === "garage";
+  const isServiceJob = usesServiceAddonWorkspace(profile.type) && bill?.job_kind === "service";
+  const isLaborType = activeType === "labor" && usesLaborCatalog(profile.type);
   const selectedLabor = useMemo(() => {
     for (const category of laborCategories) {
       const match = (category.items ?? []).find((item) => String(item.id) === selectedLaborId);
@@ -124,11 +144,43 @@ export default function BillDetailPage() {
   const laborAmount = selectedLabor
     ? Number(selectedLabor.hourly_rate) * Number(laborHours || 0)
     : 0;
+  const isPanelComposer = isPaint && isLaborType && bill?.job_kind !== "service" && bill?.job_kind !== "parts_sale";
+  const composerLaborAmount = composerLabor.reduce((sum, row) => sum + Number(row.hours || 0) * row.rate, 0);
+  const composerMaterialAmount = composerMaterials.reduce((sum, row) => sum + Number(row.qty || 0) * row.unitPrice, 0);
+  const panelTotal = composerLaborAmount + composerMaterialAmount;
   const jobKindLabel =
-    bill?.job_kind === "service" ? "Service" : bill?.job_kind === "parts_sale" ? "Instant" : "Repair";
-  const showJobKind = ["garage", "tyre", "device_repair"].includes(profile.type);
+    bill?.job_kind === "service"
+      ? (isPaint ? "Package" : "Service")
+      : bill?.job_kind === "parts_sale"
+        ? (isPaint ? "Counter sale" : "Instant")
+        : (isPaint ? "Panel work" : "Repair");
+  const showJobKind = usesVehicleJobs(profile.type);
   const billItems = useMemo(() => sortBillItems(bill?.items ?? []), [bill?.items]);
   const chargeItems = useMemo(() => billItems.filter((item) => item.type !== "discount"), [billItems]);
+  const chargeGroups = useMemo(() => {
+    const seen = new Set<string>();
+    const rows: Array<
+      | { kind: "group"; groupId: string; name: string; total: number; items: typeof chargeItems }
+      | { kind: "line"; item: (typeof chargeItems)[number] }
+    > = [];
+    for (const item of chargeItems) {
+      if (item.panel_group_id) {
+        if (seen.has(item.panel_group_id)) continue;
+        seen.add(item.panel_group_id);
+        const members = chargeItems.filter((line) => line.panel_group_id === item.panel_group_id);
+        rows.push({
+          kind: "group",
+          groupId: item.panel_group_id,
+          name: item.panel_name || item.description,
+          total: members.reduce((sum, line) => sum + Number(line.line_total), 0),
+          items: members,
+        });
+      } else {
+        rows.push({ kind: "line", item });
+      }
+    }
+    return rows;
+  }, [chargeItems]);
   const discountItems = useMemo(() => billItems.filter((item) => item.type === "discount"), [billItems]);
   const employeeOptions = useMemo(() => {
     const byId = new Map(employees.map((employee) => [employee.id, employee]));
@@ -152,8 +204,10 @@ export default function BillDetailPage() {
   }, [itemTypes, type]);
 
   useEffect(() => {
-    if (isOweIn) setMode("payment");
-  }, [isOweIn]);
+    if (isPaint && serviceAddMode === "inventory") {
+      setServiceAddMode("services");
+    }
+  }, [isPaint, serviceAddMode]);
 
   useEffect(() => {
     function onPointer(event: MouseEvent) {
@@ -173,7 +227,48 @@ export default function BillDetailPage() {
     setCustomerPart(false);
     setSelectedLaborId("");
     setLaborHours("1");
+    setPanelName("");
+    setPanelCustom(false);
+    setComposerLabor([]);
+    setComposerMaterials([]);
+    setMixQuery("");
     setFormKey((value) => value + 1);
+  }
+
+  function nextComposerKey() {
+    composerKey.current += 1;
+    return `row-${composerKey.current}`;
+  }
+
+  function addComposerLabor(item: { id: number; name: string; hourly_rate: string; standard_hours: string }) {
+    setComposerLabor((current) => {
+      if (current.some((row) => row.laborItemId === String(item.id))) return current;
+      return [...current, {
+        key: nextComposerKey(),
+        laborItemId: String(item.id),
+        name: item.name,
+        hours: String(Number(item.standard_hours) || 1),
+        rate: Number(item.hourly_rate),
+      }];
+    });
+    setSelectedLaborId("");
+    setError("");
+  }
+
+  function addComposerMaterial(part: Part) {
+    setComposerMaterials((current) => {
+      if (current.some((row) => row.partId === part.id)) return current;
+      return [...current, {
+        key: nextComposerKey(),
+        partId: part.id,
+        name: part.name,
+        qty: "",
+        unitPrice: Number(part.price),
+        stock: part.stock_qty,
+      }];
+    });
+    setMixQuery("");
+    setError("");
   }
 
   function switchServiceAddMode(next: "services" | "inventory" | "discount") {
@@ -218,6 +313,7 @@ export default function BillDetailPage() {
         setBill(result);
         setMileageDraft(result.mileage != null && result.mileage !== "" ? String(result.mileage) : "");
         setInternalNotes(result.internal_notes || result.notes || "");
+        setNoteColor(result.additional_note_color === "red" ? "red" : "blue");
         setEmployeeIds((result.employees ?? []).map((employee) => employee.id));
       })
       .catch((caught) => setError(caught.message));
@@ -228,14 +324,6 @@ export default function BillDetailPage() {
     api<{ data: Part[] }>("/parts?per_page=100")
       .then((result) => setParts(result.data))
       .catch(() => undefined);
-    if (profile.type === "garage") {
-      api<ServiceAddon[]>("/service-addons")
-        .then((result) => setAddons(result.filter((addon) => addon.active !== false)))
-        .catch(() => undefined);
-      api<LaborCategory[]>("/labor-catalog")
-        .then((result) => setLaborCategories(result))
-        .catch(() => undefined);
-    }
     api<{ user: User; features: string[] }>("/user")
       .then((result) => {
         setTenant(result.user.tenant ?? null);
@@ -245,6 +333,16 @@ export default function BillDetailPage() {
       })
       .catch(() => undefined);
   }, [load]);
+
+  useEffect(() => {
+    if (!usesLaborCatalog(profile.type) && !usesServiceAddonWorkspace(profile.type)) return;
+    api<ServiceAddon[]>("/service-addons")
+      .then((result) => setAddons(result.filter((addon) => addon.active !== false)))
+      .catch(() => undefined);
+    api<LaborCategory[]>("/labor-catalog")
+      .then((result) => setLaborCategories(result))
+      .catch(() => undefined);
+  }, [profile.type]);
 
   useEffect(() => {
     if (!canAssignEmployees) return;
@@ -262,6 +360,18 @@ export default function BillDetailPage() {
         return [part.name, part.sku, part.barcode, part.brand].filter(Boolean).join(" ").toLowerCase().includes(query);
       });
   }, [partQuery, parts]);
+
+  const mixMatches = useMemo(() => {
+    const query = mixQuery.trim().toLowerCase();
+    const chosen = new Set(composerMaterials.map((row) => row.partId));
+    return parts
+      .filter((part) => part.stock_qty > 0 && !chosen.has(part.id))
+      .filter((part) => {
+        if (!query) return true;
+        return [part.name, part.sku, part.barcode, part.brand].filter(Boolean).join(" ").toLowerCase().includes(query);
+      })
+      .slice(0, 8);
+  }, [mixQuery, composerMaterials, parts]);
 
   const selectedPart = parts.find((part) => String(part.id) === selectedPartId);
   const isStockType = selectedType?.kind === "stock" || (isServiceJob && serviceAddMode === "inventory");
@@ -338,12 +448,64 @@ export default function BillDetailPage() {
       type: String(formData.get("type") || lineType),
     };
 
-    if (isLaborType) {
-      const hours = Number(laborHours);
-      if (!Number.isFinite(hours) || hours <= 0) {
+    if (isLaborType && !isPaint) {
+      const qty = Number(laborHours);
+      if (!Number.isFinite(qty) || qty <= 0) {
         setError("Enter hours greater than 0.");
         return;
       }
+    }
+
+    if (isPanelComposer) {
+      const name = (panelCustom ? String(formData.get("panel_name") || "") : panelName).trim();
+      if (!name) {
+        setError("Select a panel.");
+        return;
+      }
+      const labor: Array<Record<string, string>> = [];
+      for (const row of composerLabor) {
+        const hours = Number(row.hours);
+        if (!Number.isFinite(hours) || hours <= 0) {
+          setError(`Enter hours for ${row.name}.`);
+          return;
+        }
+        labor.push({ labor_item_id: row.laborItemId, quantity: row.hours });
+      }
+      const materials: Array<Record<string, string>> = [];
+      for (const row of composerMaterials) {
+        const ml = Number(row.qty);
+        if (!Number.isFinite(ml) || ml <= 0 || ml !== Math.floor(ml)) {
+          setError(`Enter millilitres for ${row.name}.`);
+          return;
+        }
+        if (ml > row.stock) {
+          setError(`Not enough ${row.name} in stock (${row.stock} ml).`);
+          return;
+        }
+        materials.push({ part_id: String(row.partId), quantity: String(ml) });
+      }
+      if (labor.length === 0 && materials.length === 0) {
+        setError("Add labor or materials for this panel.");
+        return;
+      }
+
+      setAddingPanel(true);
+      try {
+        await api(`/bills/${id}/items/panel`, {
+          method: "POST",
+          body: JSON.stringify({ panel_name: name, labor, materials }),
+        });
+        resetItemForm(itemTypes[0]?.value);
+        load();
+        api<{ data: Part[] }>("/parts?per_page=100").then((result) => setParts(result.data)).catch(() => undefined);
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Could not add panel.");
+        load();
+        api<{ data: Part[] }>("/parts?per_page=100").then((result) => setParts(result.data)).catch(() => undefined);
+      } finally {
+        setAddingPanel(false);
+      }
+      return;
     }
 
     if (isStockType) {
@@ -445,10 +607,15 @@ export default function BillDetailPage() {
   async function remove(itemId: number) {
     if (isLocked) return;
     const item = bill?.items.find((entry) => entry.id === itemId);
+    const grouped = item?.panel_group_id
+      ? bill?.items.filter((entry) => entry.panel_group_id === item.panel_group_id) ?? []
+      : [];
     setPendingDelete({
       kind: "item",
       id: itemId,
-      label: item?.description || "this line item",
+      label: grouped.length > 1
+        ? `${item?.panel_name || item?.description || "this panel"} and its labor/materials`
+        : item?.description || "this line item",
     });
   }
 
@@ -517,12 +684,16 @@ export default function BillDetailPage() {
     try {
       const updated = await api<Bill>(`/bills/${id}`, {
         method: "PUT",
-        body: JSON.stringify({ internal_notes: internalNotes || null }),
+        body: JSON.stringify({
+          internal_notes: internalNotes || null,
+          additional_note_color: isGarage ? noteColor : null,
+        }),
       });
       setBill(updated);
       setInternalNotes(updated.internal_notes || updated.notes || "");
+      setNoteColor(updated.additional_note_color === "red" ? "red" : "blue");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save internal note.");
+      setError(caught instanceof Error ? caught.message : "Could not save note.");
     } finally {
       setSavingNotes(false);
     }
@@ -703,7 +874,7 @@ export default function BillDetailPage() {
       <ConfirmModal
         open={pendingOweIn}
         title="Mark as Owe In"
-        message="The job card will be locked except for payments. Choose the date the customer should settle the balance."
+        message={`The ${profile.billingSingular.toLowerCase()} will be locked except for payments. Choose the date the customer should settle the balance.`}
         confirmLabel="Mark owe in"
         tone="teal"
         busy={markingOweIn}
@@ -828,20 +999,45 @@ export default function BillDetailPage() {
           <Panel className="staff-only no-print">
             <div className="border-b border-[#d7d3c8] px-5 py-3">
               <h2 className="font-display text-xl font-semibold uppercase">Staff only</h2>
-              <p className="text-[11px] text-[#6f746e]">Hidden from the customer bill, print, and SMS link.</p>
+              <p className="text-[11px] text-[#6f746e]">
+                {isGarage
+                  ? "Assigned staff stay off the customer bill. The additional note prints at the end."
+                  : "Hidden from the customer bill, print, and SMS link."}
+              </p>
             </div>
             <div className="grid gap-5 p-5 lg:grid-cols-2">
               <form onSubmit={saveInternalNotes} className="space-y-2">
                 <label className="block text-[11px] font-bold uppercase">
-                  Internal note
+                  {isGarage ? "Additional note" : "Internal note"}
                   <textarea
                     value={internalNotes}
                     onChange={(event) => setInternalNotes(event.target.value)}
                     rows={4}
                     className={`${inputClass} mt-2`}
-                    placeholder="Workshop notes the customer should not see"
+                    placeholder={isGarage
+                      ? "Printed at the end of the bill for the customer"
+                      : "Workshop notes the customer should not see"}
                   />
                 </label>
+                {isGarage && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-[#6f746e]">Note background</p>
+                    <div className="mt-2 flex items-center gap-1.5">
+                      {(["blue", "red"] as const).map((color) => (
+                        <button
+                          key={color}
+                          type="button"
+                          onClick={() => setNoteColor(color)}
+                          aria-label={color === "red" ? "Maroon" : "Navy"}
+                          aria-pressed={noteColor === color}
+                          className={`size-7 border ${
+                            color === "red" ? "bg-[#7a1c2e]" : "bg-[#1b365d]"
+                          } ${noteColor === color ? "border-[#20221f] ring-2 ring-[#20221f] ring-offset-1" : "border-transparent"}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <button type="submit" disabled={savingNotes} className={buttonClass}>
                   {savingNotes ? "Saving..." : "Save note"}
                 </button>
@@ -905,77 +1101,63 @@ export default function BillDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {chargeItems.map((item) => {
-                    const fromCustomer = item.type === "customer_part";
-                    const isLaborLine = item.type === "labor";
-                    const isPartLine = item.type === "part" || fromCustomer;
-                    const showQty = isPartLine || Number(item.quantity) > 1;
+                  {chargeGroups.map((row) => {
+                    if (row.kind === "group") {
+                      const open = Boolean(expandedPanels[row.groupId]);
+                      return (
+                        <Fragment key={row.groupId}>
+                          <tr className="border-t border-[#e2ded4] align-top">
+                            <td className="px-4 py-3 break-words whitespace-normal">
+                              <button
+                                type="button"
+                                onClick={() => setExpandedPanels((current) => ({ ...current, [row.groupId]: !open }))}
+                                className="no-print mr-1 inline-flex align-middle text-[#6f746e]"
+                                aria-expanded={open}
+                                aria-label={open ? `Hide ${row.name} details` : `Show ${row.name} details`}
+                              >
+                                <ChevronDown size={16} className={`transition ${open ? "" : "-rotate-90"}`} />
+                              </button>
+                              <span className="font-semibold">{row.name}</span>
+                            </td>
+                            <td className="px-3 py-3 text-[#6f746e]">Panel</td>
+                            <td className="px-3 py-3 text-right tabular-nums">—</td>
+                            <td className="px-3 py-3 text-right tabular-nums">—</td>
+                            <td className="px-4 py-3 text-right tabular-nums">{money(row.total)}</td>
+                            {!isLocked && (
+                              <td className="no-print px-2 py-3">
+                                <button onClick={() => remove(row.items[0].id)} className="text-[#b84837]" title="Remove panel">
+                                  <Trash2 size={16} />
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                          {row.items.map((item) => (
+                            <ChargeItemRow
+                              key={item.id}
+                              item={item}
+                              profile={profile}
+                              isLocked={isLocked}
+                              savingLaborHours={savingLaborHours}
+                              onSaveHours={saveLaborHours}
+                              onRemove={remove}
+                              hideOnPrint
+                              nested
+                              visible={open}
+                            />
+                          ))}
+                        </Fragment>
+                      );
+                    }
                     return (
-                      <tr key={item.id} className="border-t border-[#e2ded4] align-top">
-                        <td className="px-4 py-3 break-words whitespace-normal">
-                          <BillItemDescription item={item} />
-                        </td>
-                        <td className="px-3 py-3 text-[#6f746e] break-words whitespace-normal">
-                          {billItemLabel(item.type, profile)}
-                        </td>
-                        <td className="px-3 py-3 text-right tabular-nums">
-                          {isLaborLine ? (
-                            <>
-                              {!isLocked ? (
-                                <span className="no-print inline-flex items-center justify-end gap-1">
-                                  <input
-                                    key={`${item.id}-${item.quantity}`}
-                                    type="number"
-                                    min="0.01"
-                                    step="0.01"
-                                    defaultValue={Number(item.quantity)}
-                                    disabled={savingLaborHours === item.id}
-                                    onBlur={(event) => {
-                                      if (event.target.value !== String(Number(item.quantity))) {
-                                        void saveLaborHours(item.id, event.target.value);
-                                      }
-                                    }}
-                                    className="h-8 w-[4.5rem] border border-[#c9c5b9] bg-white px-1.5 text-right text-[13px] tabular-nums"
-                                    aria-label="Labor hours"
-                                  />
-                                  <span className="text-[11px] text-[#6f746e]">h</span>
-                                </span>
-                              ) : (
-                                <span className="no-print">{Number(item.quantity)} h</span>
-                              )}
-                              <span className="hidden print:inline">—</span>
-                            </>
-                          ) : showQty ? Number(item.quantity) : "—"}
-                        </td>
-                        <td className="px-3 py-3 text-right break-words whitespace-normal">
-                          {fromCustomer ? (
-                            <span className="font-semibold text-[#167c73]">—</span>
-                          ) : isLaborLine ? (
-                            <>
-                              <span className="no-print tabular-nums">{money(item.unit_price)}/h</span>
-                              <span className="hidden print:inline">—</span>
-                            </>
-                          ) : (
-                            <span className="tabular-nums">{money(item.unit_price)}</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right break-words whitespace-normal">
-                          {fromCustomer ? (
-                            <span className="inline-block max-w-full font-semibold leading-snug text-[#167c73]">
-                              Received from customer
-                            </span>
-                          ) : (
-                            <span className="tabular-nums">{money(item.line_total)}</span>
-                          )}
-                        </td>
-                        {!isLocked && (
-                          <td className="no-print px-2 py-3">
-                            <button onClick={() => remove(item.id)} className="text-[#b84837]" title="Remove item">
-                              <Trash2 size={16} />
-                            </button>
-                          </td>
-                        )}
-                      </tr>
+                      <ChargeItemRow
+                        key={row.item.id}
+                        item={row.item}
+                        profile={profile}
+                        isLocked={isLocked}
+                        savingLaborHours={savingLaborHours}
+                        onSaveHours={saveLaborHours}
+                        onRemove={remove}
+                      />
                     );
                   })}
                 </tbody>
@@ -1067,6 +1249,7 @@ export default function BillDetailPage() {
                     <ServiceAddModeToggle
                       mode={serviceAddMode}
                       onChange={switchServiceAddMode}
+                      paint={isPaint}
                     />
                     <label className="block text-xs font-bold uppercase">
                       Quantity
@@ -1079,7 +1262,7 @@ export default function BillDetailPage() {
                         className={`${inputClass} mt-2`}
                       />
                     </label>
-                    <p className="text-xs font-bold uppercase">Services</p>
+                    <p className="text-xs font-bold uppercase">{isPaint ? "Packages" : "Services"}</p>
                     <div className="grid grid-cols-2 gap-1.5">
                       {addons.map((addon) => {
                         const busy = addingAddonId === addon.id;
@@ -1104,7 +1287,11 @@ export default function BillDetailPage() {
                       })}
                     </div>
                     {addons.length === 0 && (
-                      <p className="text-sm text-[#6f746e]">No service buttons yet. Ask the owner to add them under Service addons.</p>
+                      <p className="text-sm text-[#6f746e]">
+                        {isPaint
+                          ? "No paint packages yet. Ask the owner to add them under Paint packages."
+                          : "No service buttons yet. Ask the owner to add them under Service addons."}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -1115,6 +1302,7 @@ export default function BillDetailPage() {
                   <ServiceAddModeToggle
                     mode={serviceAddMode}
                     onChange={switchServiceAddMode}
+                    paint={isPaint}
                   />
                 )}
                 {!isServiceJob && (
@@ -1278,11 +1466,172 @@ export default function BillDetailPage() {
                       </div>
                     )}
                   </>
+                ) : isPanelComposer ? (
+                  <>
+                    <p className="text-[11px] text-[#6f746e]">Pick the panel, then add labor and materials. The customer only sees the panel total.</p>
+                    <label className="block text-xs font-bold uppercase">
+                      Panel
+                      <select
+                        value={panelCustom ? "__custom__" : panelName}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          if (value === "__custom__") {
+                            setPanelCustom(true);
+                            setPanelName("");
+                          } else {
+                            setPanelCustom(false);
+                            setPanelName(value);
+                          }
+                        }}
+                        required={!panelCustom}
+                        className={`${inputClass} mt-2`}
+                      >
+                        <option value="">Select a panel</option>
+                        {PAINT_PANEL_NAMES.map((name) => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                        <option value="__custom__">Other panel…</option>
+                      </select>
+                    </label>
+                    {panelCustom && (
+                      <label className="block text-xs font-bold uppercase">
+                        Panel name
+                        <input
+                          name="panel_name"
+                          required
+                          className={`${inputClass} mt-2`}
+                          placeholder="e.g. Left rear door"
+                        />
+                      </label>
+                    )}
+                    <div className="space-y-2 border-t border-[#e2ded4] pt-3">
+                      <p className="text-xs font-bold uppercase">Labor</p>
+                      <LaborCatalogPicker
+                        categories={laborCategories}
+                        selectedId=""
+                        placeholder="Search masking, tinkering, primer, polish…"
+                        onSelect={(item) => {
+                          if (item) addComposerLabor(item);
+                        }}
+                      />
+                      {composerLabor.map((row) => (
+                        <div key={row.key} className="border border-[#d7d3c8] bg-[#fbfaf6] p-2.5">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="min-w-0 text-sm font-semibold">{row.name}</p>
+                            <button
+                              type="button"
+                              onClick={() => setComposerLabor((current) => current.filter((entry) => entry.key !== row.key))}
+                              className="text-[#b84837]"
+                              aria-label={`Remove ${row.name}`}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                          <div className="mt-2 grid grid-cols-[1fr_auto] items-end gap-2">
+                            <label className="text-[10px] font-bold uppercase">
+                              Hours
+                              <input
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                required
+                                value={row.hours}
+                                onChange={(event) => setComposerLabor((current) => current.map((entry) => entry.key === row.key ? { ...entry, hours: event.target.value } : entry))}
+                                className={`${inputClass} mt-1`}
+                              />
+                            </label>
+                            <p className="pb-2 text-right text-sm font-semibold tabular-nums">
+                              {money(Number(row.hours || 0) * row.rate)}
+                            </p>
+                          </div>
+                          <p className="mt-1 text-[10px] text-[#6f746e]">{money(row.rate)}/h</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="space-y-2 border-t border-[#e2ded4] pt-3">
+                      <p className="text-xs font-bold uppercase">Materials</p>
+                      <p className="text-[11px] text-[#6f746e]">Putty, primer, paint, clear — millilitres from color stock.</p>
+                      {composerMaterials.map((row) => (
+                        <div key={row.key} className="border border-[#d7d3c8] bg-[#fbfaf6] p-2.5">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="min-w-0 text-sm font-semibold">{row.name}</p>
+                            <button
+                              type="button"
+                              onClick={() => setComposerMaterials((current) => current.filter((entry) => entry.key !== row.key))}
+                              className="text-[#b84837]"
+                              aria-label={`Remove ${row.name}`}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                          <div className="mt-2 grid grid-cols-[1fr_auto] items-end gap-2">
+                            <label className="text-[10px] font-bold uppercase">
+                              ml
+                              <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                required
+                                value={row.qty}
+                                onChange={(event) => setComposerMaterials((current) => current.map((entry) => entry.key === row.key ? { ...entry, qty: event.target.value } : entry))}
+                                className={`${inputClass} mt-1`}
+                                placeholder="e.g. 180"
+                              />
+                            </label>
+                            <p className="pb-2 text-right text-sm font-semibold tabular-nums">
+                              {money(Number(row.qty || 0) * row.unitPrice)}
+                            </p>
+                          </div>
+                          <p className="mt-1 text-[10px] text-[#6f746e]">{row.stock} ml in stock · {money(row.unitPrice)}/ml</p>
+                        </div>
+                      ))}
+                      <label className="block text-xs font-bold uppercase">
+                        Add material
+                        <input
+                          value={mixQuery}
+                          onChange={(event) => setMixQuery(event.target.value)}
+                          className={`${inputClass} mt-2`}
+                          placeholder="Search putty, primer, base, clear…"
+                          autoComplete="off"
+                        />
+                      </label>
+                      {(mixQuery.trim() || composerMaterials.length === 0) && mixMatches.length > 0 && (
+                        <div className="max-h-40 overflow-y-auto border border-[#d7d3c8] bg-white">
+                          {mixMatches.map((part) => (
+                            <button
+                              type="button"
+                              key={part.id}
+                              onClick={() => addComposerMaterial(part)}
+                              className="flex w-full items-center justify-between border-b border-[#eeeae1] px-3 py-2 text-left text-sm hover:bg-[#f7f5ef]"
+                            >
+                              <span className="font-semibold">{part.name}</span>
+                              <span className="text-xs text-[#6f746e]">{part.stock_qty} ml · {money(part.price)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="border-t border-[#e2ded4] pt-2 text-sm">
+                      <div className="flex justify-between text-[#6f746e]">
+                        <span>Labor</span>
+                        <span className="tabular-nums">{money(composerLaborAmount)}</span>
+                      </div>
+                      <div className="flex justify-between text-[#6f746e]">
+                        <span>Materials</span>
+                        <span className="tabular-nums">{money(composerMaterialAmount)}</span>
+                      </div>
+                      <div className="mt-1 flex justify-between font-semibold text-[#167c73]">
+                        <span>Panel total</span>
+                        <span className="tabular-nums">{money(panelTotal)}</span>
+                      </div>
+                    </div>
+                  </>
                 ) : isLaborType ? (
                   <>
                     <LaborCatalogPicker
                       categories={laborCategories}
                       selectedId={selectedLaborId}
+                      placeholder={isPaint ? "Search masking, blend, polish…" : "Search brakes, clutch, oil change…"}
                       onSelect={(item) => {
                         setSelectedLaborId(item ? String(item.id) : "");
                         if (item) setLaborHours(String(Number(item.standard_hours)));
@@ -1304,15 +1653,19 @@ export default function BillDetailPage() {
                         </label>
                         <p className="text-sm text-[#167c73]">
                           Amount {money(laborAmount)}
-                          <span className="ml-2 text-xs text-[#6f746e]">{money(selectedLabor.hourly_rate)}/h</span>
+                          <span className="ml-2 text-xs text-[#6f746e]">
+                            {money(selectedLabor.hourly_rate)}/h
+                          </span>
                         </p>
                       </>
                     ) : (
                       <>
-                        <p className="text-[11px] text-[#6f746e]">Pick from the catalog, or enter a custom labor line.</p>
+                        <p className="text-[11px] text-[#6f746e]">
+                          Pick from the catalog, or enter a custom labor line.
+                        </p>
                         <label className="block text-xs font-bold uppercase">
                           Description
-                          <input name="description" required className={`${inputClass} mt-2`} placeholder="e.g. Front brake pads replacement" />
+                          <input name="description" required className={`${inputClass} mt-2`} placeholder={isPaint ? "e.g. Bumper respray — prep & spray" : "e.g. Front brake pads replacement"} />
                         </label>
                         <div className="grid grid-cols-2 gap-3">
                           <label className="block text-xs font-bold uppercase">
@@ -1358,15 +1711,15 @@ export default function BillDetailPage() {
 
                 {isStockType && showQuantity && (selectedPartId || outsidePart || customerPart) && (
                   <label key={`qty-${outsidePart ? "outside" : customerPart ? "customer" : "stock"}`} className="block text-xs font-bold uppercase">
-                    Quantity
+                    {isPaint ? "Quantity (ml)" : "Quantity"}
                     <input name="quantity" type="number" min="1" step="1" defaultValue="1" required className={`${inputClass} mt-2`} />
                   </label>
                 )}
                 </div>
 
                 <div className="shrink-0 border-t border-[#d7d3c8] bg-white p-4">
-                  <button className={`${buttonClass} w-full`}>
-                    <Plus size={17} />Add to bill
+                  <button disabled={addingPanel} className={`${buttonClass} w-full`}>
+                    <Plus size={17} />{addingPanel ? "Adding..." : isPanelComposer ? "Add panel to bill" : "Add to bill"}
                   </button>
                 </div>
               </form>
@@ -1427,9 +1780,121 @@ export default function BillDetailPage() {
               </div>
             </div>
           </Panel>
+          {isGarage && internalNotes.trim() && (
+            <div className={`bill-additional-note px-5 py-4 text-sm ${noteColor === "red" ? "bg-[#7a1c2e]/20 text-[#7a1c2e]" : "bg-[#1b365d]/20 text-[#1b365d]"}`}>
+              <p className="text-[10px] font-bold uppercase tracking-wide opacity-80">Additional note</p>
+              <p className="mt-2 whitespace-pre-wrap">{internalNotes}</p>
+            </div>
+          )}
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function ChargeItemRow({
+  item,
+  profile,
+  isLocked,
+  savingLaborHours,
+  onSaveHours,
+  onRemove,
+  hideOnPrint = false,
+  nested = false,
+  visible = true,
+}: {
+  item: {
+    id: number;
+    type: string;
+    description: string;
+    included_services?: string[] | null;
+    quantity: string;
+    unit_price: string;
+    line_total: string;
+  };
+  profile: ReturnType<typeof profileFor>;
+  isLocked: boolean;
+  savingLaborHours: number | null;
+  onSaveHours: (itemId: number, hours: string) => void;
+  onRemove: (itemId: number) => void;
+  hideOnPrint?: boolean;
+  nested?: boolean;
+  visible?: boolean;
+}) {
+  const fromCustomer = item.type === "customer_part";
+  const isLaborLine = item.type === "labor";
+  const isPartLine = item.type === "part" || fromCustomer;
+  const showQty = isPartLine || Number(item.quantity) > 1;
+  const hidden = nested && !visible;
+
+  return (
+    <tr className={`border-t border-[#e2ded4] align-top ${hideOnPrint ? "no-print" : ""} ${hidden ? "hidden" : ""}`}>
+      <td className={`px-4 py-3 break-words whitespace-normal ${nested ? "pl-8" : ""}`}>
+        <BillItemDescription item={item} />
+      </td>
+      <td className="px-3 py-3 text-[#6f746e] break-words whitespace-normal">
+        {billItemLabel(item.type, profile)}
+      </td>
+      <td className="px-3 py-3 text-right tabular-nums">
+        {isLaborLine ? (
+          <>
+            {!isLocked ? (
+              <span className="no-print inline-flex items-center justify-end gap-1">
+                <input
+                  key={`${item.id}-${item.quantity}`}
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  defaultValue={Number(item.quantity)}
+                  disabled={savingLaborHours === item.id}
+                  onBlur={(event) => {
+                    if (event.target.value !== String(Number(item.quantity))) {
+                      void onSaveHours(item.id, event.target.value);
+                    }
+                  }}
+                  className="h-8 w-[4.5rem] border border-[#c9c5b9] bg-white px-1.5 text-right text-[13px] tabular-nums"
+                  aria-label="Labor hours"
+                />
+                <span className="text-[11px] text-[#6f746e]">h</span>
+              </span>
+            ) : (
+              <span className="no-print">{Number(item.quantity)} h</span>
+            )}
+            <span className="hidden print:inline">—</span>
+          </>
+        ) : showQty ? Number(item.quantity) : "—"}
+      </td>
+      <td className="px-3 py-3 text-right break-words whitespace-normal">
+        {fromCustomer ? (
+          <span className="font-semibold text-[#167c73]">—</span>
+        ) : isLaborLine ? (
+          <>
+            <span className="no-print tabular-nums">{money(item.unit_price)}/h</span>
+            <span className="hidden print:inline">—</span>
+          </>
+        ) : (
+          <span className="tabular-nums">{money(item.unit_price)}</span>
+        )}
+      </td>
+      <td className="px-4 py-3 text-right break-words whitespace-normal">
+        {fromCustomer ? (
+          <span className="inline-block max-w-full font-semibold leading-snug text-[#167c73]">
+            Received from customer
+          </span>
+        ) : (
+          <span className="tabular-nums">{money(item.line_total)}</span>
+        )}
+      </td>
+      {!isLocked && (
+        <td className="no-print px-2 py-3">
+          {nested ? null : (
+            <button onClick={() => onRemove(item.id)} className="text-[#b84837]" title="Remove item">
+              <Trash2 size={16} />
+            </button>
+          )}
+        </td>
+      )}
+    </tr>
   );
 }
 
@@ -1452,13 +1917,15 @@ function BillItemDescription({ item }: { item: { description: string; included_s
 function ServiceAddModeToggle({
   mode,
   onChange,
+  paint = false,
 }: {
   mode: "services" | "inventory" | "discount";
   onChange: (mode: "services" | "inventory" | "discount") => void;
+  paint?: boolean;
 }) {
   const options = [
-    ["services", "Services"],
-    ["inventory", "Inventory"],
+    ["services", paint ? "Packages" : "Services"],
+    ...(!paint ? [["inventory", "Inventory"] as const] : []),
     ["discount", "Discount"],
   ] as const;
 

@@ -47,7 +47,7 @@ export default function DashboardPage() {
   const metrics = data ? [
     can("billing") && ["Today's receipts", money(data.today_income ?? 0), Banknote, "#167c73"],
     can("billing") && [profile.openBillsLabel, String(data.open_bills ?? 0), ReceiptText, "#20221f"],
-    (can("parts_inventory") || can("product_catalog")) && ["Low stock items", String(data.low_stock_parts ?? 0), Boxes, "#b84837"],
+    (can("parts_inventory") || can("product_catalog")) && [profile.type === "paint" ? "Low stock colours" : "Low stock items", String(data.low_stock_parts ?? 0), Boxes, "#b84837"],
     can("balance_sheet") && ["Monthly profit", money(data.monthly_profit ?? 0), TrendingUp, (data.monthly_profit ?? 0) >= 0 ? "#167c73" : "#b84837"],
   ].filter(Boolean) as Array<[string, string, typeof Banknote, string]> : [];
 

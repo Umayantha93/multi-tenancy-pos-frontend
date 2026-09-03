@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight, ClipboardPlus, Hammer, Search, Wrench, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, inputClass } from "@/components/ui";
 import { api, currentUser, formatDate, money } from "@/lib/api";
-import { profileFor } from "@/lib/business-profiles";
+import { usesLaborCatalog, usesServiceAddonWorkspace } from "@/lib/business-profiles";
+import { useBusinessProfile } from "@/lib/use-business-profile";
 import { billStatusClass, billStatusLabel, isOweInUrgent } from "@/lib/bill-stamp";
 
 type Bill = {
@@ -30,7 +31,7 @@ export default function BillsPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [isOwner, setIsOwner] = useState(false);
-  const profile = useMemo(() => profileFor(currentUser()?.tenant?.business_type), []);
+  const profile = useBusinessProfile();
   const rangeInvalid = Boolean(dateFrom && dateTo && dateFrom > dateTo);
 
   useEffect(() => {
@@ -73,20 +74,24 @@ export default function BillsPage() {
       eyebrow="Open bills & queue"
       action={
         <div className="flex items-center gap-2">
-          {profile.type === "garage" && isOwner && (
+          {(usesLaborCatalog(profile.type) || usesServiceAddonWorkspace(profile.type)) && isOwner && (
             <>
+              {usesLaborCatalog(profile.type) && (
               <Link
                 href="/labor-catalog"
                 className="flex h-9 items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-[13px] font-semibold hover:border-[#167c73]"
               >
-                <Hammer size={16} /><span className="hidden sm:inline">Repair addons</span>
+                <Hammer size={16} /><span className="hidden sm:inline">{profile.type === "paint" ? "Paint labor" : "Repair addons"}</span>
               </Link>
+              )}
+              {usesServiceAddonWorkspace(profile.type) && (
               <Link
                 href="/service-addons"
                 className="flex h-9 items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-[13px] font-semibold hover:border-[#167c73]"
               >
-                <Wrench size={16} /><span className="hidden sm:inline">Service addons</span>
+                <Wrench size={16} /><span className="hidden sm:inline">{profile.type === "paint" ? "Paint packages" : "Service addons"}</span>
               </Link>
+              )}
             </>
           )}
           <Link href={profile.primaryCta.href} className="flex h-10 items-center gap-2 bg-[#f5c842] px-3 text-sm font-semibold">
@@ -165,9 +170,15 @@ export default function BillsPage() {
                     <td className="px-5 py-4 font-semibold">{bill.bill_number}</td>
                     <td>{formatDate(bill.admission_date)}</td>
                     <td>
-                      {profile.type === "garage" ? (
+                      {profile.type === "garage" || profile.type === "paint" ? (
                         <span className="px-2 py-1 text-[10px] font-bold uppercase bg-[#eeece5] text-[#6f746e]">
-                          {bill.job_kind === "service" ? "Service" : bill.job_kind === "parts_sale" ? "Instant" : bill.job_kind === "repair" || !bill.job_kind ? "Repair" : bill.job_kind}
+                          {bill.job_kind === "service"
+                            ? (profile.type === "paint" ? "Package" : "Service")
+                            : bill.job_kind === "parts_sale"
+                              ? (profile.type === "paint" ? "Counter" : "Instant")
+                              : bill.job_kind === "repair" || !bill.job_kind
+                                ? (profile.type === "paint" ? "Panel" : "Repair")
+                                : bill.job_kind}
                         </span>
                       ) : "—"}
                     </td>

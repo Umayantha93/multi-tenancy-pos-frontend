@@ -5,6 +5,7 @@ import { Boxes, Download, PackagePlus, Pencil, Plus, Search, Upload, X } from "l
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, PageState, Panel, SuccessMessage } from "@/components/ui";
 import { API_URL, api, currentFeatures, currentUser, mediaUrl, money } from "@/lib/api";
+import { useBusinessProfile } from "@/lib/use-business-profile";
 
 type Part = {
   id: number;
@@ -50,6 +51,9 @@ export default function PartsPage() {
   const [importPayment, setImportPayment] = useState("paid");
   const [importDue, setImportDue] = useState("");
   const importInputRef = useRef<HTMLInputElement>(null);
+  const isPaint = useBusinessProfile().type === "paint";
+  const stockUnit = isPaint ? "ml" : "units";
+  const lowStockAt = isPaint ? 250 : 5;
 
   const load = useCallback((term = search) => {
     api<{ data: Part[] }>(`/parts?search=${encodeURIComponent(term)}&per_page=100`)
@@ -211,8 +215,8 @@ export default function PartsPage() {
 
   return (
     <AppShell
-      title="Parts inventory"
-      eyebrow={`${parts.length} catalog items`}
+      title={isPaint ? "Color stock" : "Parts inventory"}
+      eyebrow={`${parts.length} catalog items${isPaint ? " · millilitres" : ""}`}
       action={admin ? (
         <div className="flex flex-wrap items-center justify-end gap-2">
           <button
@@ -242,7 +246,7 @@ export default function PartsPage() {
             }}
           />
           <button onClick={openAdd} className="flex h-10 items-center gap-2 bg-[#f5c842] px-3 text-sm font-semibold">
-            <Plus size={18} /><span className="hidden sm:inline">Add part</span>
+            <Plus size={18} /><span className="hidden sm:inline">{isPaint ? "Add colour" : "Add part"}</span>
           </button>
         </div>
       ) : undefined}
@@ -289,8 +293,8 @@ export default function PartsPage() {
                         <p className="text-[10px] font-bold uppercase text-[#167c73]">{part.brand} · {part.type}</p>
                         <h2 className="mt-1 truncate font-display text-lg font-semibold uppercase leading-none">{part.name}</h2>
                       </div>
-                      <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-bold ${part.stock_qty <= 5 ? "bg-[#b84837]/10 text-[#b84837]" : "bg-[#167c73]/10 text-[#167c73]"}`}>
-                        {part.stock_qty} in stock
+                      <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-bold ${part.stock_qty <= lowStockAt ? "bg-[#b84837]/10 text-[#b84837]" : "bg-[#167c73]/10 text-[#167c73]"}`}>
+                        {part.stock_qty} {isPaint ? "ml" : "in stock"}
                       </span>
                     </div>
                     <p className="mt-2 truncate text-xs text-[#6f746e]">{part.model || "Universal"} {part.year || ""}</p>
@@ -331,20 +335,20 @@ export default function PartsPage() {
             className="my-8 w-full max-w-2xl bg-[#f3f0e8]"
           >
             <div className="flex items-center justify-between border-b border-[#d7d3c8] p-5">
-              <h2 className="font-display text-3xl font-semibold uppercase">{mode === "edit" ? "Edit part" : "Add inventory part"}</h2>
+              <h2 className="font-display text-3xl font-semibold uppercase">{mode === "edit" ? (isPaint ? "Edit colour" : "Edit part") : (isPaint ? "Add colour / material" : "Add inventory part")}</h2>
               <button type="button" onClick={() => setMode(null)} aria-label="Close"><X /></button>
             </div>
             <div className="grid gap-4 p-5 sm:grid-cols-2">
               {[
-                ["name", "Part name", selected?.name ?? ""],
-                ["sku", "SKU", selected?.sku ?? ""],
+                ["name", isPaint ? "Colour / product name" : "Part name", selected?.name ?? ""],
+                ["sku", isPaint ? "Paint / formula code" : "SKU", selected?.sku ?? ""],
                 ["barcode", "Barcode", selected?.barcode ?? ""],
-                ["brand", "Brand", selected?.brand ?? ""],
-                ["type", "Category", selected?.type ?? ""],
-                ["model", "Compatible model", selected?.model ?? ""],
+                ["brand", isPaint ? "Paint system brand" : "Brand", selected?.brand ?? ""],
+                ["type", isPaint ? "Class" : "Category", selected?.type ?? ""],
+                ["model", isPaint ? "Vehicle fitment (optional)" : "Compatible model", selected?.model ?? ""],
                 ["year", "Compatible year", selected?.year ? String(selected.year) : ""],
-                ["price", "Selling price", selected?.price ?? ""],
-                ["cost_price", "Cost price", selected?.cost_price ?? ""],
+                ["price", isPaint ? "Selling price per ml" : "Selling price", selected?.price ?? ""],
+                ["cost_price", isPaint ? "Cost per ml" : "Cost price", selected?.cost_price ?? ""],
               ].map(([name, label, value]) => (
                 <label key={name} className="text-xs font-bold uppercase">
                   {label}
@@ -354,20 +358,28 @@ export default function PartsPage() {
                     type={["year", "price", "cost_price"].includes(name) ? "number" : "text"}
                     step={name.includes("price") ? "0.01" : undefined}
                     required={!["sku", "barcode", "model", "year"].includes(name)}
+                    list={name === "type" && isPaint ? "paint-material-classes" : undefined}
                     className={`${inputClass} mt-2`}
                   />
                 </label>
               ))}
+              {isPaint && (
+                <datalist id="paint-material-classes">
+                  {["Primer", "Base", "Clear", "Thinner", "Hardener", "Putty", "Tape", "Consumable"].map((option) => (
+                    <option key={option} value={option} />
+                  ))}
+                </datalist>
+              )}
               {mode === "add" && (
                 <label className="text-xs font-bold uppercase">
-                  Opening stock
+                  {isPaint ? "Opening stock (ml)" : "Opening stock"}
                   <input name="stock_qty" type="number" min="0" defaultValue="0" required className={`${inputClass} mt-2`} />
                 </label>
               )}
               {mode === "edit" && selected && (
                 <div className="text-xs font-bold uppercase">
                   Current stock
-                  <p className="mt-2 border border-[#c9c5b9] bg-white px-3 py-3 text-sm font-semibold normal-case">{selected.stock_qty} units — use Restock to add stock and record expense</p>
+                  <p className="mt-2 border border-[#c9c5b9] bg-white px-3 py-3 text-sm font-semibold normal-case">{selected.stock_qty} {stockUnit} — use Restock to add stock and record expense</p>
                 </div>
               )}
               <label className="text-xs font-bold uppercase sm:col-span-2">
@@ -417,7 +429,7 @@ export default function PartsPage() {
                 New unit cost is blended as a weighted average with existing stock. The purchase expense still uses this restock’s unit cost × qty. Paid hits finance now; credit stays as a payable until settled.
               </p>
               <label className="block text-xs font-bold uppercase">
-                Quantity to add
+                Quantity to add{isPaint ? " (ml)" : ""}
                 <input name="quantity" type="number" min="1" step="1" required className={`${inputClass} mt-2`} />
               </label>
               <label className="block text-xs font-bold uppercase">

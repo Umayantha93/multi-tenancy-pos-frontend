@@ -8,6 +8,7 @@ import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { api, formatDate, money } from "@/lib/api";
 import { billStatusClass, billStatusLabel } from "@/lib/bill-stamp";
+import { useBusinessProfile } from "@/lib/use-business-profile";
 
 type CustomerDetail = {
   id: number;
@@ -33,6 +34,7 @@ export default function CustomerDetailPage() {
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
+  const profile = useBusinessProfile();
 
   useEffect(() => {
     api<CustomerDetail>(`/customers/${id}`)
@@ -137,7 +139,7 @@ export default function CustomerDetailPage() {
         <Panel className="overflow-hidden">
           <div className="border-b border-[#d7d3c8] px-5 py-4">
             <h2 className="font-display text-2xl font-semibold uppercase">Job history</h2>
-            <p className="text-xs text-[#6f746e]">{customer.bills_count} job card{customer.bills_count === 1 ? "" : "s"}</p>
+            <p className="text-xs text-[#6f746e]">{customer.bills_count} {profile.billingSingular.toLowerCase()}{customer.bills_count === 1 ? "" : "s"}</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-sm">
