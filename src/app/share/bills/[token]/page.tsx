@@ -7,6 +7,7 @@ import { API_URL, formatDate, mediaUrl, money, PhoneEntry, Tenant } from "@/lib/
 import { billLinePresentation, sortBillItems } from "@/lib/business-profiles";
 import { billStamp, billStampDateLabel, latestPaymentAt } from "@/lib/bill-stamp";
 import { BillStatusSeal } from "@/components/bill-status-seal";
+import { BillWatermark } from "@/components/bill-watermark";
 
 type SharedBill = {
   bill_number: string;
@@ -137,7 +138,7 @@ export default function SharedBillPage() {
   const discountItems = billItems.filter((item) => item.type === "discount");
 
   return (
-    <main className="mx-auto min-h-screen max-w-3xl px-4 py-8">
+    <main className="mx-auto min-h-screen max-w-3xl px-4 py-8 print:max-w-none print:px-0 print:py-0">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 print:hidden">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wide text-[#6f746e]">{documentLabel}</p>
@@ -153,8 +154,9 @@ export default function SharedBillPage() {
         </button>
       </div>
 
-      <div className="border border-[#e2ddd0] bg-white print:border-0">
-        <div className="overflow-hidden border-b border-[#e2ddd0] p-5">
+      <div className="bill-print-sheet overflow-hidden border border-[#e2ddd0] bg-white print:border-0">
+        <BillWatermark src={logoUrl} />
+        <div className="bill-letterhead overflow-hidden border-b border-[#e2ddd0] p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex min-w-0 flex-wrap items-start gap-4">
               {logoUrl ? (
@@ -171,7 +173,7 @@ export default function SharedBillPage() {
                 </p>
                 <p className="mt-1 text-sm text-[#6f746e]">{bill.bill_number}</p>
                 <p className="mt-1 text-sm text-[#6f746e]">Date: {formatDate(bill.admission_date)}</p>
-                <div className="mt-3 space-y-1 text-sm">
+                <div className="mt-1.5 space-y-0.5 text-sm print:text-xs">
                   {bill.tenant?.address && <p>{bill.tenant.address}</p>}
                   {bill.tenant?.tin && <p>TIN: {bill.tenant.tin}</p>}
                   {contactPhones.map((phone) => (
@@ -188,7 +190,7 @@ export default function SharedBillPage() {
           </div>
         </div>
 
-        <div className="grid gap-4 border-b border-[#e2ddd0] p-5 sm:grid-cols-2">
+        <div className="bill-meta grid gap-4 border-b border-[#e2ddd0] p-5 sm:grid-cols-2">
           <div>
             <p className="text-[10px] font-bold uppercase text-[#6f746e]">Customer</p>
             <p className="mt-1 font-semibold">{bill.customer?.name ?? "Customer"}</p>
@@ -211,7 +213,7 @@ export default function SharedBillPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+          <table className="bill-items-table w-full text-left text-sm">
             <thead className="border-b border-[#e2ddd0] bg-[#fbfaf6] text-[10px] uppercase text-[#6f746e]">
               <tr>
                 <th className="px-5 py-3 font-bold">Item</th>
@@ -270,7 +272,7 @@ export default function SharedBillPage() {
           </table>
         </div>
 
-        <div className="space-y-2 border-t border-[#e2ddd0] p-5 text-sm">
+        <div className="bill-summary space-y-2 border-t border-[#e2ddd0] p-5 text-sm">
           <div className="flex justify-between">
             <span className="text-[#6f746e]">Subtotal</span>
             <strong className="tabular-nums">{money(bill.subtotal)}</strong>

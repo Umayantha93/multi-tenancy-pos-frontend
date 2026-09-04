@@ -8,7 +8,7 @@ import { PlatformShell } from "@/components/platform-shell";
 import { AddressField } from "@/components/address-field";
 import { ConfirmModal, ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
 import { api, mediaUrl, PhoneEntry, Tenant } from "@/lib/api";
-import { PAYMENT_PLAN_OPTIONS, PLAN_OPTIONS, profileFor } from "@/lib/business-profiles";
+import { PAYMENT_PLAN_OPTIONS, PLAN_OPTIONS, optionalFeaturesFor, profileFor } from "@/lib/business-profiles";
 import { groupModules } from "@/lib/feature-modules";
 
 type Feature = { id: number; key: string; name: string; group?: string | null };
@@ -23,7 +23,7 @@ type Detail = Tenant & {
   users: Array<{ id: number; name: string; email: string; role: string; status: string; is_secondary_view?: boolean }>;
   features: Feature[];
 };
-type FeatureResponse = { available: Feature[]; enabled: string[]; business_type?: string };
+type FeatureResponse = { available: Feature[]; enabled: string[]; optional?: string[]; business_type?: string };
 type FeePayment = {
   id: number;
   year: number;
@@ -679,7 +679,10 @@ export default function TenantDetailPage() {
           <Panel className="p-5">
             <p className="text-xs font-bold uppercase text-[#167c73]">{profile.label} feature plan</p>
             <h2 className="mt-1 font-display text-3xl font-semibold uppercase">Available modules</h2>
-            <p className="mt-2 text-sm text-[#6f746e]">Only modules that fit this business type are shown. Disabling one removes it from that business sidebar immediately.</p>
+            <p className="mt-2 text-sm text-[#6f746e]">
+              Only modules that fit this business type are shown. Disabling one removes it from that business sidebar immediately.
+              {tenant.business_type === "store" ? " Repair also unlocks the Repair tab on bill profits." : ""}
+            </p>
             <div className="mt-6 space-y-6">
               {groupModules(featureData.available).map(({ group, features }) => (
                 <div key={group}>
@@ -687,6 +690,7 @@ export default function TenantDetailPage() {
                   <div className="grid gap-2 sm:grid-cols-2">
                     {features.map((feature) => {
                       const active = enabled.includes(feature.key);
+                      const optional = (featureData.optional ?? optionalFeaturesFor(tenant.business_type)).includes(feature.key);
                       return (
                         <button
                           type="button"
@@ -694,7 +698,10 @@ export default function TenantDetailPage() {
                           onClick={() => setEnabled((value) => active ? value.filter((key) => key !== feature.key) : [...value, feature.key])}
                           className={`flex min-h-14 items-center justify-between border px-4 py-2 text-left text-sm font-semibold ${active ? "border-[#167c73] bg-[#167c73]/7" : "border-[#d7d3c8] text-[#6f746e]"}`}
                         >
-                          <span>{feature.name}</span>
+                          <span>
+                            {feature.name}
+                            {optional && <span className="ml-2 text-[10px] font-bold uppercase text-[#9a5b12]">Optional</span>}
+                          </span>
                           <span className={`grid size-6 place-items-center ${active ? "bg-[#167c73] text-white" : "bg-[#e7e4db]"}`}>
                             {active && <Check size={15} />}
                           </span>

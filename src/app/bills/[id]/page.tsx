@@ -8,9 +8,10 @@ import { EmployeePicker } from "@/components/employee-picker";
 import { LaborCatalogPicker, type LaborCategory } from "@/components/labor-catalog-picker";
 import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { api, formatDate, mediaUrl, money, storeSession, Tenant, User } from "@/lib/api";
-import { billItemLabel, billLinePresentation, PAINT_PANEL_NAMES, profileFor, sortBillItems, usesLaborCatalog, usesServiceAddonWorkspace, usesVehicleJobs } from "@/lib/business-profiles";
+import { billItemLabel, billLinePresentation, PAINT_PANEL_NAMES, profileFor, sortBillItems, usesLaborCatalog, usesServiceAddonWorkspace, usesStoreCounter, usesVehicleJobs } from "@/lib/business-profiles";
 import { billStamp, billStampDateLabel, latestPaymentAt } from "@/lib/bill-stamp";
 import { BillStatusSeal } from "@/components/bill-status-seal";
+import { BillWatermark } from "@/components/bill-watermark";
 
 type Part = { id: number; name: string; price: string; stock_qty: number; sku?: string | null; barcode?: string | null; brand?: string };
 type ComposerLabor = { key: string; laborItemId: string; name: string; hours: string; rate: number };
@@ -125,9 +126,11 @@ export default function BillDetailPage() {
   const profile = profileFor(tenant?.business_type);
   const isPaint = profile.type === "paint";
   const isGarage = profile.type === "garage";
+  const isStore = usesStoreCounter(profile.type);
   const itemTypes = profile.billItemTypes.filter((option) => {
     if (option.value === "charge") return false;
     if (isPaint && option.value === "part" && bill?.job_kind !== "parts_sale") return false;
+    if (isStore && option.value === "labor" && bill?.job_kind !== "repair") return false;
     return true;
   });
   const selectedType = itemTypes.find((option) => option.value === type) ?? itemTypes[0];
@@ -152,9 +155,9 @@ export default function BillDetailPage() {
     bill?.job_kind === "service"
       ? (isPaint ? "Package" : "Service")
       : bill?.job_kind === "parts_sale"
-        ? (isPaint ? "Counter sale" : "Instant")
+        ? (isPaint ? "Counter sale" : isStore ? "Sale" : "Instant")
         : (isPaint ? "Panel work" : "Repair");
-  const showJobKind = usesVehicleJobs(profile.type);
+  const showJobKind = usesVehicleJobs(profile.type) || isStore;
   const billItems = useMemo(() => sortBillItems(bill?.items ?? []), [bill?.items]);
   const chargeItems = useMemo(() => billItems.filter((item) => item.type !== "discount"), [billItems]);
   const chargeGroups = useMemo(() => {
@@ -894,6 +897,8 @@ export default function BillDetailPage() {
           />
         </label>
       </ConfirmModal>
+      <div className="bill-print-sheet">
+      <BillWatermark src={logoUrl} printOnly />
       <Panel className="bill-letterhead mb-5 overflow-hidden p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-4">
@@ -913,8 +918,8 @@ export default function BillDetailPage() {
               <p className="font-display text-3xl font-semibold uppercase leading-none">
                 {tenant?.business_name ?? "Business"}
               </p>
-              <p className="mt-2 text-sm text-[#6f746e]">{bill.bill_number}</p>
-              <div className="mt-3 space-y-1 text-sm">
+              <p className="mt-1 text-sm text-[#6f746e]">{bill.bill_number}</p>
+              <div className="mt-1.5 space-y-0.5 text-sm print:text-xs">
                 {tenant?.address && <p><span className="text-[#6f746e]">Address:</span> {tenant.address}</p>}
                 {tenant?.tin && <p><span className="text-[#6f746e]">TIN:</span> {tenant.tin}</p>}
                 {contactPhones.map((phone) => (
@@ -935,10 +940,10 @@ export default function BillDetailPage() {
         </div>
       </Panel>
 
-      <div className="grid items-start gap-5 xl:grid-cols-[1.55fr_0.75fr] print:block print:space-y-5">
-        <div className="space-y-5">
+      <div className="grid items-start gap-5 xl:grid-cols-[1.55fr_0.75fr] print:block print:space-y-2">
+        <div className="space-y-5 print:space-y-2">
           <Panel>
-            <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="bill-meta grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <p className="text-[10px] font-bold uppercase text-[#6f746e]">Customer</p>
                 <p className="mt-1 font-semibold">{bill.customer?.name ?? "Walk-in"}</p>
@@ -986,10 +991,12 @@ export default function BillDetailPage() {
               ) : (
                 <div className="sm:col-span-2">
                   <p className="text-[10px] font-bold uppercase text-[#6f746e]">
-                    {bill.job_kind === "parts_sale" ? "Instant bill" : "Type"}
+                    {isStore ? (bill.job_kind === "repair" ? "Repair" : "Sale") : bill.job_kind === "parts_sale" ? "Instant bill" : "Type"}
                   </p>
                   <p className="mt-1 font-semibold">
-                    {bill.job_kind === "parts_sale" ? "No vehicle · walk-in" : profile.label}
+                    {isStore
+                      ? (bill.notes || (bill.job_kind === "repair" ? "Repair job" : "Counter sale"))
+                      : (bill.job_kind === "parts_sale" ? "No vehicle · walk-in" : profile.label)}
                   </p>
                 </div>
               )}
@@ -1077,7 +1084,7 @@ export default function BillDetailPage() {
           )}
 
           <Panel>
-            <div className="border-b border-[#d7d3c8] px-5 py-4">
+            <div className="bill-section-head border-b border-[#d7d3c8] px-5 py-4">
               <h2 className="font-display text-2xl font-semibold uppercase">Bill items</h2>
             </div>
             <div className="overflow-x-auto print:overflow-visible">
@@ -1198,7 +1205,7 @@ export default function BillDetailPage() {
 
           {bill.payments.length > 0 && (
             <Panel>
-              <div className="border-b border-[#d7d3c8] px-5 py-4">
+              <div className="bill-section-head border-b border-[#d7d3c8] px-5 py-4">
                 <h2 className="font-display text-2xl font-semibold uppercase">Payments</h2>
               </div>
               <div className="divide-y divide-[#e2ded4]">
@@ -1223,7 +1230,7 @@ export default function BillDetailPage() {
           )}
         </div>
 
-        <div className="space-y-5 print:mt-5">
+        <div className="space-y-5 print:mt-2">
           {!isClosed && (
           <Panel className="no-print xl:sticky xl:top-4">
             {!isOweIn && (
@@ -1340,6 +1347,7 @@ export default function BillDetailPage() {
 
                 {isStockType ? (
                   <>
+                    {(!isStore || bill?.job_kind === "repair") ? (
                     <div className="grid gap-1.5 sm:grid-cols-2">
                       <label className="flex cursor-pointer items-center gap-2 border border-[#d7d3c8] bg-[#fbfaf6] px-2.5 py-2">
                         <input
@@ -1376,6 +1384,7 @@ export default function BillDetailPage() {
                         <span className="text-[10px] font-bold uppercase">Customer supplied</span>
                       </label>
                     </div>
+                    ) : null}
 
                     {useStockSearch ? (
                       <div key="stock-search" className="space-y-3">
@@ -1691,16 +1700,21 @@ export default function BillDetailPage() {
                 ) : (
                   <>
                     <label className="block text-xs font-bold uppercase">
-                      Description
-                      <input name="description" required className={`${inputClass} mt-2`} />
+                      {isStore && activeType === "labor" ? "Repair work" : "Description"}
+                      <input
+                        name="description"
+                        required
+                        className={`${inputClass} mt-2`}
+                        placeholder={isStore && activeType === "labor" ? "e.g. Screen replacement" : undefined}
+                      />
                     </label>
                     {showCost && (
                       <label className="block text-xs font-bold uppercase">
-                        Cost
+                        {isStore && activeType === "labor" ? "Amount" : "Cost"}
                         <input name="unit_price" type="number" min="0" step="0.01" required className={`${inputClass} mt-2`} />
                       </label>
                     )}
-                    {showQuantity && (
+                    {showQuantity && !(isStore && activeType === "labor") && (
                       <label className="block text-xs font-bold uppercase">
                         Quantity
                         <input name="quantity" type="number" min="1" step={selectedType?.allowQty && !isStockType ? "0.01" : "1"} defaultValue="1" required className={`${inputClass} mt-2`} />
@@ -1751,7 +1765,7 @@ export default function BillDetailPage() {
           </Panel>
           )}
 
-          <Panel className="p-5">
+          <Panel className="bill-summary p-5">
             <p className="text-xs font-bold uppercase text-[#6f746e]">Bill summary</p>
             <div className="mt-5 space-y-3 text-sm">
               <div className="flex justify-between gap-6"><span>Charges</span><strong className="tabular-nums">{money(bill.subtotal)}</strong></div>
@@ -1787,6 +1801,7 @@ export default function BillDetailPage() {
             </div>
           )}
         </div>
+      </div>
       </div>
     </AppShell>
   );

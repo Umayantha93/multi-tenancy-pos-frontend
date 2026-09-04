@@ -7,7 +7,7 @@ import { PlatformShell } from "@/components/platform-shell";
 import { AddressField } from "@/components/address-field";
 import { ErrorMessage, Panel, PasswordInput, buttonClass, inputClass } from "@/components/ui";
 import { api, BusinessType, Tenant } from "@/lib/api";
-import { BUSINESS_TYPE_OPTIONS, PAYMENT_PLAN_OPTIONS, PLAN_OPTIONS, defaultPlanFor, profileFor } from "@/lib/business-profiles";
+import { BUSINESS_TYPE_OPTIONS, PAYMENT_PLAN_OPTIONS, PLAN_OPTIONS, defaultPlanFor, optionalFeaturesFor, profileFor } from "@/lib/business-profiles";
 import { groupModules } from "@/lib/feature-modules";
 
 type PhoneRow = { label: string; number: string };
@@ -264,7 +264,10 @@ export default function NewTenantPage() {
         <Panel className="h-fit p-5">
           <p className="text-xs font-bold uppercase text-[#167c73]">{profile.label} plan</p>
           <h2 className="mt-2 font-display text-3xl font-semibold uppercase">Shape the plan</h2>
-          <p className="mt-2 text-sm text-[#6f746e]">Modules switch when you change business type — only what fits {profile.label.toLowerCase()}.</p>
+          <p className="mt-2 text-sm text-[#6f746e]">
+            Modules switch when you change business type — only what fits {profile.label.toLowerCase()}.
+            {businessType === "store" ? " Repair is off until you tick it; that also unlocks repair profit." : ""}
+          </p>
           <div className="mt-6 space-y-5">
             {groupModules(profile.moduleCatalog).map(({ group, features: modules }) => (
               <div key={group}>
@@ -272,6 +275,7 @@ export default function NewTenantPage() {
                 <div className="space-y-2">
                   {modules.map((module) => {
                     const enabled = features.includes(module.key);
+                    const optional = optionalFeaturesFor(businessType).includes(module.key);
                     return (
                       <button
                         type="button"
@@ -279,7 +283,10 @@ export default function NewTenantPage() {
                         onClick={() => setFeatures((value) => enabled ? value.filter((item) => item !== module.key) : [...value, module.key])}
                         className={`flex h-12 w-full items-center justify-between border px-3 text-left text-sm font-semibold ${enabled ? "border-[#167c73] bg-[#167c73]/7" : "border-[#d7d3c8] text-[#6f746e]"}`}
                       >
-                        <span>{module.name}</span>
+                        <span>
+                          {module.name}
+                          {optional && <span className="ml-2 text-[10px] font-bold uppercase text-[#9a5b12]">Optional</span>}
+                        </span>
                         <span className={`grid size-6 place-items-center ${enabled ? "bg-[#167c73] text-white" : "bg-[#e7e4db]"}`}>
                           {enabled && <Check size={15} />}
                         </span>
