@@ -6,6 +6,7 @@ import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, PageState, Panel, SuccessMessage } from "@/components/ui";
 import { API_URL, api, currentFeatures, currentUser, mediaUrl, money } from "@/lib/api";
 import { useBusinessProfile } from "@/lib/use-business-profile";
+import { usesStoreCounter } from "@/lib/business-profiles";
 
 type Part = {
   id: number;
@@ -51,7 +52,9 @@ export default function PartsPage() {
   const [importPayment, setImportPayment] = useState("paid");
   const [importDue, setImportDue] = useState("");
   const importInputRef = useRef<HTMLInputElement>(null);
-  const isPaint = useBusinessProfile().type === "paint";
+  const profile = useBusinessProfile();
+  const isPaint = profile.type === "paint";
+  const isStore = usesStoreCounter(profile.type);
   const stockUnit = isPaint ? "ml" : "units";
   const lowStockAt = isPaint ? 250 : 5;
 
@@ -215,7 +218,7 @@ export default function PartsPage() {
 
   return (
     <AppShell
-      title={isPaint ? "Color stock" : "Parts inventory"}
+      title={isPaint ? "Color stock" : isStore ? "Stock" : "Parts inventory"}
       eyebrow={`${parts.length} catalog items${isPaint ? " · millilitres" : ""}`}
       action={admin ? (
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -246,7 +249,7 @@ export default function PartsPage() {
             }}
           />
           <button onClick={openAdd} className="flex h-10 items-center gap-2 bg-[#f5c842] px-3 text-sm font-semibold">
-            <Plus size={18} /><span className="hidden sm:inline">{isPaint ? "Add colour" : "Add part"}</span>
+            <Plus size={18} /><span className="hidden sm:inline">{isPaint ? "Add colour" : isStore ? "Add item" : "Add part"}</span>
           </button>
         </div>
       ) : undefined}
@@ -269,7 +272,7 @@ export default function PartsPage() {
       {notice && <div className="mb-5"><SuccessMessage message={notice} /></div>}
 
       {parts.length === 0 && !error ? (
-        <PageState message="No parts in the catalog yet." />
+        <PageState message={isStore ? "No stock in the catalog yet." : "No parts in the catalog yet."} />
       ) : (
         <div className="grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {parts.map((part) => {
@@ -335,18 +338,18 @@ export default function PartsPage() {
             className="my-8 w-full max-w-2xl bg-[#f3f0e8]"
           >
             <div className="flex items-center justify-between border-b border-[#d7d3c8] p-5">
-              <h2 className="font-display text-3xl font-semibold uppercase">{mode === "edit" ? (isPaint ? "Edit colour" : "Edit part") : (isPaint ? "Add colour / material" : "Add inventory part")}</h2>
+              <h2 className="font-display text-3xl font-semibold uppercase">{mode === "edit" ? (isPaint ? "Edit colour" : isStore ? "Edit item" : "Edit part") : (isPaint ? "Add colour / material" : isStore ? "Add stock item" : "Add inventory part")}</h2>
               <button type="button" onClick={() => setMode(null)} aria-label="Close"><X /></button>
             </div>
             <div className="grid gap-4 p-5 sm:grid-cols-2">
               {[
-                ["name", isPaint ? "Colour / product name" : "Part name", selected?.name ?? ""],
+                ["name", isPaint ? "Colour / product name" : isStore ? "Item name" : "Part name", selected?.name ?? ""],
                 ["sku", isPaint ? "Paint / formula code" : "SKU", selected?.sku ?? ""],
                 ["barcode", "Barcode", selected?.barcode ?? ""],
                 ["brand", isPaint ? "Paint system brand" : "Brand", selected?.brand ?? ""],
-                ["type", isPaint ? "Class" : "Category", selected?.type ?? ""],
-                ["model", isPaint ? "Vehicle fitment (optional)" : "Compatible model", selected?.model ?? ""],
-                ["year", "Compatible year", selected?.year ? String(selected.year) : ""],
+                ["type", isPaint ? "Class" : isStore ? "Category" : "Category", selected?.type ?? ""],
+                ["model", isPaint ? "Vehicle fitment (optional)" : isStore ? "Model" : "Compatible model", selected?.model ?? ""],
+                ["year", isStore ? "Year" : "Compatible year", selected?.year ? String(selected.year) : ""],
                 ["price", isPaint ? "Selling price per ml" : "Selling price", selected?.price ?? ""],
                 ["cost_price", isPaint ? "Cost per ml" : "Cost price", selected?.cost_price ?? ""],
               ].map(([name, label, value]) => (
@@ -403,7 +406,7 @@ export default function PartsPage() {
               ) : null}
             </div>
             <div className="flex justify-end border-t border-[#d7d3c8] p-5">
-              <button className={buttonClass}>{mode === "edit" ? "Save changes" : "Save part"}</button>
+              <button className={buttonClass}>{mode === "edit" ? "Save changes" : isStore ? "Save item" : "Save part"}</button>
             </div>
           </form>
         </div>

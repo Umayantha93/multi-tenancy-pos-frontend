@@ -28,6 +28,7 @@ export type FeatureKey =
   | "billing"
   | "bill_sms"
   | "bill_profits"
+  | "repair_bills"
   | "payroll"
   | "balance_sheet"
   | "parts_inventory"
@@ -42,7 +43,7 @@ export type FeatureKey =
   | "cottage_stays"
   | "suppliers";
 
-export type BusinessType = "garage" | "tyre" | "device_repair" | "paint" | "photography" | "clothing" | "salon" | "cottage";
+export type BusinessType = "garage" | "tyre" | "device_repair" | "paint" | "photography" | "clothing" | "salon" | "cottage" | "store";
 
 export type PhoneEntry = { label?: string; number: string };
 

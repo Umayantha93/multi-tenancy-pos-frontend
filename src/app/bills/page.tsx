@@ -6,7 +6,7 @@ import { ArrowRight, ClipboardPlus, Hammer, Search, Wrench, X } from "lucide-rea
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, inputClass } from "@/components/ui";
 import { api, currentUser, formatDate, money } from "@/lib/api";
-import { usesLaborCatalog, usesServiceAddonWorkspace } from "@/lib/business-profiles";
+import { usesLaborCatalog, usesServiceAddonWorkspace, usesStoreCounter } from "@/lib/business-profiles";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 import { billStatusClass, billStatusLabel, isOweInUrgent } from "@/lib/bill-stamp";
 
@@ -19,6 +19,7 @@ type Bill = {
   subtotal: string;
   balance_due: string;
   owe_in_due_date?: string | null;
+  notes?: string | null;
   customer: { name: string; phone: string } | null;
   vehicle: { number_plate: string; make?: string; model?: string } | null;
 };
@@ -52,6 +53,7 @@ export default function BillsPage() {
         search,
         per_page: "50",
       });
+      if (usesStoreCounter(profile.type)) params.set("job_kind", "parts_sale");
       if (dateFrom) params.set("date_from", dateFrom);
       if (dateTo) params.set("date_to", dateTo);
 
@@ -61,7 +63,7 @@ export default function BillsPage() {
         .finally(() => setLoading(false));
     }, 250);
     return () => clearTimeout(timer);
-  }, [search, dateFrom, dateTo, rangeInvalid]);
+  }, [search, dateFrom, dateTo, rangeInvalid, profile.type]);
 
   function clearDates() {
     setDateFrom("");
@@ -170,20 +172,22 @@ export default function BillsPage() {
                     <td className="px-5 py-4 font-semibold">{bill.bill_number}</td>
                     <td>{formatDate(bill.admission_date)}</td>
                     <td>
-                      {profile.type === "garage" || profile.type === "paint" ? (
+                      {profile.type === "garage" || profile.type === "paint" || usesStoreCounter(profile.type) ? (
                         <span className="px-2 py-1 text-[10px] font-bold uppercase bg-[#eeece5] text-[#6f746e]">
-                          {bill.job_kind === "service"
-                            ? (profile.type === "paint" ? "Package" : "Service")
-                            : bill.job_kind === "parts_sale"
-                              ? (profile.type === "paint" ? "Counter" : "Instant")
-                              : bill.job_kind === "repair" || !bill.job_kind
-                                ? (profile.type === "paint" ? "Panel" : "Repair")
-                                : bill.job_kind}
+                          {usesStoreCounter(profile.type)
+                            ? "Sale"
+                            : bill.job_kind === "service"
+                              ? (profile.type === "paint" ? "Package" : "Service")
+                              : bill.job_kind === "parts_sale"
+                                ? (profile.type === "paint" ? "Counter" : "Instant")
+                                : bill.job_kind === "repair" || !bill.job_kind
+                                  ? (profile.type === "paint" ? "Panel" : "Repair")
+                                  : bill.job_kind}
                         </span>
                       ) : "—"}
                     </td>
                     <td>{bill.customer?.name ?? "Walk-in"}</td>
-                    <td>{bill.vehicle?.number_plate ?? "—"}</td>
+                    <td>{usesStoreCounter(profile.type) ? (bill.notes || "—") : (bill.vehicle?.number_plate ?? "—")}</td>
                     <td>
                       <span className={`px-2 py-1 text-[10px] font-bold uppercase ${billStatusClass(bill.status, bill.owe_in_due_date)}`}>
                         {billStatusLabel(bill.status)}

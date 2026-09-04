@@ -19,6 +19,7 @@ import {
   Target,
   Truck,
   UserRound,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 
@@ -268,6 +269,50 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { value: "discount", label: "Discount", kind: "discount" },
     ],
   },
+  store: {
+    type: "store",
+    label: "Stores",
+    operationsLabel: "Store operations",
+    billingLabel: "Sales",
+    billingSingular: "Sale",
+    openBillsLabel: "Open sales",
+    recentBillsTitle: "Latest sales",
+    recentBillsHint: "Counter receipts and balances due",
+    primaryCta: { href: "/pos", label: "New sale", feature: "billing" },
+    quickActions: [
+      { href: "/pos", label: "New sale", feature: "billing" },
+      { href: "/repairs/new", label: "New repair", feature: "repair_bills" },
+      { href: "/parts", label: "Find stock", feature: "parts_inventory" },
+      { href: "/bills", label: "Take payment", feature: "billing" },
+      { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
+    ],
+    defaultFeatures: [
+      "parts_inventory", "suppliers", "customers", "billing", "bill_sms", "bill_profits",
+      "employees_management", "attendance", "payroll", "balance_sheet", "reports",
+    ],
+    moduleCatalog: [
+      { key: "billing", name: "Sales", group: "Service Intake" },
+      { key: "repair_bills", name: "Repair", group: "Service Intake" },
+      { key: "parts_inventory", name: "Stock", group: "Inventory" },
+      { key: "suppliers", name: "Suppliers", group: "Inventory" },
+      ...sharedPeopleFinance.filter((m) => m.key !== "billing"),
+    ],
+    navigation: [
+      { href: "/dashboard", label: "Overview", icon: Gauge },
+      { href: "/pos", label: "New sale", icon: ShoppingBag, feature: "billing" },
+      { href: "/bills", label: "Sales", icon: ReceiptText, feature: "billing" },
+      { href: "/repairs", label: "Repair bills", icon: Wrench, feature: "repair_bills" },
+      billProfitsNav,
+      { href: "/parts", label: "Stock", icon: Boxes, feature: "parts_inventory" },
+      suppliersNav,
+      ...sharedNavTail,
+    ],
+    billItemTypes: [
+      { value: "part", label: "Item", kind: "stock", allowQty: true },
+      { value: "labor", label: "Repair", kind: "charge" },
+      { value: "discount", label: "Discount", kind: "discount" },
+    ],
+  },
   cottage: {
     type: "cottage",
     label: "Cottages",
@@ -446,6 +491,7 @@ export const BUSINESS_TYPE_OPTIONS: Array<{ value: BusinessType; label: string }
   { value: "paint", label: "Paint shops" },
   { value: "photography", label: "Studios" },
   { value: "clothing", label: "Garments" },
+  { value: "store", label: "Stores" },
   { value: "salon", label: "Salons" },
   { value: "cottage", label: "Cottages" },
 ];
@@ -456,6 +502,7 @@ export const PLAN_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "paint-pro", label: "Paint Pro" },
   { value: "studio-pro", label: "Studio Pro" },
   { value: "retail-pro", label: "Retail Pro" },
+  { value: "store-pro", label: "Store Pro" },
   { value: "stay-pro", label: "Stay Pro" },
   { value: "salon-pro", label: "Salon Pro" },
   { value: "repair-pro", label: "Repair Pro" },
@@ -479,6 +526,8 @@ function matchPlan(type: BusinessType): string {
       return "studio-pro";
     case "clothing":
       return "retail-pro";
+    case "store":
+      return "store-pro";
     case "cottage":
       return "stay-pro";
     case "salon":
@@ -502,6 +551,14 @@ export function usesLaborCatalog(type?: string | null): boolean {
 
 export function usesServiceAddonWorkspace(type?: string | null): boolean {
   return type === "garage" || type === "paint";
+}
+
+export function usesStoreCounter(type?: string | null): boolean {
+  return type === "store";
+}
+
+export function optionalFeaturesFor(type?: string | null): FeatureKey[] {
+  return type === "store" ? ["repair_bills"] : [];
 }
 
 export function profileFor(type?: string | null): BusinessProfile {

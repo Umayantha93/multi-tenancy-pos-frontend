@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
-import { api, currentUser, formatDate, money } from "@/lib/api";
+import { api, currentFeatures, currentUser, formatDate, money } from "@/lib/api";
 import { billStatusClass, billStatusLabel } from "@/lib/bill-stamp";
 
 type JobKindFilter = "service" | "repair" | "parts_sale" | null;
@@ -81,6 +81,8 @@ function daysAgo(days: number) {
 export default function BillProfitsPage() {
   const [isGarage, setIsGarage] = useState(false);
   const [isPaint, setIsPaint] = useState(false);
+  const [isStore, setIsStore] = useState(false);
+  const [hasRepair, setHasRepair] = useState(false);
   const [dateFrom, setDateFrom] = useState(() => daysAgo(29));
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [jobKind, setJobKind] = useState<JobKindFilter>(null);
@@ -91,6 +93,8 @@ export default function BillProfitsPage() {
   const [detailBusy, setDetailBusy] = useState(false);
   const rangeInvalid = Boolean(dateFrom && dateTo && dateFrom > dateTo);
 
+  const effectiveKind = jobKind ?? (isStore && !hasRepair ? "parts_sale" : null);
+
   const load = useCallback(() => {
     if (rangeInvalid) {
       setError("From date must be on or before To date.");
@@ -100,18 +104,20 @@ export default function BillProfitsPage() {
     setLoading(true);
     setError("");
     const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, per_page: "50" });
-    if (jobKind) params.set("job_kind", jobKind);
+    if (effectiveKind) params.set("job_kind", effectiveKind);
     api<Report>(`/bill-profits?${params}`)
       .then(setReport)
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load bill profits."))
       .finally(() => setLoading(false));
-  }, [dateFrom, dateTo, jobKind, rangeInvalid]);
+  }, [dateFrom, dateTo, effectiveKind, rangeInvalid]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     const type = currentUser()?.tenant?.business_type;
     setIsGarage(type === "garage" || type === "tyre" || type === "device_repair" || type === "paint");
     setIsPaint(type === "paint");
+    setIsStore(type === "store");
+    setHasRepair(currentFeatures().includes("repair_bills"));
   }, []);
 
   function toggleKind(kind: "service" | "repair" | "parts_sale") {
@@ -137,7 +143,7 @@ export default function BillProfitsPage() {
 
   const summary = useMemo(() => {
     if (!report) return null;
-    if (jobKind === "service") {
+    if (effectiveKind === "service") {
       return {
         title: isPaint ? "Packages" : "Service",
         revenue: report.service_revenue,
@@ -147,7 +153,7 @@ export default function BillProfitsPage() {
         count: report.service_count,
       };
     }
-    if (jobKind === "repair") {
+    if (effectiveKind === "repair") {
       return {
         title: isPaint ? "Panel work" : "Repair",
         revenue: report.repair_revenue,
@@ -157,9 +163,9 @@ export default function BillProfitsPage() {
         count: report.repair_count,
       };
     }
-    if (jobKind === "parts_sale") {
+    if (effectiveKind === "parts_sale") {
       return {
-        title: isPaint ? "Counter sales" : "Instant bills",
+        title: isPaint ? "Counter sales" : isStore ? "Sales" : "Instant bills",
         revenue: report.parts_sale_revenue,
         cogs: report.parts_sale_cogs,
         profit: report.parts_sale_gross_profit,
@@ -175,7 +181,7 @@ export default function BillProfitsPage() {
       margin: report.margin,
       count: report.service_count + report.repair_count + (report.parts_sale_count || 0),
     };
-  }, [jobKind, report, isPaint]);
+  }, [effectiveKind, report, isPaint, isStore]);
 
   const kindButton = (kind: "service" | "repair" | "parts_sale", label: string) => {
     const selected = jobKind === kind;
@@ -213,6 +219,12 @@ export default function BillProfitsPage() {
             {kindButton("parts_sale", isPaint ? "Counter sales" : "Instant bills")}
           </div>
         )}
+        {isStore && hasRepair && (
+          <div className="flex flex-wrap gap-2">
+            {kindButton("parts_sale", "Sales")}
+            {kindButton("repair", "Repair")}
+          </div>
+        )}
       </div>
 
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
@@ -220,7 +232,7 @@ export default function BillProfitsPage() {
         <>
           <p className="mb-3 text-xs font-bold uppercase text-[#6f746e]">
             {periodLabel}
-            {jobKind === "service" ? (isPaint ? " · Package jobs" : " · Service bills") : jobKind === "repair" ? (isPaint ? " · Panel jobs" : " · Repair bills") : jobKind === "parts_sale" ? (isPaint ? " · Counter sales" : " · Instant bills") : ""}
+            {effectiveKind === "service" ? (isPaint ? " · Package jobs" : " · Service bills") : effectiveKind === "repair" ? (isPaint ? " · Panel jobs" : " · Repair bills") : effectiveKind === "parts_sale" ? (isPaint ? " · Counter sales" : isStore ? " · Sales" : " · Instant bills") : ""}
           </p>
           <div className="grid gap-3 sm:grid-cols-3">
             <Panel className="p-5">
@@ -268,7 +280,7 @@ export default function BillProfitsPage() {
           <Panel className="mt-5 overflow-hidden">
             <div className="border-b border-[#d7d3c8] px-5 py-4">
               <h2 className="font-display text-2xl font-semibold uppercase">
-                {jobKind === "service" ? (isPaint ? "Package jobs" : "Service bills") : jobKind === "repair" ? (isPaint ? "Panel jobs" : "Repair bills") : jobKind === "parts_sale" ? (isPaint ? "Counter sales" : "Instant bills") : "Bills"}
+                {effectiveKind === "service" ? (isPaint ? "Package jobs" : "Service bills") : effectiveKind === "repair" ? (isPaint ? "Panel jobs" : "Repair bills") : effectiveKind === "parts_sale" ? (isPaint ? "Counter sales" : isStore ? "Sales" : "Instant bills") : "Bills"}
               </h2>
             </div>
             <div className="overflow-x-auto">
@@ -278,6 +290,7 @@ export default function BillProfitsPage() {
                     <th className="px-5 py-3">Bill</th>
                     <th>Date</th>
                     {isGarage && <th>Type</th>}
+                    {isStore && hasRepair && <th>Type</th>}
                     <th>Customer</th>
                     <th>Payment</th>
                     <th>Billing type</th>
@@ -300,6 +313,9 @@ export default function BillProfitsPage() {
                               ? (isPaint ? "Counter" : "Instant")
                               : (isPaint ? "Panel" : "Repair")}
                         </td>
+                      )}
+                      {isStore && hasRepair && (
+                        <td className="capitalize">{bill.job_kind === "repair" ? "Repair" : "Sale"}</td>
                       )}
                       <td>{bill.customer?.name ?? "Walk-in"}</td>
                       <td>
