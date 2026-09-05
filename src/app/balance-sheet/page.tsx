@@ -5,6 +5,7 @@ import { Minus, Plus, TrendingUp, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, Panel } from "@/components/ui";
 import { api, currentUser, formatDate, money } from "@/lib/api";
+import { ShopFilter } from "@/components/branch-chip";
 
 type AccountRow = {
   date: string;
@@ -57,6 +58,7 @@ export default function BalanceSheetPage() {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
+  const [shopFilter, setShopFilter] = useState("");
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [error, setError] = useState("");
   const [category, setCategory] = useState("rent");
@@ -70,8 +72,10 @@ export default function BalanceSheetPage() {
   const businessName = currentUser()?.tenant?.business_name ?? "Business";
 
   const load = useCallback(() => {
-    api<Sheet>(`/balance-sheet?month=${month}&year=${year}`).then(setSheet).catch((caught) => setError(caught.message));
-  }, [month, year]);
+    const params = new URLSearchParams({ month: String(month), year: String(year) });
+    if (shopFilter) params.set("branch_id", shopFilter);
+    api<Sheet>(`/balance-sheet?${params}`).then(setSheet).catch((caught) => setError(caught.message));
+  }, [month, year, shopFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -180,6 +184,7 @@ export default function BalanceSheetPage() {
           Year
           <input value={year} onChange={(event) => setYear(Number(event.target.value))} className={`${inputClass} mt-2 w-28`} type="number" />
         </label>
+        <ShopFilter value={shopFilter} onChange={setShopFilter} />
         <button onClick={load} className={buttonClass}>Apply period</button>
       </div>
 

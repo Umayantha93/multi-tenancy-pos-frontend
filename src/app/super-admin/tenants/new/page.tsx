@@ -266,7 +266,7 @@ export default function NewTenantPage() {
           <h2 className="mt-2 font-display text-3xl font-semibold uppercase">Shape the plan</h2>
           <p className="mt-2 text-sm text-[#6f746e]">
             Modules switch when you change business type — only what fits {profile.label.toLowerCase()}.
-            {businessType === "store" ? " Repair is off until you tick it; that also unlocks repair profit." : ""}
+            {businessType === "store" ? " Repair and Warranties stay off until you tick them." : ""}
           </p>
           <div className="mt-6 space-y-5">
             {groupModules(profile.moduleCatalog).map(({ group, features: modules }) => (

@@ -7,7 +7,7 @@ import { Check, Plus, Power, Trash2, Users } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
 import { AddressField } from "@/components/address-field";
 import { ConfirmModal, ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
-import { api, mediaUrl, PhoneEntry, Tenant } from "@/lib/api";
+import { api, Branch, mediaUrl, PhoneEntry, Tenant } from "@/lib/api";
 import { PAYMENT_PLAN_OPTIONS, PLAN_OPTIONS, optionalFeaturesFor, profileFor } from "@/lib/business-profiles";
 import { groupModules } from "@/lib/feature-modules";
 
@@ -78,19 +78,23 @@ export default function TenantDetailPage() {
   const [feePayments, setFeePayments] = useState<FeePayment[]>([]);
   const [currentMonthPaid, setCurrentMonthPaid] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [branchSaving, setBranchSaving] = useState(false);
 
   function load() {
     Promise.all([
       api<Detail>(`/super-admin/tenants/${id}`),
       api<FeatureResponse>(`/super-admin/tenants/${id}/features`),
       api<FeePaymentsResponse>(`/super-admin/tenants/${id}/fee-payments`),
+      api<Branch[]>(`/super-admin/tenants/${id}/branches`),
     ])
-      .then(([detail, features, fees]) => {
+      .then(([detail, features, fees, shopList]) => {
         setTenant(detail);
         setFeatureData(features);
         setEnabled(features.enabled);
         setFeePayments(fees.payments);
         setCurrentMonthPaid(fees.current_month_paid);
+        setBranches(shopList);
         const phones = detail.contact_phones?.length
           ? detail.contact_phones
           : [{ label: "Business", number: detail.contact_phone || detail.owner_phone || "" }];
@@ -444,6 +448,65 @@ export default function TenantDetailPage() {
             </Panel>
 
             <Panel className="p-5">
+              <h2 className="font-display text-2xl font-semibold uppercase">Shops / branches</h2>
+              <p className="mt-2 text-sm text-[#6f746e]">You create shops. The owner can rename them. Stock and bills stay separate per shop.</p>
+              <div className="mt-4 divide-y divide-[#e2ded4] border border-[#d7d3c8]">
+                {branches.map((branch) => (
+                  <div key={branch.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                    <div>
+                      <strong>{branch.name}</strong>
+                      <span className="ml-2 text-xs text-[#6f746e]">{branch.code}{branch.is_default ? " · default" : ""}{branch.status === "inactive" ? " · inactive" : ""}</span>
+                    </div>
+                    {!branch.is_default && (
+                      <button
+                        type="button"
+                        className="text-xs font-semibold uppercase text-[#6b1e2a]"
+                        onClick={async () => {
+                          try {
+                            const path = branch.status === "inactive" ? "activate" : "deactivate";
+                            const updated = await api<Branch>(`/super-admin/tenants/${id}/branches/${branch.id}/${path}`, { method: "POST" });
+                            setBranches((current) => current.map((item) => item.id === updated.id ? updated : item));
+                          } catch (caught) {
+                            setError(caught instanceof Error ? caught.message : "Unable to update shop.");
+                          }
+                        }}
+                      >
+                        {branch.status === "inactive" ? "Activate" : "Deactivate"}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <form
+                className="mt-4 space-y-2"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  const form = event.currentTarget;
+                  const data = Object.fromEntries(new FormData(form));
+                  setBranchSaving(true);
+                  setError("");
+                  try {
+                    const created = await api<Branch>(`/super-admin/tenants/${id}/branches`, {
+                      method: "POST",
+                      body: JSON.stringify({ name: data.name, address: data.address || null }),
+                    });
+                    setBranches((current) => [...current, created]);
+                    form.reset();
+                    setNotice(`Shop ${created.name} created. Stock starts at zero — transfer from Main.`);
+                  } catch (caught) {
+                    setError(caught instanceof Error ? caught.message : "Unable to add shop.");
+                  } finally {
+                    setBranchSaving(false);
+                  }
+                }}
+              >
+                <input required name="name" placeholder="Shop name" className={inputClass} />
+                <input name="address" placeholder="Address (optional)" className={inputClass} />
+                <button disabled={branchSaving} className={`${buttonClass} w-full`}><Plus size={16} />{branchSaving ? "Adding..." : "Add branch"}</button>
+              </form>
+            </Panel>
+
+            <Panel className="p-5">
               <h2 className="font-display text-2xl font-semibold uppercase">Monthly fee payments</h2>
               <p className="mt-2 text-sm text-[#6f746e]">
                 Track SaaS fee collection for this business. Mark the current month paid after payment is received.
@@ -681,7 +744,7 @@ export default function TenantDetailPage() {
             <h2 className="mt-1 font-display text-3xl font-semibold uppercase">Available modules</h2>
             <p className="mt-2 text-sm text-[#6f746e]">
               Only modules that fit this business type are shown. Disabling one removes it from that business sidebar immediately.
-              {tenant.business_type === "store" ? " Repair also unlocks the Repair tab on bill profits." : ""}
+              {tenant.business_type === "store" ? " Repair and Warranties are optional modules." : ""}
             </p>
             <div className="mt-6 space-y-6">
               {groupModules(featureData.available).map(({ group, features }) => (

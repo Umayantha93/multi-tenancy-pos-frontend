@@ -8,6 +8,7 @@ import { ErrorMessage, PageState, Panel, inputClass } from "@/components/ui";
 import { api, formatDate, money } from "@/lib/api";
 import { billStatusClass, billStatusLabel } from "@/lib/bill-stamp";
 import { useBusinessProfile } from "@/lib/use-business-profile";
+import { ShopFilter } from "@/components/branch-chip";
 
 type EmployeeOption = { id: number; name: string; position?: string | null };
 type EmployeeJob = {
@@ -75,6 +76,7 @@ export default function ReportsPage() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [employeeId, setEmployeeId] = useState("");
+  const [shopFilter, setShopFilter] = useState("");
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState("");
   const isPaint = useBusinessProfile().type === "paint";
@@ -83,8 +85,9 @@ export default function ReportsPage() {
     const range = period === "year" ? yearBounds(year) : monthBounds(month, year);
     const params = new URLSearchParams({ from: range.from, to: range.to });
     if (employeeId) params.set("employee_id", employeeId);
+    if (shopFilter) params.set("branch_id", shopFilter);
     api<Report>(`/reports?${params}`).then(setReport).catch((caught) => setError(caught.message));
-  }, [period, month, year, employeeId]);
+  }, [period, month, year, employeeId, shopFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -121,6 +124,7 @@ export default function ReportsPage() {
             ))}
           </select>
         </label>
+        <ShopFilter value={shopFilter} onChange={setShopFilter} />
       </form>
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
       {!report && !error ? <PageState message="Loading reports..." /> : report && (

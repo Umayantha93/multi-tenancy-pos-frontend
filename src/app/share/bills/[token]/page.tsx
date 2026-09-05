@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { Download } from "lucide-react";
 import { API_URL, formatDate, mediaUrl, money, PhoneEntry, Tenant } from "@/lib/api";
 import { billLinePresentation, sortBillItems } from "@/lib/business-profiles";
+import { warrantyLabel } from "@/lib/warranty";
 import { billStamp, billStampDateLabel, latestPaymentAt } from "@/lib/bill-stamp";
 import { BillStatusSeal } from "@/components/bill-status-seal";
 import { BillWatermark } from "@/components/bill-watermark";
@@ -36,9 +37,14 @@ type SharedBill = {
     unit_price: string | number | null;
     line_total: string;
     hide_hours?: boolean;
+    warranty_months?: number | null;
+    warranty_starts_on?: string | null;
+    warranty_until?: string | null;
   }>;
   payments: Array<{ id: number; amount: string; method: string; paid_at: string }>;
   tenant: Tenant | null;
+  branch?: { id: number; name: string; address?: string | null } | null;
+  show_shop?: boolean;
 };
 
 function documentCopy(stamp: ReturnType<typeof billStamp>) {
@@ -171,10 +177,13 @@ export default function SharedBillPage() {
                 <p className="font-display text-3xl font-semibold uppercase leading-none">
                   {bill.tenant?.business_name ?? "Business"}
                 </p>
+                {bill.show_shop && bill.branch?.name && (
+                  <p className="mt-1 text-sm font-semibold uppercase tracking-wide text-[#167c73]">{bill.branch.name}</p>
+                )}
                 <p className="mt-1 text-sm text-[#6f746e]">{bill.bill_number}</p>
                 <p className="mt-1 text-sm text-[#6f746e]">Date: {formatDate(bill.admission_date)}</p>
                 <div className="mt-1.5 space-y-0.5 text-sm print:text-xs">
-                  {bill.tenant?.address && <p>{bill.tenant.address}</p>}
+                  {(bill.branch?.address || bill.tenant?.address) && <p>{bill.branch?.address || bill.tenant?.address}</p>}
                   {bill.tenant?.tin && <p>TIN: {bill.tenant.tin}</p>}
                   {contactPhones.map((phone) => (
                     <p key={phone}>{phone}</p>
@@ -226,10 +235,12 @@ export default function SharedBillPage() {
               {chargeItems.map((item) => {
                 const { title, inclusions } = billLinePresentation(item);
                 const hideHours = Boolean(item.hide_hours);
+                const warranty = warrantyLabel(item.warranty_months, item.warranty_until, item.warranty_starts_on);
                 return (
                 <tr key={item.id} className="border-b border-[#f0ece3] align-top">
                   <td className="px-5 py-3">
                     <p className="font-semibold">{title}</p>
+                    {warranty && <p className="mt-1 text-[11px] font-semibold uppercase text-[#167c73]">{warranty}</p>}
                     {inclusions.length > 0 && (
                       <ul className="mt-1.5 space-y-0.5 text-xs text-[#6f746e]">
                         {inclusions.map((name) => (

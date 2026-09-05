@@ -4,8 +4,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { LogOut, Menu, Store, X } from "lucide-react";
-import { api, clearSession, currentFeatures, currentUser, mediaUrl, money, storeSession, User } from "@/lib/api";
+import { api, clearSession, currentFeatures, currentUser, mediaUrl, money, SessionPayload, storeSession, User } from "@/lib/api";
 import { profileFor } from "@/lib/business-profiles";
+import { BranchChip } from "@/components/branch-chip";
 
 export function AppShell({ children, title, eyebrow, action }: { children: ReactNode; title: string; eyebrow?: string; action?: ReactNode }) {
   const pathname = usePathname();
@@ -32,10 +33,13 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
     setUser(sessionUser);
     setFeatures(currentFeatures());
 
-    api<{ user: User; features: string[] }>("/user")
+    api<SessionPayload>("/user")
       .then((result) => {
         const token = localStorage.getItem("garage_token");
-        if (token) storeSession(token, result.user, result.features);
+        if (token) storeSession(token, result.user, result.features, {
+          branches: result.branches,
+          active_branch: result.active_branch,
+        });
         setUser(result.user);
         setFeatures(result.features);
       })
@@ -123,7 +127,10 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
             <button onClick={() => setOpen(true)} className="grid size-10 place-items-center border border-[#d7d3c8] lg:hidden" aria-label="Open navigation"><Menu size={20} /></button>
             <div className="min-w-0">{eyebrow && <p className="text-[10px] font-bold uppercase text-[#167c73]">{eyebrow}</p>}<h1 className="font-display text-3xl font-semibold uppercase leading-none sm:text-4xl">{title}</h1></div>
           </div>
-          {action ? <div className="flex shrink-0 items-center gap-2">{action}</div> : null}
+          <div className="flex shrink-0 items-center gap-2">
+            <BranchChip />
+            {action}
+          </div>
         </header>
         <div className="page-enter p-4 sm:p-7">{children}</div>
       </main>

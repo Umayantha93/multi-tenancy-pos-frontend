@@ -2,16 +2,19 @@
 
 import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { ChevronDown, CreditCard, Lock, MessageSquare, Plus, Printer, Trash2 } from "lucide-react";
+import { ChevronDown, CreditCard, Lock, MessageSquare, Plus, Printer, ShieldCheck, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { EmployeePicker } from "@/components/employee-picker";
 import { LaborCatalogPicker, type LaborCategory } from "@/components/labor-catalog-picker";
 import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
-import { api, formatDate, mediaUrl, money, storeSession, Tenant, User } from "@/lib/api";
+import { api, formatDate, isMultiBranch, mediaUrl, money, SessionPayload, storeSession, Tenant } from "@/lib/api";
 import { billItemLabel, billLinePresentation, PAINT_PANEL_NAMES, profileFor, sortBillItems, usesLaborCatalog, usesServiceAddonWorkspace, usesStoreCounter, usesVehicleJobs } from "@/lib/business-profiles";
+import { warrantyLabel } from "@/lib/warranty";
 import { billStamp, billStampDateLabel, latestPaymentAt } from "@/lib/bill-stamp";
 import { BillStatusSeal } from "@/components/bill-status-seal";
 import { BillWatermark } from "@/components/bill-watermark";
+import { BillingBranchBanner } from "@/components/branch-chip";
+import { WarrantyFields, warrantyFromForm } from "@/components/warranty-fields";
 
 type Part = { id: number; name: string; price: string; stock_qty: number; sku?: string | null; barcode?: string | null; brand?: string };
 type ComposerLabor = { key: string; laborItemId: string; name: string; hours: string; rate: number };
@@ -29,6 +32,7 @@ type Bill = {
   bill_number: string;
   share_token?: string | null;
   status: string;
+  admission_date?: string | null;
   job_kind?: string | null;
   owe_in_due_date?: string | null;
   subtotal: string;
@@ -58,8 +62,12 @@ type Bill = {
     line_total: string;
     panel_group_id?: string | null;
     panel_name?: string | null;
+    warranty_months?: number | null;
+    warranty_starts_on?: string | null;
+    warranty_until?: string | null;
   }>;
   payments: Array<{ id: number; amount: string; method: string; paid_at: string }>;
+  branch?: { id: number; name: string; address?: string | null; phone?: string | null } | null;
 };
 
 type PendingDelete =
@@ -115,8 +123,11 @@ export default function BillDetailPage() {
   const composerKey = useRef(0);
   const [savingLaborHours, setSavingLaborHours] = useState<number | null>(null);
   const [features, setFeatures] = useState<string[]>([]);
+  const [warrantyItem, setWarrantyItem] = useState<Bill["items"][number] | null>(null);
+  const [savingWarranty, setSavingWarranty] = useState(false);
   const canSendSms = features.includes("bill_sms");
   const canAssignEmployees = features.includes("employees_management") || features.includes("attendance");
+  const canWarranty = features.includes("warranties");
 
   const logoUrl = mediaUrl(tenant?.logo_url || tenant?.logo);
   const contactEmail = tenant?.contact_email || tenant?.owner_email || "";
@@ -128,7 +139,7 @@ export default function BillDetailPage() {
   const isGarage = profile.type === "garage";
   const isStore = usesStoreCounter(profile.type);
   const itemTypes = profile.billItemTypes.filter((option) => {
-    if (option.value === "charge") return false;
+    if (option.value === "charge") return isStore && bill?.job_kind !== "repair";
     if (isPaint && option.value === "part" && bill?.job_kind !== "parts_sale") return false;
     if (isStore && option.value === "labor" && bill?.job_kind !== "repair") return false;
     return true;
@@ -327,12 +338,15 @@ export default function BillDetailPage() {
     api<{ data: Part[] }>("/parts?per_page=100")
       .then((result) => setParts(result.data))
       .catch(() => undefined);
-    api<{ user: User; features: string[] }>("/user")
+    api<SessionPayload>("/user")
       .then((result) => {
         setTenant(result.user.tenant ?? null);
         setFeatures(result.features);
         const token = localStorage.getItem("garage_token");
-        if (token) storeSession(token, result.user, result.features);
+        if (token) storeSession(token, result.user, result.features, {
+          branches: result.branches,
+          active_branch: result.active_branch,
+        });
       })
       .catch(() => undefined);
   }, [load]);
@@ -545,12 +559,32 @@ export default function BillDetailPage() {
     }
 
     try {
-      await api(`/bills/${id}/items`, { method: "POST", body: JSON.stringify(payload) });
+      const warranty = canWarranty && payload.type !== "discount" ? warrantyFromForm(formData) : null;
+      await api(`/bills/${id}/items`, { method: "POST", body: JSON.stringify(warranty ? { ...payload, ...warranty } : payload) });
       resetItemForm(isServiceJob ? (serviceAddMode === "discount" ? "discount" : "part") : itemTypes[0]?.value);
       load();
       api<{ data: Part[] }>("/parts?per_page=100").then((result) => setParts(result.data)).catch(() => undefined);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not add item.");
+    }
+  }
+
+  async function saveWarranty(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!warrantyItem || isLocked) return;
+    setSavingWarranty(true);
+    setError("");
+    try {
+      await api(`/bills/${id}/items/${warrantyItem.id}/warranty`, {
+        method: "PUT",
+        body: JSON.stringify(warrantyFromForm(new FormData(event.currentTarget))),
+      });
+      setWarrantyItem(null);
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save warranty.");
+    } finally {
+      setSavingWarranty(false);
     }
   }
 
@@ -897,6 +931,32 @@ export default function BillDetailPage() {
           />
         </label>
       </ConfirmModal>
+      {warrantyItem && (
+        <div className="no-print fixed inset-0 z-50 grid place-items-center bg-black/55 p-4" onClick={() => !savingWarranty && setWarrantyItem(null)}>
+          <form
+            onSubmit={saveWarranty}
+            onClick={(event) => event.stopPropagation()}
+            className="w-full max-w-md bg-[#f3f0e8] p-5"
+          >
+            <h2 className="font-display text-2xl font-semibold uppercase">Warranty</h2>
+            <p className="mt-1 text-sm text-[#6f746e]">{warrantyItem.description}</p>
+            <div className="mt-4">
+              <WarrantyFields
+                key={warrantyItem.id}
+                purchaseDate={bill?.admission_date}
+                months={warrantyItem.warranty_months}
+                startsOn={warrantyItem.warranty_starts_on}
+                until={warrantyItem.warranty_until}
+              />
+            </div>
+            <div className="mt-4 flex gap-2">
+              <button type="button" onClick={() => setWarrantyItem(null)} className={`${buttonClass} flex-1 bg-white`}>Cancel</button>
+              <button disabled={savingWarranty} className={`${buttonClass} flex-1`}>{savingWarranty ? "Saving..." : "Save warranty"}</button>
+            </div>
+          </form>
+        </div>
+      )}
+      <BillingBranchBanner />
       <div className="bill-print-sheet">
       <BillWatermark src={logoUrl} printOnly />
       <Panel className="bill-letterhead mb-5 overflow-hidden p-5">
@@ -918,9 +978,12 @@ export default function BillDetailPage() {
               <p className="font-display text-3xl font-semibold uppercase leading-none">
                 {tenant?.business_name ?? "Business"}
               </p>
+              {isMultiBranch() && bill.branch?.name && (
+                <p className="mt-1 text-sm font-semibold uppercase tracking-wide text-[#167c73]">{bill.branch.name}</p>
+              )}
               <p className="mt-1 text-sm text-[#6f746e]">{bill.bill_number}</p>
               <div className="mt-1.5 space-y-0.5 text-sm print:text-xs">
-                {tenant?.address && <p><span className="text-[#6f746e]">Address:</span> {tenant.address}</p>}
+                {(bill.branch?.address || tenant?.address) && <p><span className="text-[#6f746e]">Address:</span> {bill.branch?.address || tenant?.address}</p>}
                 {tenant?.tin && <p><span className="text-[#6f746e]">TIN:</span> {tenant.tin}</p>}
                 {contactPhones.map((phone) => (
                   <p key={phone}><span className="text-[#6f746e]">Mobile:</span> {phone}</p>
@@ -1147,6 +1210,8 @@ export default function BillDetailPage() {
                               savingLaborHours={savingLaborHours}
                               onSaveHours={saveLaborHours}
                               onRemove={remove}
+                              canWarranty={canWarranty}
+                              onEditWarranty={setWarrantyItem}
                               hideOnPrint
                               nested
                               visible={open}
@@ -1164,6 +1229,8 @@ export default function BillDetailPage() {
                         savingLaborHours={savingLaborHours}
                         onSaveHours={saveLaborHours}
                         onRemove={remove}
+                        canWarranty={canWarranty}
+                        onEditWarranty={setWarrantyItem}
                       />
                     );
                   })}
@@ -1729,6 +1796,9 @@ export default function BillDetailPage() {
                     <input name="quantity" type="number" min="1" step="1" defaultValue="1" required className={`${inputClass} mt-2`} />
                   </label>
                 )}
+                {canWarranty && !isPanelComposer && activeType !== "discount" && (
+                  <WarrantyFields purchaseDate={bill?.admission_date} />
+                )}
                 </div>
 
                 <div className="shrink-0 border-t border-[#d7d3c8] bg-white p-4">
@@ -1814,6 +1884,8 @@ function ChargeItemRow({
   savingLaborHours,
   onSaveHours,
   onRemove,
+  canWarranty = false,
+  onEditWarranty,
   hideOnPrint = false,
   nested = false,
   visible = true,
@@ -1826,12 +1898,28 @@ function ChargeItemRow({
     quantity: string;
     unit_price: string;
     line_total: string;
+    warranty_months?: number | null;
+    warranty_starts_on?: string | null;
+    warranty_until?: string | null;
   };
   profile: ReturnType<typeof profileFor>;
   isLocked: boolean;
   savingLaborHours: number | null;
   onSaveHours: (itemId: number, hours: string) => void;
   onRemove: (itemId: number) => void;
+  canWarranty?: boolean;
+  onEditWarranty?: (item: {
+    id: number;
+    type: string;
+    description: string;
+    included_services?: string[] | null;
+    quantity: string;
+    unit_price: string;
+    line_total: string;
+    warranty_months?: number | null;
+    warranty_starts_on?: string | null;
+    warranty_until?: string | null;
+  }) => void;
   hideOnPrint?: boolean;
   nested?: boolean;
   visible?: boolean;
@@ -1903,9 +1991,16 @@ function ChargeItemRow({
       {!isLocked && (
         <td className="no-print px-2 py-3">
           {nested ? null : (
-            <button onClick={() => onRemove(item.id)} className="text-[#b84837]" title="Remove item">
-              <Trash2 size={16} />
-            </button>
+            <div className="flex items-center justify-end gap-1">
+              {canWarranty && item.type !== "discount" && (
+                <button type="button" onClick={() => onEditWarranty?.(item)} className="text-[#167c73]" title={item.warranty_until ? "Edit warranty" : "Add warranty"}>
+                  <ShieldCheck size={16} />
+                </button>
+              )}
+              <button type="button" onClick={() => onRemove(item.id)} className="text-[#b84837]" title="Remove item">
+                <Trash2 size={16} />
+              </button>
+            </div>
           )}
         </td>
       )}
@@ -1913,11 +2008,13 @@ function ChargeItemRow({
   );
 }
 
-function BillItemDescription({ item }: { item: { description: string; included_services?: string[] | null } }) {
+function BillItemDescription({ item }: { item: { description: string; included_services?: string[] | null; warranty_months?: number | null; warranty_starts_on?: string | null; warranty_until?: string | null } }) {
   const { title, inclusions } = billLinePresentation(item);
+  const warranty = warrantyLabel(item.warranty_months, item.warranty_until, item.warranty_starts_on);
   return (
     <>
       <p className="font-semibold">{title}</p>
+      {warranty && <p className="mt-1 text-[11px] font-semibold uppercase text-[#167c73] print:text-[#20221f]">{warranty}</p>}
       {inclusions.length > 0 && (
         <ul className="mt-1.5 space-y-0.5 text-xs font-normal text-[#6f746e]">
           {inclusions.map((name) => (
