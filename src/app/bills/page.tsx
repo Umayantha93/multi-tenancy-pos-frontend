@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { ArrowRight, ClipboardPlus, Hammer, Search, Wrench, X } from "lucide-react";
+import { FormEvent, useEffect, useState } from "react";
+import { ArrowRight, ClipboardPlus, Hammer, Search, Wrench, X, Zap } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { ErrorMessage, PageState, Panel, inputClass } from "@/components/ui";
+import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
 import { api, currentUser, formatDate, money } from "@/lib/api";
 import { usesLaborCatalog, usesServiceAddonWorkspace, usesStoreCounter } from "@/lib/business-profiles";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 import { billStatusClass, billStatusLabel, isOweInUrgent } from "@/lib/bill-stamp";
+import { BillingBranchBanner } from "@/components/branch-chip";
+import { useRouter } from "next/navigation";
 
 type Bill = {
   id: number;
@@ -32,7 +34,12 @@ export default function BillsPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [isOwner, setIsOwner] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickSaving, setQuickSaving] = useState(false);
+  const [payNow, setPayNow] = useState(true);
   const profile = useBusinessProfile();
+  const router = useRouter();
+  const isStore = usesStoreCounter(profile.type);
   const rangeInvalid = Boolean(dateFrom && dateTo && dateFrom > dateTo);
 
   useEffect(() => {
@@ -70,6 +77,34 @@ export default function BillsPage() {
     setDateTo("");
   }
 
+  async function createQuickBill(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setQuickSaving(true);
+    setError("");
+    const form = new FormData(event.currentTarget);
+    const amount = Number(form.get("amount") || 0);
+    try {
+      const bill = await api<{ id: number }>("/bills/quick", {
+        method: "POST",
+        body: JSON.stringify({
+          description: form.get("description"),
+          amount,
+          quantity: Number(form.get("quantity") || 1),
+          customer_name: form.get("customer_name") || null,
+          customer_phone: form.get("customer_phone") || null,
+          payment_method: form.get("payment_method") || "cash",
+          payment_amount: payNow ? amount * Number(form.get("quantity") || 1) : 0,
+        }),
+      });
+      setQuickOpen(false);
+      router.push(`/bills/${bill.id}`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not create quick bill.");
+    } finally {
+      setQuickSaving(false);
+    }
+  }
+
   return (
     <AppShell
       title={profile.billingLabel}
@@ -96,12 +131,22 @@ export default function BillsPage() {
               )}
             </>
           )}
+          {isStore && (
+            <button
+              type="button"
+              onClick={() => { setQuickOpen(true); setError(""); }}
+              className="flex h-10 items-center gap-2 border border-[#20221f] bg-white px-3 text-sm font-semibold"
+            >
+              <Zap size={16} /><span className="hidden sm:inline">Quick bill</span>
+            </button>
+          )}
           <Link href={profile.primaryCta.href} className="flex h-10 items-center gap-2 bg-[#f5c842] px-3 text-sm font-semibold">
             <ClipboardPlus size={18} /><span className="hidden sm:inline">{profile.primaryCta.label}</span>
           </Link>
         </div>
       }
     >
+      <BillingBranchBanner />
       <div className="mb-5 flex flex-wrap items-end gap-3">
         <label className="relative block min-w-56 max-w-md flex-1">
           <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">Search</span>
@@ -111,7 +156,7 @@ export default function BillsPage() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               className={`${inputClass} pl-10`}
-              placeholder={`Search ${profile.billingSingular.toLowerCase()} or customer`}
+              placeholder={isStore ? "Search sale, customer, phone or job" : `Search ${profile.billingSingular.toLowerCase()} or customer`}
             />
           </span>
         </label>
@@ -175,7 +220,7 @@ export default function BillsPage() {
                       {profile.type === "garage" || profile.type === "paint" || usesStoreCounter(profile.type) ? (
                         <span className="px-2 py-1 text-[10px] font-bold uppercase bg-[#eeece5] text-[#6f746e]">
                           {usesStoreCounter(profile.type)
-                            ? "Sale"
+                            ? (bill.bill_number.startsWith("QCK-") ? "Quick" : "Sale")
                             : bill.job_kind === "service"
                               ? (profile.type === "paint" ? "Package" : "Service")
                               : bill.job_kind === "parts_sale"
@@ -216,6 +261,57 @@ export default function BillsPage() {
             )}
           </div>
         </Panel>
+      )}
+      {quickOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4" onClick={() => !quickSaving && setQuickOpen(false)}>
+          <form onSubmit={createQuickBill} onClick={(event) => event.stopPropagation()} className="w-full max-w-md bg-[#f3f0e8]">
+            <div className="border-b border-[#d7d3c8] px-5 py-4">
+              <h2 className="font-display text-2xl font-semibold uppercase">Quick bill</h2>
+              <p className="mt-1 text-xs text-[#6f746e]">CD write, photocopy, or any small job. Customer details are optional.</p>
+            </div>
+            <div className="space-y-3 p-5">
+              {error && <ErrorMessage message={error} />}
+              <label className="block text-xs font-bold uppercase">
+                Job
+                <input required name="description" placeholder="DVD write, CD copy, screen guard…" className={`${inputClass} mt-2`} />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block text-xs font-bold uppercase">
+                  Amount
+                  <input required name="amount" type="number" min="0" step="0.01" className={`${inputClass} mt-2`} />
+                </label>
+                <label className="block text-xs font-bold uppercase">
+                  Qty
+                  <input name="quantity" type="number" min="1" step="1" defaultValue="1" className={`${inputClass} mt-2`} />
+                </label>
+              </div>
+              <label className="block text-xs font-bold uppercase">
+                Customer name <span className="font-normal text-[#6f746e]">optional</span>
+                <input name="customer_name" className={`${inputClass} mt-2`} />
+              </label>
+              <label className="block text-xs font-bold uppercase">
+                Phone <span className="font-normal text-[#6f746e]">optional</span>
+                <input name="customer_phone" className={`${inputClass} mt-2`} />
+              </label>
+              <label className="block text-xs font-bold uppercase">
+                Payment
+                <select name="payment_method" className={`${inputClass} mt-2`}>
+                  <option value="cash">Cash</option>
+                  <option value="card">Card</option>
+                  <option value="bank_transfer">Bank transfer</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={payNow} onChange={(event) => setPayNow(event.target.checked)} className="size-4 accent-[#167c73]" />
+                Take payment now
+              </label>
+              <div className="flex gap-2">
+                <button disabled={quickSaving} className={`${buttonClass} flex-1`}>{quickSaving ? "Saving..." : "Create bill"}</button>
+                <button type="button" onClick={() => setQuickOpen(false)} className="h-9 border border-[#cbc7bc] px-3 text-xs">Cancel</button>
+              </div>
+            </div>
+          </form>
+        </div>
       )}
     </AppShell>
   );

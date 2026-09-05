@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Building2, LockKeyhole, Store } from "lucide-react";
 import { PasswordInput } from "@/components/ui";
-import { api, mediaUrl, storeSession, User } from "@/lib/api";
+import { api, mediaUrl, SessionPayload, storeSession } from "@/lib/api";
 
 type Branding = {
   business_name: string | null;
@@ -38,12 +38,15 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
     try {
-      const result = await api<{ token: string; user: User; features: string[] }>("/auth/login", {
+      const result = await api<SessionPayload>("/auth/login", {
         method: "POST",
         authenticated: false,
         body: JSON.stringify({ email, password }),
       });
-      storeSession(result.token, result.user, result.features);
+      storeSession(result.token!, result.user, result.features, {
+        branches: result.branches,
+        active_branch: result.active_branch,
+      });
       router.push(result.user.role === "super_admin" ? "/super-admin/dashboard" : "/dashboard");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to sign in.");

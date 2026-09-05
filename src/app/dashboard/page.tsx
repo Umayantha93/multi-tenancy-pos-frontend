@@ -8,6 +8,7 @@ import { ErrorMessage, PageState, Panel } from "@/components/ui";
 import { api, currentFeatures, currentUser, money } from "@/lib/api";
 import { profileFor } from "@/lib/business-profiles";
 import { billStatusClass, billStatusLabel } from "@/lib/bill-stamp";
+import { ShopFilter } from "@/components/branch-chip";
 
 type Dashboard = {
   features: string[];
@@ -30,13 +31,15 @@ export default function DashboardPage() {
   const [sessionFeatures, setSessionFeatures] = useState<string[]>([]);
   const [sessionBusinessType, setSessionBusinessType] = useState<string | undefined>();
   const [eyebrow, setEyebrow] = useState("");
+  const [shopFilter, setShopFilter] = useState("");
 
   useEffect(() => {
     setSessionFeatures(currentFeatures());
     setSessionBusinessType(currentUser()?.tenant?.business_type);
     setEyebrow(new Intl.DateTimeFormat("en-LK", { dateStyle: "full" }).format(new Date()));
-    api<Dashboard>("/dashboard").then(setData).catch((caught) => setError(caught.message));
-  }, []);
+    const params = shopFilter ? `?branch_id=${encodeURIComponent(shopFilter)}` : "";
+    api<Dashboard>(`/dashboard${params}`).then(setData).catch((caught) => setError(caught.message));
+  }, [shopFilter]);
 
   const features = data?.features ?? sessionFeatures;
   const profile = useMemo(
@@ -59,6 +62,7 @@ export default function DashboardPage() {
 
   return <AppShell title="Business overview" eyebrow={eyebrow || undefined} action={cta}>
     {error && <ErrorMessage message={error} />}
+    <ShopFilter value={shopFilter} onChange={setShopFilter} className="mb-5 block" />
     {!data && !error ? <PageState message="Loading your business dashboard..." /> : data && <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map(([label, value, Icon, color]) => <Panel key={label} className="relative overflow-hidden p-5"><div className="mb-8 flex items-start justify-between"><p className="text-xs font-bold uppercase text-[#6f746e]">{label}</p><Icon size={20} style={{ color }} /></div><p className="font-display text-3xl font-semibold sm:text-4xl">{value}</p><span className="absolute bottom-0 left-0 h-1 w-16" style={{ background: color }} /></Panel>)}

@@ -4,16 +4,17 @@ import { FormEvent, useEffect, useState } from "react";
 import { Check, Power, UserPlus } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
-import { api } from "@/lib/api";
+import { api, Branch } from "@/lib/api";
 import { groupModules } from "@/lib/feature-modules";
 
 type Feature = { id: number; key: string; name: string; group?: string | null; pivot?: { can_access: boolean } };
-type Staff = { id: number; name: string; email: string; status: "active" | "inactive"; employee_id?: number | null; employee?: { id: number; name: string } | null; permissions: Feature[] };
+type Staff = { id: number; name: string; email: string; status: "active" | "inactive"; employee_id?: number | null; home_branch_id?: number | null; home_branch?: { id: number; name: string } | null; employee?: { id: number; name: string } | null; permissions: Feature[] };
 type PermissionResponse = { available: Feature[]; permissions: Feature[] };
 
 export default function StaffPage() {
   const [staff, setStaff] = useState<Staff[] | null>(null);
   const [employees, setEmployees] = useState<Array<{ id: number; name: string }>>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [selected, setSelected] = useState<Staff | null>(null);
   const [available, setAvailable] = useState<Feature[]>([]);
   const [enabled, setEnabled] = useState<string[]>([]);
@@ -25,6 +26,7 @@ export default function StaffPage() {
     api<{ data: Array<{ id: number; name: string }> }>("/employees?active_only=1&per_page=100")
       .then((result) => setEmployees(result.data))
       .catch(() => setEmployees([]));
+    api<{ data: Branch[] }>("/branches").then((result) => setBranches(result.data)).catch(() => setBranches([]));
   }
 
   useEffect(load, []);
@@ -114,7 +116,7 @@ export default function StaffPage() {
                   <span className="grid size-10 place-items-center bg-[#e7e4db] font-bold">{user.name.charAt(0)}</span>
                   <div className="min-w-44 flex-1">
                     <strong className="block text-sm">{user.name}</strong>
-                    <span className="text-xs text-[#6f746e]">{user.email}{user.employee ? ` · ${user.employee.name}` : ""}</span>
+                    <span className="text-xs text-[#6f746e]">{user.email}{user.employee ? ` · ${user.employee.name}` : ""}{user.home_branch ? ` · ${user.home_branch.name}` : ""}</span>
                   </div>
                   <span className={`px-2 py-1 text-[10px] font-bold uppercase ${user.status === "active" ? "bg-[#167c73]/10 text-[#167c73]" : "bg-[#b84837]/10 text-[#b84837]"}`}>
                     {user.status}
@@ -150,6 +152,15 @@ export default function StaffPage() {
                 <option value="">Not linked</option>
                 {employees.map((employee) => (
                   <option key={employee.id} value={employee.id}>{employee.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm font-semibold">
+              Home shop
+              <select name="home_branch_id" className={`mt-2 ${inputClass}`} defaultValue="">
+                <option value="">Default Main</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>{branch.name}</option>
                 ))}
               </select>
             </label>

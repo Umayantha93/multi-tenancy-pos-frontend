@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { Eye, Fingerprint, Pencil, Plus, Power, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
-import { api, money } from "@/lib/api";
+import { api, Branch, money } from "@/lib/api";
 
 type Allowance = { name: string; amount: number | string; kind?: string; min_days?: number };
 type Shift = { id: number; name: string };
@@ -21,6 +21,8 @@ type Employee = {
   epf_enabled?: boolean;
   paid_leave_days_per_year?: number | null;
   default_shift_id?: number | null;
+  home_branch_id?: number | null;
+  home_branch?: { id: number; name: string } | null;
   default_shift?: Shift | null;
   allowances?: Allowance[] | null;
 };
@@ -30,6 +32,7 @@ type Mode = "add" | "edit" | "view" | null;
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [showInactive, setShowInactive] = useState(false);
   const [mode, setMode] = useState<Mode>(null);
   const [selected, setSelected] = useState<Employee | null>(null);
@@ -45,6 +48,7 @@ export default function EmployeesPage() {
 
   useEffect(() => {
     api<Shift[]>("/work-shifts").then(setShifts).catch(() => setShifts([]));
+    api<{ data: Branch[] }>("/branches").then((result) => setBranches(result.data)).catch(() => setBranches([]));
   }, []);
 
   function openAdd() {
@@ -81,6 +85,7 @@ export default function EmployeesPage() {
       epf_enabled: data.epf_enabled === "1",
       paid_leave_days_per_year: data.paid_leave_days_per_year ? Number(data.paid_leave_days_per_year) : null,
       default_shift_id: data.default_shift_id ? Number(data.default_shift_id) : null,
+      home_branch_id: data.home_branch_id ? Number(data.home_branch_id) : null,
       allowances: allowanceName
         ? [{ name: allowanceName, amount: Number(data.allowance_amount || 0), kind: data.allowance_kind || "fixed", min_days: Number(data.allowance_min_days || 0) }]
         : [],
@@ -198,6 +203,7 @@ export default function EmployeesPage() {
                 ["EPF / ETF", selected.epf_enabled ? "On" : "Off"],
                 ["Paid leave / year", selected.paid_leave_days_per_year != null ? String(selected.paid_leave_days_per_year) : "Not set"],
                 ["Default shift", selected.default_shift?.name ?? "None"],
+                ["Home shop", selected.home_branch?.name ?? "—"],
                 ["Allowance", firstAllowance ? `${firstAllowance.name} ${money(firstAllowance.amount)}` : "None"],
               ].map(([label, value]) => (
                 <div key={label}>
@@ -262,6 +268,13 @@ export default function EmployeesPage() {
                 <select name="default_shift_id" defaultValue={selected?.default_shift_id ?? ""} className={`${inputClass} mt-2`}>
                   <option value="">None (OT = hours − 8)</option>
                   {shifts.map((shift) => <option key={shift.id} value={shift.id}>{shift.name}</option>)}
+                </select>
+              </label>
+              <label className="text-xs font-bold uppercase">
+                Home shop
+                <select name="home_branch_id" defaultValue={selected?.home_branch_id ?? ""} className={`${inputClass} mt-2`}>
+                  <option value="">Default Main</option>
+                  {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
                 </select>
               </label>
               <label className="flex items-center gap-2 text-xs font-bold uppercase sm:col-span-2">

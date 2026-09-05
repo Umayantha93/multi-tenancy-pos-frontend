@@ -8,6 +8,8 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
   const headers = new Headers(options.headers);
   if (!(options.body instanceof FormData)) headers.set("Content-Type", "application/json");
   if (options.authenticated !== false && token) headers.set("Authorization", `Bearer ${token}`);
+  const branchId = typeof window === "undefined" ? null : currentBranchId();
+  if (options.authenticated !== false && branchId) headers.set("X-Branch-Id", String(branchId));
   const response = await fetch(`${API_URL}${path}`, { ...options, headers });
   if (response.status === 401 && typeof window !== "undefined") {
     clearSession();
@@ -29,6 +31,7 @@ export type FeatureKey =
   | "bill_sms"
   | "bill_profits"
   | "repair_bills"
+  | "warranties"
   | "payroll"
   | "balance_sheet"
   | "parts_inventory"
@@ -76,6 +79,16 @@ export type Tenant = {
   demo_days_left?: number | null;
   is_demo?: boolean;
 };
+export type Branch = {
+  id: number;
+  name: string;
+  code?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  is_default?: boolean;
+  status?: "active" | "inactive";
+};
+
 export type User = {
   id: number;
   tenant_id: number | null;
@@ -84,21 +97,36 @@ export type User = {
   role: "super_admin" | "business_owner" | "staff";
   status: "active" | "inactive";
   employee_id?: number | null;
+  home_branch_id?: number | null;
+  last_branch_id?: number | null;
   employee?: { id: number; name: string; phone?: string; position?: string; nic?: string } | null;
   is_secondary_view?: boolean;
   tenant?: Tenant | null;
 };
 
-export function storeSession(token: string, user: User, features: string[]) {
+export type SessionPayload = {
+  token?: string;
+  user: User;
+  features: string[];
+  branches?: Branch[];
+  active_branch?: Branch | null;
+  can_switch_branch?: boolean;
+};
+
+export function storeSession(token: string, user: User, features: string[], extras?: { branches?: Branch[]; active_branch?: Branch | null }) {
   localStorage.setItem("garage_token", token);
   localStorage.setItem("garage_user", JSON.stringify(user));
   localStorage.setItem("garage_features", JSON.stringify(features));
+  if (extras?.branches) localStorage.setItem("garage_branches", JSON.stringify(extras.branches));
+  if (extras?.active_branch?.id) localStorage.setItem("garage_branch_id", String(extras.active_branch.id));
 }
 
 export function clearSession() {
   localStorage.removeItem("garage_token");
   localStorage.removeItem("garage_user");
   localStorage.removeItem("garage_features");
+  localStorage.removeItem("garage_branches");
+  localStorage.removeItem("garage_branch_id");
 }
 
 export function currentUser(): User | null {
@@ -111,6 +139,34 @@ export function currentFeatures(): string[] {
   if (typeof window === "undefined") return [];
   const value = localStorage.getItem("garage_features");
   return value ? JSON.parse(value) as string[] : [];
+}
+
+export function currentBranches(): Branch[] {
+  if (typeof window === "undefined") return [];
+  const value = localStorage.getItem("garage_branches");
+  return value ? JSON.parse(value) as Branch[] : [];
+}
+
+export function currentBranchId(): number | null {
+  if (typeof window === "undefined") return null;
+  const value = localStorage.getItem("garage_branch_id");
+  const id = value ? Number(value) : NaN;
+  return Number.isFinite(id) ? id : null;
+}
+
+export function setCurrentBranchId(id: number) {
+  localStorage.setItem("garage_branch_id", String(id));
+  window.dispatchEvent(new Event("garage-branch-changed"));
+}
+
+export function currentBranch(): Branch | null {
+  const id = currentBranchId();
+  if (!id) return currentBranches()[0] ?? null;
+  return currentBranches().find((branch) => branch.id === id) ?? currentBranches()[0] ?? null;
+}
+
+export function isMultiBranch() {
+  return currentBranches().filter((branch) => branch.status !== "inactive").length > 1;
 }
 
 export function money(value: number | string) {

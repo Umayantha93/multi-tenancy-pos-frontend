@@ -7,6 +7,7 @@ import { buttonClass, ErrorMessage, inputClass, PageState, Panel, SuccessMessage
 import { API_URL, api, currentFeatures, currentUser, mediaUrl, money } from "@/lib/api";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 import { usesStoreCounter } from "@/lib/business-profiles";
+import { StickerPrintButton } from "@/components/sticker-print";
 
 type Part = {
   id: number;
@@ -59,7 +60,8 @@ export default function PartsPage() {
   const lowStockAt = isPaint ? 250 : 5;
 
   const load = useCallback((term = search) => {
-    api<{ data: Part[] }>(`/parts?search=${encodeURIComponent(term)}&per_page=100`)
+    const params = new URLSearchParams({ search: term, per_page: "100" });
+    api<{ data: Part[] }>(`/parts?${params}`)
       .then((result) => setParts(result.data))
       .catch((caught) => setError(caught.message));
   }, [search]);
@@ -254,8 +256,8 @@ export default function PartsPage() {
         </div>
       ) : undefined}
     >
-      <div className="mb-5 flex max-w-3xl gap-2">
-        <label className="relative flex-1">
+      <div className="mb-5 flex max-w-3xl flex-wrap items-end gap-2">
+        <label className="relative min-w-56 flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f746e]" size={16} />
           <input
             value={search}
@@ -320,6 +322,11 @@ export default function PartsPage() {
                     <button type="button" onClick={() => openRestock(part)} className={`flex flex-1 items-center justify-center gap-1.5 py-2 text-[10px] font-bold uppercase text-[#167c73] hover:bg-[#eeece5] ${admin ? "border-l border-[#d7d3c8]" : ""}`}>
                       <PackagePlus size={12} /> Restock
                     </button>
+                    {isStore && (
+                      <span className="flex flex-1 border-l border-[#d7d3c8]">
+                        <StickerPrintButton item={part} />
+                      </span>
+                    )}
                   </div>
               </Panel>
             );

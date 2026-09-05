@@ -6,6 +6,7 @@ import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { api, currentFeatures, currentUser, formatDate, money } from "@/lib/api";
 import { billStatusClass, billStatusLabel } from "@/lib/bill-stamp";
+import { ShopFilter } from "@/components/branch-chip";
 
 type JobKindFilter = "service" | "repair" | "parts_sale" | null;
 
@@ -91,6 +92,7 @@ export default function BillProfitsPage() {
   const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<ProfitBill | null>(null);
   const [detailBusy, setDetailBusy] = useState(false);
+  const [shopFilter, setShopFilter] = useState<string>("");
   const rangeInvalid = Boolean(dateFrom && dateTo && dateFrom > dateTo);
 
   const effectiveKind = jobKind ?? (isStore && !hasRepair ? "parts_sale" : null);
@@ -105,11 +107,12 @@ export default function BillProfitsPage() {
     setError("");
     const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, per_page: "50" });
     if (effectiveKind) params.set("job_kind", effectiveKind);
+    if (shopFilter) params.set("branch_id", shopFilter);
     api<Report>(`/bill-profits?${params}`)
       .then(setReport)
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load bill profits."))
       .finally(() => setLoading(false));
-  }, [dateFrom, dateTo, effectiveKind, rangeInvalid]);
+  }, [dateFrom, dateTo, effectiveKind, rangeInvalid, shopFilter]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -211,6 +214,7 @@ export default function BillProfitsPage() {
           <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">To</span>
           <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className={`${inputClass} w-auto min-w-40`} />
         </label>
+        <ShopFilter value={shopFilter} onChange={setShopFilter} />
         <button type="button" onClick={load} className={buttonClass}>Apply period</button>
         {isGarage && (
           <div className="flex flex-wrap gap-2">

@@ -12,6 +12,7 @@ import {
   ReceiptText,
   ShieldCheck,
   ShoppingBag,
+  Store,
   Users,
   ChartNoAxesCombined,
   PieChart,
@@ -79,6 +80,7 @@ const sharedNavTail: NavItem[] = [
   { href: "/payroll", label: "Payroll", icon: ChartNoAxesCombined, feature: "payroll" },
   { href: "/reports", label: "Reports", icon: ClipboardList, feature: "reports" },
   { href: "/balance-sheet", label: "Finance", icon: ChartNoAxesCombined, feature: "balance_sheet" },
+  { href: "/shops", label: "Shops", icon: Store, owner: true },
   { href: "/profile", label: "Shop details", icon: UserRound, owner: true },
   { href: "/profile", label: "My details", icon: UserRound, staffSelf: true },
   { href: "/staff", label: "Staff access", icon: ShieldCheck, owner: true },
@@ -94,6 +96,7 @@ const garmentPeopleNav: NavItem[] = [
   { href: "/payroll", label: "Payroll", icon: ChartNoAxesCombined, feature: "payroll" },
   { href: "/reports", label: "Reports", icon: ClipboardList, feature: "reports" },
   { href: "/balance-sheet", label: "Finance", icon: ChartNoAxesCombined, feature: "balance_sheet" },
+  { href: "/shops", label: "Shops", icon: Store, owner: true },
   { href: "/profile", label: "Shop details", icon: UserRound, owner: true },
   { href: "/profile", label: "My details", icon: UserRound, staffSelf: true },
   { href: "/staff", label: "Staff access", icon: ShieldCheck, owner: true },
@@ -282,6 +285,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
     quickActions: [
       { href: "/pos", label: "New sale", feature: "billing" },
       { href: "/repairs/new", label: "New repair", feature: "repair_bills" },
+      { href: "/warranties", label: "Warranties", feature: "warranties" },
       { href: "/parts", label: "Find stock", feature: "parts_inventory" },
       { href: "/bills", label: "Take payment", feature: "billing" },
       { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
@@ -293,6 +297,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
     moduleCatalog: [
       { key: "billing", name: "Sales", group: "Service Intake" },
       { key: "repair_bills", name: "Repair", group: "Service Intake" },
+      { key: "warranties", name: "Warranties", group: "Service Intake" },
       { key: "parts_inventory", name: "Stock", group: "Inventory" },
       { key: "suppliers", name: "Suppliers", group: "Inventory" },
       ...sharedPeopleFinance.filter((m) => m.key !== "billing"),
@@ -302,6 +307,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/pos", label: "New sale", icon: ShoppingBag, feature: "billing" },
       { href: "/bills", label: "Sales", icon: ReceiptText, feature: "billing" },
       { href: "/repairs", label: "Repair bills", icon: Wrench, feature: "repair_bills" },
+      { href: "/warranties", label: "Warranties", icon: ShieldCheck, feature: "warranties" },
       billProfitsNav,
       { href: "/parts", label: "Stock", icon: Boxes, feature: "parts_inventory" },
       suppliersNav,
@@ -309,6 +315,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
     ],
     billItemTypes: [
       { value: "part", label: "Item", kind: "stock", allowQty: true },
+      { value: "charge", label: "Quick job", kind: "charge", allowQty: true },
       { value: "labor", label: "Repair", kind: "charge" },
       { value: "discount", label: "Discount", kind: "discount" },
     ],
@@ -558,7 +565,7 @@ export function usesStoreCounter(type?: string | null): boolean {
 }
 
 export function optionalFeaturesFor(type?: string | null): FeatureKey[] {
-  return type === "store" ? ["repair_bills"] : [];
+  return type === "store" ? ["repair_bills", "warranties"] : [];
 }
 
 export function profileFor(type?: string | null): BusinessProfile {
