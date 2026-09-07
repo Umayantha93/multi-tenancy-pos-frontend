@@ -14,15 +14,20 @@ type SharedBill = {
   bill_number: string;
   admission_date: string | null;
   status: string;
-  subtotal: string;
-  total_deductions: string;
+  hide_amounts?: boolean;
+  subtotal: string | null;
+  total_deductions: string | null;
   vat_rate?: string | number | null;
   sscl_rate?: string | number | null;
   vat_amount?: string | number | null;
   sscl_amount?: string | number | null;
-  amount_paid: string;
-  balance_due: string;
+  amount_paid: string | null;
+  balance_due: string | null;
   mileage?: number | string | null;
+  next_service_mileage?: number | string | null;
+  warranty_months?: number | null;
+  warranty_starts_on?: string | null;
+  warranty_until?: string | null;
   additional_note?: string | null;
   additional_note_color?: string | null;
   notes?: string | null;
@@ -35,8 +40,9 @@ type SharedBill = {
     included_services?: string[] | null;
     quantity: string | number | null;
     unit_price: string | number | null;
-    line_total: string;
+    line_total: string | number | null;
     hide_hours?: boolean;
+    hide_amounts?: boolean;
     warranty_months?: number | null;
     warranty_starts_on?: string | null;
     warranty_until?: string | null;
@@ -53,6 +59,9 @@ function documentCopy(stamp: ReturnType<typeof billStamp>) {
   }
   if (stamp === "partial") {
     return { title: "Bill", label: "Partially paid bill", download: "Download bill" };
+  }
+  if (stamp === "repair_note") {
+    return { title: "Repair note", label: "Repair note", download: "Download repair note" };
   }
   return { title: "Quotation", label: "Quotation", download: "Download quotation" };
 }
@@ -217,6 +226,20 @@ export default function SharedBillPage() {
                 <span className="text-[10px] font-bold uppercase text-[#6f746e]">Mileage </span>
                 {bill.mileage != null && bill.mileage !== "" ? `${Number(bill.mileage).toLocaleString()} km` : "—"}
               </p>
+              {bill.next_service_mileage != null && bill.next_service_mileage !== "" && (
+                <p className="mt-1 text-sm">
+                  <span className="text-[10px] font-bold uppercase text-[#6f746e]">Next service </span>
+                  {`${Number(bill.next_service_mileage).toLocaleString()} km`}
+                </p>
+              )}
+            </div>
+          )}
+          {(bill.warranty_until || Number(bill.warranty_months) > 0) && (
+            <div>
+              <p className="text-[10px] font-bold uppercase text-[#6f746e]">Warranty</p>
+              <p className="mt-1 font-semibold">
+                {warrantyLabel(bill.warranty_months, bill.warranty_until, bill.warranty_starts_on)}
+              </p>
             </div>
           )}
         </div>
@@ -251,7 +274,7 @@ export default function SharedBillPage() {
                   </td>
                   <td className="px-3 py-3 tabular-nums">{hideHours || item.quantity == null ? "—" : item.quantity}</td>
                   <td className="px-3 py-3 tabular-nums">{hideHours || item.unit_price == null ? "—" : money(item.unit_price)}</td>
-                  <td className="px-5 py-3 text-right tabular-nums">{money(item.line_total)}</td>
+                  <td className="px-5 py-3 text-right tabular-nums">{item.line_total == null ? "—" : money(item.line_total)}</td>
                 </tr>
                 );
               })}
@@ -267,7 +290,7 @@ export default function SharedBillPage() {
                       <td className="px-5 py-3">{item.description}</td>
                       <td className="px-3 py-3 tabular-nums">{item.quantity == null ? "—" : item.quantity}</td>
                       <td className="px-3 py-3 tabular-nums">{item.unit_price == null ? "—" : money(item.unit_price)}</td>
-                      <td className="px-5 py-3 text-right font-semibold tabular-nums">-{money(item.line_total)}</td>
+                      <td className="px-5 py-3 text-right font-semibold tabular-nums">{item.line_total == null ? "—" : `-${money(item.line_total)}`}</td>
                     </tr>
                   ))}
                 </>
@@ -284,14 +307,18 @@ export default function SharedBillPage() {
         </div>
 
         <div className="bill-summary space-y-2 border-t border-[#e2ddd0] p-5 text-sm">
+          {stamp === "repair_note" ? (
+            <p className="text-[#6f746e]">Work list — amounts hidden on this repair note.</p>
+          ) : (
+            <>
           <div className="flex justify-between">
             <span className="text-[#6f746e]">Subtotal</span>
-            <strong className="tabular-nums">{money(bill.subtotal)}</strong>
+            <strong className="tabular-nums">{money(bill.subtotal ?? 0)}</strong>
           </div>
           {Number(bill.total_deductions) > 0 && (
             <div className="bill-discount-row -mx-2 flex justify-between rounded-sm bg-[#e7f4f2] px-2 py-1.5 text-[#167c73]">
               <span>Deductions</span>
-              <strong className="tabular-nums">-{money(bill.total_deductions)}</strong>
+              <strong className="tabular-nums">-{money(bill.total_deductions ?? 0)}</strong>
             </div>
           )}
           {Number(bill.vat_amount) > 0 && (
@@ -310,7 +337,7 @@ export default function SharedBillPage() {
             <>
               <div className="flex justify-between">
                 <span className="text-[#6f746e]">Amount paid</span>
-                <strong className="tabular-nums">{money(bill.amount_paid)}</strong>
+                <strong className="tabular-nums">{money(bill.amount_paid ?? 0)}</strong>
               </div>
               <div className="flex justify-between border-t border-[#e2ddd0] pt-2 text-base">
                 <span className="font-semibold text-[#167c73]">Paid in full</span>
@@ -322,18 +349,20 @@ export default function SharedBillPage() {
               {Number(bill.amount_paid) > 0 && (
                 <div className="flex justify-between">
                   <span className="text-[#6f746e]">Amount paid</span>
-                  <strong className="tabular-nums">{money(bill.amount_paid)}</strong>
+                  <strong className="tabular-nums">{money(bill.amount_paid ?? 0)}</strong>
                 </div>
               )}
               <div className="flex justify-between border-t border-[#e2ddd0] pt-2 text-base">
                 <span className="font-semibold">Balance due</span>
-                <strong className="tabular-nums">{money(bill.balance_due)}</strong>
+                <strong className="tabular-nums">{money(bill.balance_due ?? 0)}</strong>
               </div>
               {stamp === "quote" && (
                 <p className="pt-2 text-xs text-[#6f746e]">
                   This is a quotation. Final receipt will be available after payment is completed.
                 </p>
               )}
+            </>
+          )}
             </>
           )}
         </div>

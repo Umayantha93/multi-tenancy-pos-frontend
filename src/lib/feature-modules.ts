@@ -23,6 +23,8 @@ const FALLBACK_GROUP: Record<string, string> = {
   bill_profits: "Service Intake",
   repair_bills: "Service Intake",
   warranties: "Service Intake",
+  owner_bill_sms: "Service Intake",
+  job_videos: "Service Intake",
   parts_inventory: "Inventory",
   product_catalog: "Inventory",
   cottage_rooms: "Inventory",
@@ -32,6 +34,7 @@ const FALLBACK_GROUP: Record<string, string> = {
   payroll: "People",
   balance_sheet: "Finance",
   reports: "Finance",
+  service_ops_report: "Finance",
 };
 
 /** Full catalog fallback — prefer profileFor(type).moduleCatalog when type is known. */

@@ -44,7 +44,10 @@ export type FeatureKey =
   | "product_catalog"
   | "cottage_rooms"
   | "cottage_stays"
-  | "suppliers";
+  | "suppliers"
+  | "owner_bill_sms"
+  | "service_ops_report"
+  | "job_videos";
 
 export type BusinessType = "garage" | "tyre" | "device_repair" | "paint" | "photography" | "clothing" | "salon" | "cottage" | "store";
 

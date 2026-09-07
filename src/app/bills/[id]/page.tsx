@@ -15,6 +15,7 @@ import { BillStatusSeal } from "@/components/bill-status-seal";
 import { BillWatermark } from "@/components/bill-watermark";
 import { BillingBranchBanner } from "@/components/branch-chip";
 import { WarrantyFields, warrantyFromForm } from "@/components/warranty-fields";
+import { JobVideos } from "@/components/job-videos";
 
 type Part = { id: number; name: string; price: string; stock_qty: number; sku?: string | null; barcode?: string | null; brand?: string };
 type ComposerLabor = { key: string; laborItemId: string; name: string; hours: string; rate: number };
@@ -34,6 +35,7 @@ type Bill = {
   status: string;
   admission_date?: string | null;
   job_kind?: string | null;
+  hide_amounts?: boolean;
   owe_in_due_date?: string | null;
   subtotal: string;
   total_deductions: string;
@@ -45,10 +47,14 @@ type Bill = {
   balance_due: string;
   customer_balance?: string | number;
   mileage?: number | string | null;
+  next_service_mileage?: number | string | null;
   odometer?: number | string | null;
   notes?: string | null;
   internal_notes?: string | null;
   additional_note_color?: string | null;
+  warranty_months?: number | null;
+  warranty_starts_on?: string | null;
+  warranty_until?: string | null;
   customer: { name: string; phone: string; address?: string | null } | null;
   vehicle: { number_plate: string; chassis_number?: string | null; make?: string; model?: string } | null;
   employees?: Array<{ id: number; name: string; position?: string | null }>;
@@ -80,6 +86,7 @@ export default function BillDetailPage() {
   const [parts, setParts] = useState<Part[]>([]);
   const [addons, setAddons] = useState<ServiceAddon[]>([]);
   const [addonQty, setAddonQty] = useState("1");
+  const [itemQty, setItemQty] = useState("1");
   const [addingAddonId, setAddingAddonId] = useState<number | null>(null);
   const [serviceAddMode, setServiceAddMode] = useState<"services" | "inventory" | "discount">("services");
   const [tenant, setTenant] = useState<Tenant | null>(null);
@@ -103,6 +110,7 @@ export default function BillDetailPage() {
   const [sendingSms, setSendingSms] = useState(false);
   const [smsNotice, setSmsNotice] = useState("");
   const [mileageDraft, setMileageDraft] = useState("");
+  const [nextServiceMileageDraft, setNextServiceMileageDraft] = useState("");
   const [savingMileage, setSavingMileage] = useState(false);
   const [internalNotes, setInternalNotes] = useState("");
   const [noteColor, setNoteColor] = useState<"blue" | "red">("blue");
@@ -125,7 +133,10 @@ export default function BillDetailPage() {
   const [features, setFeatures] = useState<string[]>([]);
   const [warrantyItem, setWarrantyItem] = useState<Bill["items"][number] | null>(null);
   const [savingWarranty, setSavingWarranty] = useState(false);
+  const [savingJobWarranty, setSavingJobWarranty] = useState(false);
   const canSendSms = features.includes("bill_sms");
+  const canOwnerSms = features.includes("owner_bill_sms");
+  const canJobVideos = features.includes("job_videos");
   const canAssignEmployees = features.includes("employees_management") || features.includes("attendance");
   const canWarranty = features.includes("warranties");
 
@@ -208,6 +219,7 @@ export default function BillDetailPage() {
   const isLocked = isClosed || isOweIn;
   const isPaid = Boolean(bill && Number(bill.amount_paid) > 0 && Number(bill.balance_due) <= 0);
   const stamp = bill ? billStamp(bill) : "quote";
+  const hidePrintMoney = Boolean(isGarage && bill?.hide_amounts && Number(bill.amount_paid) <= 0);
   const paymentDate = bill ? billStampDateLabel(latestPaymentAt(bill.payments)) : null;
 
   useEffect(() => {
@@ -241,6 +253,8 @@ export default function BillDetailPage() {
     setCustomerPart(false);
     setSelectedLaborId("");
     setLaborHours("1");
+    setAddonQty("1");
+    setItemQty("1");
     setPanelName("");
     setPanelCustom(false);
     setComposerLabor([]);
@@ -292,6 +306,8 @@ export default function BillDetailPage() {
     setOutsidePart(false);
     setCustomerPart(false);
     setError("");
+    setItemQty("1");
+    setAddonQty("1");
     if (next === "inventory") setType("part");
     if (next === "discount") setType("discount");
     setFormKey((value) => value + 1);
@@ -321,11 +337,26 @@ export default function BillDetailPage() {
     }
   }
 
+  async function toggleHideAmounts() {
+    if (!bill) return;
+    setError("");
+    try {
+      const updated = await api<Bill>(`/bills/${bill.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ hide_amounts: !bill.hide_amounts }),
+      });
+      setBill({ ...bill, hide_amounts: updated.hide_amounts });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not update the repair note.");
+    }
+  }
+
   const load = useCallback(() => {
     api<Bill>(`/bills/${id}`)
       .then((result) => {
         setBill(result);
         setMileageDraft(result.mileage != null && result.mileage !== "" ? String(result.mileage) : "");
+        setNextServiceMileageDraft(result.next_service_mileage != null && result.next_service_mileage !== "" ? String(result.next_service_mileage) : "");
         setInternalNotes(result.internal_notes || result.notes || "");
         setNoteColor(result.additional_note_color === "red" ? "red" : "blue");
         setEmployeeIds((result.employees ?? []).map((employee) => employee.id));
@@ -588,6 +619,24 @@ export default function BillDetailPage() {
     }
   }
 
+  async function saveJobWarranty(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!bill || isLocked) return;
+    setSavingJobWarranty(true);
+    setError("");
+    try {
+      const updated = await api<Bill>(`/bills/${id}/warranty`, {
+        method: "PUT",
+        body: JSON.stringify(warrantyFromForm(new FormData(event.currentTarget))),
+      });
+      setBill(updated);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save warranty.");
+    } finally {
+      setSavingJobWarranty(false);
+    }
+  }
+
   async function addAddon(addon: ServiceAddon) {
     if (isLocked) return;
     setError("");
@@ -602,6 +651,7 @@ export default function BillDetailPage() {
         }),
       });
       load();
+      setAddonQty("1");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not add service.");
     } finally {
@@ -700,12 +750,23 @@ export default function BillDetailPage() {
     setSavingMileage(true);
     setError("");
     try {
+      const payload: Record<string, number | null> = {
+        mileage: mileageDraft === "" ? null : Number(mileageDraft),
+      };
+      if (isServiceJob) {
+        payload.next_service_mileage = nextServiceMileageDraft === "" ? null : Number(nextServiceMileageDraft);
+      }
       const updated = await api<Bill>(`/bills/${id}`, {
         method: "PUT",
-        body: JSON.stringify({ mileage: mileageDraft === "" ? null : Number(mileageDraft) }),
+        body: JSON.stringify(payload),
       });
       setBill(updated);
       setMileageDraft(updated.mileage != null && updated.mileage !== "" ? String(updated.mileage) : "");
+      setNextServiceMileageDraft(
+        updated.next_service_mileage != null && updated.next_service_mileage !== ""
+          ? String(updated.next_service_mileage)
+          : "",
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save mileage.");
     } finally {
@@ -800,6 +861,16 @@ export default function BillDetailPage() {
       eyebrow={`${bill.vehicle?.number_plate ?? bill.customer?.name ?? profile.billingSingular}${showJobKind ? ` · ${jobKindLabel}` : ""} · ${bill.status.replace("_", " ")}`}
       action={
         <div className="no-print flex items-center gap-2">
+          {isGarage && Number(bill.amount_paid) <= 0 && (
+            <button
+              type="button"
+              onClick={() => void toggleHideAmounts()}
+              className={`h-10 border px-3 text-xs font-bold uppercase ${bill.hide_amounts ? "border-[#167c73] bg-[#167c73] text-white" : "border-[#c9c5b9] bg-white"}`}
+              title="Hide amounts on the customer print and SMS copy"
+            >
+              {bill.hide_amounts ? "Repair note" : "Hide amounts"}
+            </button>
+          )}
           {canSendSms && (
             <button
               type="button"
@@ -809,9 +880,13 @@ export default function BillDetailPage() {
               title={
                 !bill.customer?.phone
                   ? "Customer phone required"
-                  : stamp === "paid"
-                    ? "Send paid bill link by SMS"
-                    : "Send quotation link by SMS"
+                  : canOwnerSms
+                    ? "Sends to customer and owner"
+                    : stamp === "paid"
+                      ? "Send paid bill link by SMS"
+                      : bill.hide_amounts
+                        ? "Send repair note by SMS"
+                        : "Send quotation link by SMS"
               }
             >
               <MessageSquare size={19} />
@@ -994,8 +1069,8 @@ export default function BillDetailPage() {
           </div>
           <div className="flex shrink-0 flex-col items-end text-right text-xs uppercase text-[#6f746e]">
             <p className="font-bold text-[#167c73]">
-              Tax invoice / {profile.billingSingular.toLowerCase()}
-              {showJobKind ? ` · ${jobKindLabel}` : ""}
+              {hidePrintMoney ? "Repair note" : `Tax invoice / ${profile.billingSingular.toLowerCase()}`}
+              {showJobKind && !hidePrintMoney ? ` · ${jobKindLabel}` : ""}
             </p>
             <p className="mt-1 normal-case">{new Date().toLocaleString("en-LK")}</p>
             <BillStatusSeal stamp={stamp} paymentDate={paymentDate} />
@@ -1033,20 +1108,50 @@ export default function BillDetailPage() {
                     <p className="mt-1 font-semibold">
                       {bill.mileage != null && bill.mileage !== "" ? `${Number(bill.mileage).toLocaleString()} km` : "—"}
                     </p>
+                    {isServiceJob && (
+                      <>
+                        <p className="mt-3 text-[10px] font-bold uppercase text-[#6f746e]">Next service</p>
+                        <p className="mt-1 font-semibold">
+                          {bill.next_service_mileage != null && bill.next_service_mileage !== ""
+                            ? `${Number(bill.next_service_mileage).toLocaleString()} km`
+                            : "—"}
+                        </p>
+                      </>
+                    )}
                     {!isLocked && (
-                      <form onSubmit={saveMileage} className="no-print mt-2 flex h-9 items-stretch gap-2">
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={mileageDraft}
-                          onChange={(event) => setMileageDraft(event.target.value)}
-                          className={inputClass}
-                          placeholder="km"
-                        />
-                        <button type="submit" disabled={savingMileage} className="inline-flex h-9 shrink-0 items-center justify-center border border-[#20221f] px-3 text-[10px] font-bold uppercase">
-                          {savingMileage ? "..." : "Save"}
-                        </button>
+                      <form onSubmit={saveMileage} className="no-print mt-2 space-y-2">
+                        <div className="flex h-9 items-stretch gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={mileageDraft}
+                            onChange={(event) => setMileageDraft(event.target.value)}
+                            className={inputClass}
+                            placeholder="Current km"
+                          />
+                          {!isServiceJob && (
+                            <button type="submit" disabled={savingMileage} className="inline-flex h-9 shrink-0 items-center justify-center border border-[#20221f] px-3 text-[10px] font-bold uppercase">
+                              {savingMileage ? "..." : "Save"}
+                            </button>
+                          )}
+                        </div>
+                        {isServiceJob && (
+                          <>
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={nextServiceMileageDraft}
+                              onChange={(event) => setNextServiceMileageDraft(event.target.value)}
+                              className={inputClass}
+                              placeholder="Next service km"
+                            />
+                            <button type="submit" disabled={savingMileage} className="inline-flex h-9 items-center justify-center border border-[#20221f] px-3 text-[10px] font-bold uppercase">
+                              {savingMileage ? "..." : "Save"}
+                            </button>
+                          </>
+                        )}
                       </form>
                     )}
                   </div>
@@ -1063,8 +1168,40 @@ export default function BillDetailPage() {
                   </p>
                 </div>
               )}
+              {(bill.warranty_until || Number(bill.warranty_months) > 0) && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase text-[#6f746e]">Warranty</p>
+                  <p className="mt-1 font-semibold">
+                    {warrantyLabel(bill.warranty_months, bill.warranty_until, bill.warranty_starts_on)}
+                  </p>
+                </div>
+              )}
             </div>
           </Panel>
+
+          {canWarranty && usesVehicleJobs(profile.type) && (
+            <Panel className="no-print">
+              <div className="border-b border-[#d7d3c8] px-5 py-3">
+                <h2 className="font-display text-xl font-semibold uppercase">Job warranty</h2>
+                <p className="text-[11px] text-[#6f746e]">Printed on the customer bill. Choose months or years from the job date.</p>
+              </div>
+              <form onSubmit={saveJobWarranty} className="space-y-3 p-5">
+                <WarrantyFields
+                  key={`${bill.id}-${bill.warranty_months ?? ""}-${bill.warranty_until ?? ""}`}
+                  purchaseDate={bill.admission_date}
+                  months={bill.warranty_months}
+                  startsOn={bill.warranty_starts_on}
+                  until={bill.warranty_until}
+                  hint="Covers the work on this job. 3 months, 1 year, or a custom end date."
+                />
+                {!isLocked && (
+                  <button type="submit" disabled={savingJobWarranty} className={buttonClass}>
+                    {savingJobWarranty ? "Saving..." : "Save warranty"}
+                  </button>
+                )}
+              </form>
+            </Panel>
+          )}
 
           <Panel className="staff-only no-print">
             <div className="border-b border-[#d7d3c8] px-5 py-3">
@@ -1133,6 +1270,9 @@ export default function BillDetailPage() {
               {smsNotice}
             </div>
           )}
+          {canJobVideos && isGarage && bill.job_kind !== "parts_sale" && (
+            <JobVideos billId={bill.id} />
+          )}
           {isClosed && (
             <div className="no-print flex items-center gap-2 border border-[#20221f]/15 bg-[#20221f]/5 px-4 py-3 text-sm text-[#20221f]">
               <Lock size={16} />
@@ -1192,7 +1332,10 @@ export default function BillDetailPage() {
                             <td className="px-3 py-3 text-[#6f746e]">Panel</td>
                             <td className="px-3 py-3 text-right tabular-nums">—</td>
                             <td className="px-3 py-3 text-right tabular-nums">—</td>
-                            <td className="px-4 py-3 text-right tabular-nums">{money(row.total)}</td>
+                            <td className="px-4 py-3 text-right tabular-nums">
+                              <span className={hidePrintMoney ? "print:hidden" : ""}>{money(row.total)}</span>
+                              {hidePrintMoney && <span className="hidden print:inline">—</span>}
+                            </td>
                             {!isLocked && (
                               <td className="no-print px-2 py-3">
                                 <button onClick={() => remove(row.items[0].id)} className="text-[#b84837]" title="Remove panel">
@@ -1213,6 +1356,7 @@ export default function BillDetailPage() {
                               canWarranty={canWarranty}
                               onEditWarranty={setWarrantyItem}
                               hideOnPrint
+                              hideAmountsOnPrint={hidePrintMoney}
                               nested
                               visible={open}
                             />
@@ -1231,6 +1375,7 @@ export default function BillDetailPage() {
                         onRemove={remove}
                         canWarranty={canWarranty}
                         onEditWarranty={setWarrantyItem}
+                        hideAmountsOnPrint={hidePrintMoney}
                       />
                     );
                   })}
@@ -1252,8 +1397,14 @@ export default function BillDetailPage() {
                         <td className="px-3 py-3 text-right tabular-nums">
                           {Number(item.quantity) > 1 ? Number(item.quantity) : "—"}
                         </td>
-                        <td className="px-3 py-3 text-right tabular-nums">{money(item.unit_price)}</td>
-                        <td className="px-4 py-3 text-right font-semibold tabular-nums">-{money(item.line_total)}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">
+                          <span className={hidePrintMoney ? "print:hidden" : ""}>{money(item.unit_price)}</span>
+                          {hidePrintMoney && <span className="hidden print:inline">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                          <span className={hidePrintMoney ? "print:hidden" : ""}>-{money(item.line_total)}</span>
+                          {hidePrintMoney && <span className="hidden print:inline">—</span>}
+                        </td>
                         {!isLocked && (
                           <td className="no-print px-2 py-3">
                             <button onClick={() => remove(item.id)} className="text-[#b84837]" title="Remove item">
@@ -1784,7 +1935,16 @@ export default function BillDetailPage() {
                     {showQuantity && !(isStore && activeType === "labor") && (
                       <label className="block text-xs font-bold uppercase">
                         Quantity
-                        <input name="quantity" type="number" min="1" step={selectedType?.allowQty && !isStockType ? "0.01" : "1"} defaultValue="1" required className={`${inputClass} mt-2`} />
+                        <input
+                          name="quantity"
+                          type="number"
+                          min="1"
+                          step={selectedType?.allowQty && !isStockType ? "0.01" : "1"}
+                          value={itemQty}
+                          onChange={(event) => setItemQty(event.target.value)}
+                          required
+                          className={`${inputClass} mt-2`}
+                        />
                       </label>
                     )}
                   </>
@@ -1793,11 +1953,25 @@ export default function BillDetailPage() {
                 {isStockType && showQuantity && (selectedPartId || outsidePart || customerPart) && (
                   <label key={`qty-${outsidePart ? "outside" : customerPart ? "customer" : "stock"}`} className="block text-xs font-bold uppercase">
                     {isPaint ? "Quantity (ml)" : "Quantity"}
-                    <input name="quantity" type="number" min="1" step="1" defaultValue="1" required className={`${inputClass} mt-2`} />
+                    <input
+                      name="quantity"
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={itemQty}
+                      onChange={(event) => setItemQty(event.target.value)}
+                      required
+                      className={`${inputClass} mt-2`}
+                    />
                   </label>
                 )}
                 {canWarranty && !isPanelComposer && activeType !== "discount" && (
-                  <WarrantyFields purchaseDate={bill?.admission_date} />
+                  <WarrantyFields
+                    purchaseDate={bill?.admission_date}
+                    hint={usesVehicleJobs(profile.type)
+                      ? "Optional cover on this line. Job warranty above covers the whole job."
+                      : "Starts on the day this customer bought the item. Set months or years, or a custom end date."}
+                  />
                 )}
                 </div>
 
@@ -1837,7 +2011,10 @@ export default function BillDetailPage() {
 
           <Panel className="bill-summary p-5">
             <p className="text-xs font-bold uppercase text-[#6f746e]">Bill summary</p>
-            <div className="mt-5 space-y-3 text-sm">
+            {hidePrintMoney && (
+              <p className="mt-3 hidden text-sm text-[#6f746e] print:block">Work list — amounts hidden on this repair note.</p>
+            )}
+            <div className={`mt-5 space-y-3 text-sm ${hidePrintMoney ? "print:hidden" : ""}`}>
               <div className="flex justify-between gap-6"><span>Charges</span><strong className="tabular-nums">{money(bill.subtotal)}</strong></div>
               <div className={`flex justify-between gap-6 ${Number(bill.total_deductions) > 0 ? "rounded-sm bg-[#e7f4f2] px-2 py-1.5 text-[#167c73]" : ""}`}>
                 <span>Deductions</span>
@@ -1887,6 +2064,7 @@ function ChargeItemRow({
   canWarranty = false,
   onEditWarranty,
   hideOnPrint = false,
+  hideAmountsOnPrint = false,
   nested = false,
   visible = true,
 }: {
@@ -1921,6 +2099,7 @@ function ChargeItemRow({
     warranty_until?: string | null;
   }) => void;
   hideOnPrint?: boolean;
+  hideAmountsOnPrint?: boolean;
   nested?: boolean;
   visible?: boolean;
 }) {
@@ -1976,7 +2155,10 @@ function ChargeItemRow({
             <span className="hidden print:inline">—</span>
           </>
         ) : (
-          <span className="tabular-nums">{money(item.unit_price)}</span>
+          <>
+            <span className={`tabular-nums ${hideAmountsOnPrint ? "print:hidden" : ""}`}>{money(item.unit_price)}</span>
+            {hideAmountsOnPrint && <span className="hidden print:inline">—</span>}
+          </>
         )}
       </td>
       <td className="px-4 py-3 text-right break-words whitespace-normal">
@@ -1985,7 +2167,10 @@ function ChargeItemRow({
             Received from customer
           </span>
         ) : (
-          <span className="tabular-nums">{money(item.line_total)}</span>
+          <>
+            <span className={`tabular-nums ${hideAmountsOnPrint ? "print:hidden" : ""}`}>{money(item.line_total)}</span>
+            {hideAmountsOnPrint && <span className="hidden print:inline">—</span>}
+          </>
         )}
       </td>
       {!isLocked && (

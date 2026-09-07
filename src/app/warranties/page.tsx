@@ -9,7 +9,7 @@ import { api, formatDate } from "@/lib/api";
 import { warrantyLabel } from "@/lib/warranty";
 
 type WarrantyRow = {
-  id: number;
+  id: number | string;
   description: string;
   warranty_months: number | null;
   warranty_starts_on?: string | null;
@@ -44,7 +44,7 @@ export default function WarrantiesPage() {
   return (
     <AppShell title="Warranties" eyebrow="Sold items still under cover">
       <p className="mb-5 max-w-2xl text-sm text-[#6f746e]">
-        Warranties are added on the sale, from the day the customer bought the item. Search by customer, phone, barcode, SKU, or bill number.
+        Warranties are added on the job or sale, in months or years. Search by customer, phone, vehicle number, barcode, SKU, or bill number.
       </p>
       <div className="mb-5 flex flex-wrap items-end gap-2">
         <label className="relative min-w-56 flex-1">
@@ -53,7 +53,7 @@ export default function WarrantiesPage() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className={`${inputClass} pl-10`}
-            placeholder="Customer, phone, barcode, SKU or bill number"
+            placeholder="Customer, phone, vehicle, barcode, SKU or bill number"
           />
         </label>
         <button type="button" onClick={() => load(search, includeExpired)} className={buttonClass}>Look up</button>
@@ -101,7 +101,7 @@ export default function WarrantiesPage() {
             </table>
           </div>
           {rows.length === 0 && (
-            <p className="p-8 text-center text-sm text-[#6f746e]">No warranties match that search. Add cover on a sale bill after the customer buys the item.</p>
+            <p className="p-8 text-center text-sm text-[#6f746e]">No warranties match that search. Add cover on the job card after the vehicle is admitted.</p>
           )}
         </Panel>
       )}

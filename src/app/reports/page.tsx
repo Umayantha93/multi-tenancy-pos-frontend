@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, inputClass } from "@/components/ui";
-import { api, formatDate, money } from "@/lib/api";
+import { api, currentFeatures, formatDate, money } from "@/lib/api";
 import { billStatusClass, billStatusLabel } from "@/lib/bill-stamp";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 import { ShopFilter } from "@/components/branch-chip";
@@ -70,6 +70,24 @@ function yearBounds(year: number) {
   return { from: `${year}-01-01`, to: `${year}-12-31` };
 }
 
+type ServiceOps = {
+  from: string;
+  to: string;
+  jobs: number;
+  addon_revenue: number;
+  addon_profit: number;
+  average_addons_per_job: number;
+  rows: Array<{
+    service_addon_id: number;
+    name: string;
+    is_full_service: boolean;
+    sold_qty: number;
+    inside_full_service: number | null;
+    revenue: number;
+    profit: number;
+  }>;
+};
+
 export default function ReportsPage() {
   const now = new Date();
   const [period, setPeriod] = useState<"month" | "year">("month");
@@ -78,8 +96,13 @@ export default function ReportsPage() {
   const [employeeId, setEmployeeId] = useState("");
   const [shopFilter, setShopFilter] = useState("");
   const [report, setReport] = useState<Report | null>(null);
+  const [serviceOps, setServiceOps] = useState<ServiceOps | null>(null);
+  const [tab, setTab] = useState<"overview" | "service">("overview");
   const [error, setError] = useState("");
-  const isPaint = useBusinessProfile().type === "paint";
+  const profile = useBusinessProfile();
+  const isPaint = profile.type === "paint";
+  const isGarage = profile.type === "garage";
+  const canServiceOps = isGarage && currentFeatures().includes("service_ops_report");
 
   const load = useCallback(() => {
     const range = period === "year" ? yearBounds(year) : monthBounds(month, year);
@@ -87,12 +110,23 @@ export default function ReportsPage() {
     if (employeeId) params.set("employee_id", employeeId);
     if (shopFilter) params.set("branch_id", shopFilter);
     api<Report>(`/reports?${params}`).then(setReport).catch((caught) => setError(caught.message));
-  }, [period, month, year, employeeId, shopFilter]);
+    if (canServiceOps) {
+      api<ServiceOps>(`/reports/service-ops?from=${range.from}&to=${range.to}`)
+        .then(setServiceOps)
+        .catch(() => setServiceOps(null));
+    }
+  }, [period, month, year, employeeId, shopFilter, canServiceOps]);
 
   useEffect(() => { load(); }, [load]);
 
   return (
     <AppShell title="Reports" eyebrow="Sales, stock, staff, and past jobs for the selected period">
+      {canServiceOps && (
+        <div className="mb-5 flex gap-2">
+          <button type="button" onClick={() => setTab("overview")} className={`h-10 px-4 text-xs font-bold uppercase ${tab === "overview" ? "bg-[#20221f] text-white" : "border border-[#c9c5b9]"}`}>Overview</button>
+          <button type="button" onClick={() => setTab("service")} className={`h-10 px-4 text-xs font-bold uppercase ${tab === "service" ? "bg-[#20221f] text-white" : "border border-[#c9c5b9]"}`}>Service operations</button>
+        </div>
+      )}
       <form className="mb-5 flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); load(); }}>
         <label className="text-[11px] font-bold uppercase">
           Period
@@ -127,7 +161,56 @@ export default function ReportsPage() {
         <ShopFilter value={shopFilter} onChange={setShopFilter} />
       </form>
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
-      {!report && !error ? <PageState message="Loading reports..." /> : report && (
+      {canServiceOps && tab === "service" ? (
+        serviceOps ? (
+          <div className="space-y-5">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                ["Jobs", String(serviceOps.jobs)],
+                ["Addon revenue", money(serviceOps.addon_revenue)],
+                ["Est. profit", money(serviceOps.addon_profit)],
+                ["Avg addons / job", String(serviceOps.average_addons_per_job)],
+              ].map(([label, value]) => (
+                <Panel key={label} className="p-5">
+                  <p className="text-xs font-bold uppercase text-[#6f746e]">{label}</p>
+                  <p className="mt-3 font-display text-3xl font-semibold">{value}</p>
+                </Panel>
+              ))}
+            </div>
+            <Panel>
+              <div className="border-b border-[#d7d3c8] px-5 py-4">
+                <h2 className="font-display text-2xl font-semibold uppercase">Service addons</h2>
+                <p className="text-xs text-[#6f746e]">Sold qty is billed lines only. Inside full service does not inflate sold qty. {formatDate(serviceOps.from)} – {formatDate(serviceOps.to)}</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-left text-sm">
+                  <thead className="bg-[#eeece5] text-[10px] uppercase text-[#6f746e]">
+                    <tr>
+                      <th className="px-5 py-3">Service</th>
+                      <th>Sold qty</th>
+                      <th>Inside full svc</th>
+                      <th className="text-right">Revenue</th>
+                      <th className="pr-5 text-right">Est. profit</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {serviceOps.rows.map((row) => (
+                      <tr key={row.service_addon_id} className="border-t border-[#e2ded4]">
+                        <td className="px-5 py-3 font-semibold">{row.name}</td>
+                        <td>{row.sold_qty}</td>
+                        <td>{row.inside_full_service == null ? "—" : row.inside_full_service}</td>
+                        <td className="text-right tabular-nums">{money(row.revenue)}</td>
+                        <td className="pr-5 text-right tabular-nums">{money(row.profit)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {serviceOps.rows.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No billed service addons in this period.</p>}
+              </div>
+            </Panel>
+          </div>
+        ) : <PageState message="Loading service operations..." />
+      ) : !report && !error ? <PageState message="Loading reports..." /> : report && (
         <div className="space-y-5">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
