@@ -12,8 +12,8 @@ import { BillingBranchBanner } from "@/components/branch-chip";
 
 type Part = { id: number; name: string; sku?: string | null; barcode?: string | null; brand?: string; price: string; stock_qty: number };
 type Product = { id: number; name: string; sku: string | null; size: string | null; color: string | null; price: string; stock_qty: number };
-type WarrantyCover = "" | "12" | "24" | "custom";
-type CartLine = { id: number; name: string; detail: string; price: number; stock: number; quantity: number; warrantyCover?: WarrantyCover; warrantyUntil?: string };
+type WarrantyCover = "" | "months" | "years" | "custom";
+type CartLine = { id: number; name: string; detail: string; price: number; stock: number; quantity: number; warrantyCover?: WarrantyCover; warrantyAmount?: number; warrantyUntil?: string };
 
 function toCartLine(row: Part | Product, store: boolean): CartLine {
   if (store) {
@@ -102,8 +102,8 @@ export default function PosPage() {
     setCart((lines) => lines.map((line) => line.id === id ? { ...line, quantity: next } : line));
   }
 
-  function setWarranty(id: number, warrantyCover: WarrantyCover, warrantyUntil?: string) {
-    setCart((lines) => lines.map((line) => line.id === id ? { ...line, warrantyCover, warrantyUntil: warrantyCover === "custom" ? warrantyUntil ?? line.warrantyUntil : undefined } : line));
+  function setWarranty(id: number, patch: Partial<Pick<CartLine, "warrantyCover" | "warrantyAmount" | "warrantyUntil">>) {
+    setCart((lines) => lines.map((line) => line.id === id ? { ...line, ...patch } : line));
   }
 
   async function scanExact(needle: string): Promise<CartLine | null> {
@@ -144,6 +144,10 @@ export default function PosPage() {
       setError("Choose the warranty end date.");
       return;
     }
+    if (canWarranty && cart.some((line) => (line.warrantyCover === "months" || line.warrantyCover === "years") && !Number(line.warrantyAmount))) {
+      setError("Enter the warranty length in months or years.");
+      return;
+    }
     setSaving(true);
     setError("");
     const form = new FormData(event.currentTarget);
@@ -163,7 +167,7 @@ export default function PosPage() {
               ...(canWarranty && line.warrantyCover
                 ? line.warrantyCover === "custom"
                   ? { warranty_until: line.warrantyUntil || null }
-                  : { warranty_months: Number(line.warrantyCover) }
+                  : { warranty_months: line.warrantyCover === "years" ? Number(line.warrantyAmount) * 12 : Number(line.warrantyAmount) }
                 : {}),
             })),
           }),
@@ -259,19 +263,30 @@ export default function PosPage() {
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <select
                       value={line.warrantyCover || ""}
-                      onChange={(event) => setWarranty(line.id, event.target.value as WarrantyCover)}
+                      onChange={(event) => setWarranty(line.id, { warrantyCover: event.target.value as WarrantyCover, warrantyAmount: line.warrantyAmount || 1 })}
                       className="h-8 border border-[#c9c5b9] bg-white px-2 text-[11px] font-semibold uppercase"
                     >
                       <option value="">No warranty</option>
-                      <option value="12">1 year</option>
-                      <option value="24">2 years</option>
+                      <option value="months">Months</option>
+                      <option value="years">Years</option>
                       <option value="custom">Custom until</option>
                     </select>
+                    {(line.warrantyCover === "months" || line.warrantyCover === "years") && (
+                      <input
+                        type="number"
+                        min="1"
+                        max={line.warrantyCover === "years" ? 10 : 120}
+                        value={line.warrantyAmount || 1}
+                        onChange={(event) => setWarranty(line.id, { warrantyAmount: Number(event.target.value) })}
+                        className="h-8 w-16 border border-[#c9c5b9] bg-white px-2 text-[11px] tabular-nums"
+                        aria-label="Warranty length"
+                      />
+                    )}
                     {line.warrantyCover === "custom" && (
                       <input
                         type="date"
                         value={line.warrantyUntil || ""}
-                        onChange={(event) => setWarranty(line.id, "custom", event.target.value)}
+                        onChange={(event) => setWarranty(line.id, { warrantyCover: "custom", warrantyUntil: event.target.value })}
                         className="h-8 border border-[#c9c5b9] bg-white px-2 text-[11px]"
                       />
                     )}

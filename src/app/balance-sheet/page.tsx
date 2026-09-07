@@ -6,6 +6,7 @@ import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, Panel } from "@/components/ui";
 import { api, currentUser, formatDate, money } from "@/lib/api";
 import { ShopFilter } from "@/components/branch-chip";
+import { useBusinessProfile } from "@/lib/use-business-profile";
 
 type AccountRow = {
   date: string;
@@ -21,6 +22,8 @@ type AccountRow = {
 type PayableItem = {
   id: number;
   description: string;
+  supplier?: string | null;
+  supplier_phone?: string | null;
   amount: number;
   amount_paid?: number;
   remaining?: number;
@@ -42,6 +45,7 @@ type Sheet = {
   bill_receivables?: { receivables_total: number; count: number };
 };
 type Part = { id: number; name: string; stock_qty: number; cost_price: string };
+type Supplier = { id: number; name: string; is_system?: boolean };
 
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
@@ -64,12 +68,14 @@ export default function BalanceSheetPage() {
   const [category, setCategory] = useState("rent");
   const [parts, setParts] = useState<Part[]>([]);
   const [partId, setPartId] = useState("");
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [paymentStatus, setPaymentStatus] = useState("paid");
   const [settlingId, setSettlingId] = useState<number | null>(null);
   const [settleItem, setSettleItem] = useState<PayableItem | null>(null);
   const [settleAmount, setSettleAmount] = useState("");
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const businessName = currentUser()?.tenant?.business_name ?? "Business";
+  const isGarage = useBusinessProfile().type === "garage";
 
   const load = useCallback(() => {
     const params = new URLSearchParams({ month: String(month), year: String(year) });
@@ -84,7 +90,12 @@ export default function BalanceSheetPage() {
     api<{ data: Part[] }>("/parts?per_page=100")
       .then((result) => setParts(result.data))
       .catch(() => setParts([]));
-  }, [category]);
+    if (isGarage) {
+      api<{ data: Supplier[] }>("/suppliers?per_page=100")
+        .then((result) => setSuppliers(result.data))
+        .catch(() => setSuppliers([]));
+    }
+  }, [category, isGarage]);
 
   async function expense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -104,6 +115,7 @@ export default function BalanceSheetPage() {
             expense_date: formData.get("expense_date"),
             payment_status: formData.get("payment_status") || "paid",
             due_date: formData.get("due_date") || undefined,
+            supplier_id: formData.get("supplier_id") || undefined,
           }),
         });
       } else {
@@ -259,6 +271,21 @@ export default function BalanceSheetPage() {
                         Current stock {selectedPart.stock_qty}. Total purchase amount below becomes the inventory expense when paid now.
                       </p>
                     )}
+                    {isGarage && (
+                      <label className="block text-xs font-bold uppercase">
+                        Supplier
+                        <select
+                          name="supplier_id"
+                          required
+                          className={`${inputClass} mt-2`}
+                          defaultValue={String(suppliers.find((row) => row.is_system)?.id ?? suppliers[0]?.id ?? "")}
+                        >
+                          {suppliers.map((supplier) => (
+                            <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
                     <label className="block text-xs font-bold uppercase">
                       Supplier payment
                       <select
@@ -320,7 +347,8 @@ export default function BalanceSheetPage() {
                       <div key={item.id} className="py-3 text-sm">
                         <div className="flex items-center gap-3">
                           <div className="min-w-0">
-                            <p className="font-semibold">{item.description}</p>
+                            <p className="font-semibold">{item.supplier || "No supplier"}</p>
+                            <p className="text-xs text-[#6f746e]">{item.description}</p>
                             <p className="text-xs text-[#6f746e]">
                               Due {item.due_date ? formatDate(item.due_date) : "—"} · Paid {money(paid)} of {money(item.amount)}
                             </p>
@@ -496,7 +524,8 @@ export default function BalanceSheetPage() {
           <form onSubmit={settlePayable} className="relative z-10 w-full max-w-md border border-[#d7d3c8] bg-[#fbfaf6] p-5">
             <p className="text-[10px] font-bold uppercase tracking-wide text-[#167c73]">Settle supplier credit</p>
             <h2 className="mt-1 font-display text-2xl font-semibold uppercase">Pay this bill in steps</h2>
-            <p className="mt-2 text-sm text-[#6f746e]">{settleItem.description}</p>
+            <p className="mt-2 text-sm font-semibold">{settleItem.supplier || "No supplier"}</p>
+            <p className="mt-1 text-sm text-[#6f746e]">{settleItem.description}</p>
             <dl className="mt-4 space-y-2 text-sm">
               <div className="flex justify-between"><dt className="text-[#6f746e]">Original</dt><dd className="font-semibold">{money(settleItem.amount)}</dd></div>
               <div className="flex justify-between"><dt className="text-[#6f746e]">Paid so far</dt><dd className="font-semibold">{money(settleItem.amount_paid ?? 0)}</dd></div>

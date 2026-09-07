@@ -27,7 +27,7 @@ type Part = {
 };
 
 type Mode = "add" | "edit" | "restock" | null;
-type Supplier = { id: number; name: string };
+type Supplier = { id: number; name: string; is_system?: boolean };
 
 type ImportResult = {
   message: string;
@@ -56,6 +56,7 @@ export default function PartsPage() {
   const profile = useBusinessProfile();
   const isPaint = profile.type === "paint";
   const isStore = usesStoreCounter(profile.type);
+  const isGarage = profile.type === "garage";
   const stockUnit = isPaint ? "ml" : "units";
   const lowStockAt = isPaint ? 250 : 5;
 
@@ -203,6 +204,10 @@ export default function PartsPage() {
         delete payload.due_date;
       }
       if (!payload.supplier_id) {
+        if (isGarage) {
+          setError("Pick a supplier. Use Walk-in / unnamed for cash buys with no named house.");
+          return;
+        }
         delete payload.supplier_id;
       }
       await api(`/parts/${selected.id}/restock`, {
@@ -448,9 +453,14 @@ export default function PartsPage() {
               </label>
               {suppliers.length > 0 && (
                 <label className="block text-xs font-bold uppercase">
-                  Supplier (optional)
-                  <select name="supplier_id" className={`${inputClass} mt-2`} defaultValue="">
-                    <option value="">No supplier — same as today</option>
+                  {isGarage ? "Supplier" : "Supplier (optional)"}
+                  <select
+                    name="supplier_id"
+                    required={isGarage}
+                    className={`${inputClass} mt-2`}
+                    defaultValue={isGarage ? String(suppliers.find((row) => row.is_system)?.id ?? suppliers[0]?.id ?? "") : ""}
+                  >
+                    {!isGarage && <option value="">No supplier — same as today</option>}
                     {suppliers.map((supplier) => (
                       <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
                     ))}

@@ -1,12 +1,17 @@
 import { formatDate } from "@/lib/api";
 
-export type BillStamp = "paid" | "partial" | "quote";
+export type BillStamp = "paid" | "partial" | "quote" | "repair_note";
 
-export function billStamp(bill: { amount_paid: string | number; balance_due: string | number }): BillStamp {
-  const paid = Number(bill.amount_paid);
-  const due = Number(bill.balance_due);
+export function billStamp(bill: {
+  amount_paid: string | number | null;
+  balance_due: string | number | null;
+  hide_amounts?: boolean | null;
+}): BillStamp {
+  const paid = Number(bill.amount_paid ?? 0);
+  const due = Number(bill.balance_due ?? 0);
   if (paid > 0 && due <= 0) return "paid";
   if (paid > 0) return "partial";
+  if (bill.hide_amounts) return "repair_note";
   return "quote";
 }
 
@@ -18,6 +23,7 @@ export function latestPaymentAt(payments: Array<{ paid_at: string }>): string | 
 export function billStampLabel(stamp: BillStamp): string {
   if (stamp === "paid") return "Paid";
   if (stamp === "partial") return "Partially paid";
+  if (stamp === "repair_note") return "Repair note";
   return "Quote";
 }
 

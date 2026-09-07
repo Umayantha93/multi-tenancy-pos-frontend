@@ -12,9 +12,11 @@ export function BillStatusSeal({
   const tone =
     stamp === "paid"
       ? "border-[#167c73] text-[#167c73]"
-      : stamp === "partial"
-        ? "border-[#b8860b] text-[#b8860b]"
-        : "border-[#b8860b] text-[#b8860b]";
+      : stamp === "repair_note"
+        ? "border-[#167c73] text-[#167c73]"
+        : stamp === "partial"
+          ? "border-[#b8860b] text-[#b8860b]"
+          : "border-[#b8860b] text-[#b8860b]";
 
   return (
     <div
@@ -23,10 +25,10 @@ export function BillStatusSeal({
         alwaysVisible ? "" : "hidden print:inline-block"
       } ${tone}`}
     >
-      <p className={`leading-none ${stamp === "partial" ? "text-xl sm:text-2xl" : "text-3xl sm:text-4xl"}`}>
+      <p className={`leading-none ${stamp === "partial" || stamp === "repair_note" ? "text-xl sm:text-2xl" : "text-3xl sm:text-4xl"}`}>
         {billStampLabel(stamp)}
       </p>
-      {paymentDate && stamp !== "quote" && (
+      {paymentDate && stamp !== "quote" && stamp !== "repair_note" && (
         <p className="mt-1 text-[10px] font-semibold normal-case tracking-normal sm:text-xs">{paymentDate}</p>
       )}
     </div>

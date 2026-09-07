@@ -25,6 +25,7 @@ type Bill = {
   notes?: string | null;
   internal_notes?: string | null;
   mileage?: number | string | null;
+  next_service_mileage?: number | string | null;
   odometer?: number | null;
   subtotal: string;
   total_deductions: string;
@@ -59,6 +60,7 @@ export default function SuperAdminInvoiceDetailPage() {
   const [notes, setNotes] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
   const [mileage, setMileage] = useState("");
+  const [nextServiceMileage, setNextServiceMileage] = useState("");
   const [itemType, setItemType] = useState("labor");
   const [itemDescription, setItemDescription] = useState("");
   const [itemQty, setItemQty] = useState("1");
@@ -81,6 +83,7 @@ export default function SuperAdminInvoiceDetailPage() {
         setNotes(result.notes ?? "");
         setInternalNotes(result.internal_notes ?? "");
         setMileage(result.mileage != null && result.mileage !== "" ? String(result.mileage) : "");
+        setNextServiceMileage(result.next_service_mileage != null && result.next_service_mileage !== "" ? String(result.next_service_mileage) : "");
         setDrafts(
           Object.fromEntries(
             result.items.map((item) => [
@@ -129,6 +132,7 @@ export default function SuperAdminInvoiceDetailPage() {
         setNotes(result.notes ?? "");
         setInternalNotes(result.internal_notes ?? "");
         setMileage(result.mileage != null && result.mileage !== "" ? String(result.mileage) : "");
+        setNextServiceMileage(result.next_service_mileage != null && result.next_service_mileage !== "" ? String(result.next_service_mileage) : "");
         setDrafts(
           Object.fromEntries(
             result.items.map((item) => [
@@ -154,7 +158,12 @@ export default function SuperAdminInvoiceDetailPage() {
     event.preventDefault();
     await run(
       `/super-admin/tenants/${tenantId}/bills/${billId}`,
-      { method: "PUT", body: JSON.stringify({ notes, internal_notes: internalNotes, mileage: mileage === "" ? null : Number(mileage) }) },
+      { method: "PUT", body: JSON.stringify({
+        notes,
+        internal_notes: internalNotes,
+        mileage: mileage === "" ? null : Number(mileage),
+        next_service_mileage: nextServiceMileage === "" ? null : Number(nextServiceMileage),
+      }) },
       "Bill details saved.",
     );
   }
@@ -298,6 +307,11 @@ export default function SuperAdminInvoiceDetailPage() {
                   <p className="mt-2 text-sm text-[#6f746e]">
                     Mileage {bill.mileage != null && bill.mileage !== "" ? `${Number(bill.mileage).toLocaleString()} km` : "—"}
                   </p>
+                  {(bill.next_service_mileage != null && bill.next_service_mileage !== "") && (
+                    <p className="mt-1 text-sm text-[#6f746e]">
+                      Next service {`${Number(bill.next_service_mileage).toLocaleString()} km`}
+                    </p>
+                  )}
                 </div>
               )}
               <div className="text-right">
@@ -471,6 +485,10 @@ export default function SuperAdminInvoiceDetailPage() {
               <label className="block text-xs font-bold uppercase text-[#6f746e]">
                 Mileage (km)
                 <input type="number" min="0" step="1" value={mileage} onChange={(event) => setMileage(event.target.value)} className={`${inputClass} mt-2`} />
+              </label>
+              <label className="block text-xs font-bold uppercase text-[#6f746e]">
+                Next service (km)
+                <input type="number" min="0" step="1" value={nextServiceMileage} onChange={(event) => setNextServiceMileage(event.target.value)} className={`${inputClass} mt-2`} />
               </label>
               <label className="block text-xs font-bold uppercase text-[#6f746e]">
                 Notes

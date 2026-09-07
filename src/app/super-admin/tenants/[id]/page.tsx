@@ -745,6 +745,7 @@ export default function TenantDetailPage() {
             <p className="mt-2 text-sm text-[#6f746e]">
               Only modules that fit this business type are shown. Disabling one removes it from that business sidebar immediately.
               {tenant.business_type === "store" ? " Repair and Warranties are optional modules." : ""}
+              {tenant.business_type === "garage" ? " Owner bill SMS, service operations report, and job videos are optional." : ""}
             </p>
             <div className="mt-6 space-y-6">
               {groupModules(featureData.available).map(({ group, features }) => (
