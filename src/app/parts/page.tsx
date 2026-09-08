@@ -1,9 +1,9 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { Boxes, Download, PackagePlus, Pencil, Plus, Search, Upload, X } from "lucide-react";
+import { Boxes, Download, Loader2, PackagePlus, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { buttonClass, ErrorMessage, inputClass, PageState, Panel, SuccessMessage } from "@/components/ui";
+import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel, SuccessMessage } from "@/components/ui";
 import { API_URL, api, currentFeatures, currentUser, mediaUrl, money } from "@/lib/api";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 import { usesStoreCounter } from "@/lib/business-profiles";
@@ -49,6 +49,9 @@ export default function PartsPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [importing, setImporting] = useState(false);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<Part | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importPayment, setImportPayment] = useState("paid");
   const [importDue, setImportDue] = useState("");
@@ -59,6 +62,7 @@ export default function PartsPage() {
   const isGarage = profile.type === "garage";
   const stockUnit = isPaint ? "ml" : "units";
   const lowStockAt = isPaint ? 250 : 5;
+  const itemNoun = isPaint ? "colour" : isStore ? "item" : "part";
 
   const load = useCallback((term = search) => {
     const params = new URLSearchParams({ search: term, per_page: "100" });
@@ -83,11 +87,11 @@ export default function PartsPage() {
   useEffect(() => {
     if (!mode) return;
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setMode(null);
+      if (event.key === "Escape" && !saving) setMode(null);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [mode]);
+  }, [mode, saving]);
 
   function openAdd() {
     setSelected(null);
@@ -179,6 +183,9 @@ export default function PartsPage() {
     if (fileInput?.files?.length) {
       Array.from(fileInput.files).slice(0, 5).forEach((file) => formData.append("images[]", file));
     }
+    setSaving(true);
+    setError("");
+    setNotice("");
     try {
       if (mode === "edit" && selected) {
         await api(`/parts/${selected.id}`, { method: "POST", body: formData });
@@ -191,6 +198,8 @@ export default function PartsPage() {
       load("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save part.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -198,18 +207,21 @@ export default function PartsPage() {
     event.preventDefault();
     if (!selected) return;
     const form = event.currentTarget;
+    const payload = Object.fromEntries(new FormData(form));
+    if (!payload.due_date || payload.payment_status !== "credit") {
+      delete payload.due_date;
+    }
+    if (!payload.supplier_id) {
+      if (isGarage) {
+        setError("Pick a supplier. Use Walk-in / unnamed for cash buys with no named house.");
+        return;
+      }
+      delete payload.supplier_id;
+    }
+    setSaving(true);
+    setError("");
+    setNotice("");
     try {
-      const payload = Object.fromEntries(new FormData(form));
-      if (!payload.due_date || payload.payment_status !== "credit") {
-        delete payload.due_date;
-      }
-      if (!payload.supplier_id) {
-        if (isGarage) {
-          setError("Pick a supplier. Use Walk-in / unnamed for cash buys with no named house.");
-          return;
-        }
-        delete payload.supplier_id;
-      }
       await api(`/parts/${selected.id}/restock`, {
         method: "POST",
         body: JSON.stringify(payload),
@@ -220,6 +232,34 @@ export default function PartsPage() {
       load("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not restock part.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openDelete(part: Part) {
+    if (!admin) return;
+    setMode(null);
+    setSelected(null);
+    setSaving(false);
+    setPendingDelete(part);
+    setError("");
+    setNotice("");
+  }
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    setError("");
+    try {
+      await api(`/parts/${pendingDelete.id}`, { method: "DELETE" });
+      setNotice(`Deleted ${pendingDelete.name}.`);
+      setPendingDelete(null);
+      load("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : `Could not delete ${itemNoun}.`);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -285,7 +325,21 @@ export default function PartsPage() {
           {parts.map((part) => {
             const image = mediaUrl(part.image_urls?.[0] || part.images?.[0]);
             return (
-              <Panel key={part.id} className="flex h-full flex-col overflow-hidden">
+              <Panel key={part.id} className="group relative flex h-full flex-col overflow-hidden">
+                {admin && (
+                  <button
+                    type="button"
+                    aria-label={`Remove ${part.name}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      openDelete(part);
+                    }}
+                    className="absolute right-2 top-2 z-20 grid size-8 place-items-center bg-[#b84837] text-white opacity-0 shadow-sm transition group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+                  >
+                    <X size={16} />
+                  </button>
+                )}
                 <button type="button" onClick={() => (admin ? openEdit(part) : openRestock(part))} className="block w-full flex-1 text-left">
                   <div className="relative aspect-[16/10] w-full overflow-hidden bg-[#e8e5dc]">
                     {image ? (
@@ -342,16 +396,22 @@ export default function PartsPage() {
       {(mode === "add" || mode === "edit") && (
         <div
           className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4"
-          onClick={() => setMode(null)}
+          onClick={() => { if (!saving) setMode(null); }}
         >
           <form
             onSubmit={savePart}
             onClick={(event) => event.stopPropagation()}
-            className="my-8 w-full max-w-2xl bg-[#f3f0e8]"
+            aria-busy={saving}
+            className="relative my-8 w-full max-w-2xl bg-[#f3f0e8]"
           >
+            {saving && (
+              <div className="absolute inset-0 z-10 grid place-items-center bg-[#f3f0e8]/80" role="status" aria-live="polite" aria-label="Saving">
+                <Loader2 className="animate-spin text-[#167c73]" size={36} />
+              </div>
+            )}
             <div className="flex items-center justify-between border-b border-[#d7d3c8] p-5">
               <h2 className="font-display text-3xl font-semibold uppercase">{mode === "edit" ? (isPaint ? "Edit colour" : isStore ? "Edit item" : "Edit part") : (isPaint ? "Add colour / material" : isStore ? "Add stock item" : "Add inventory part")}</h2>
-              <button type="button" onClick={() => setMode(null)} aria-label="Close"><X /></button>
+              <button type="button" onClick={() => setMode(null)} disabled={saving} aria-label="Close"><X /></button>
             </div>
             <div className="grid gap-4 p-5 sm:grid-cols-2">
               {[
@@ -417,8 +477,21 @@ export default function PartsPage() {
                 </div>
               ) : null}
             </div>
-            <div className="flex justify-end border-t border-[#d7d3c8] p-5">
-              <button className={buttonClass}>{mode === "edit" ? "Save changes" : isStore ? "Save item" : "Save part"}</button>
+            <div className="flex items-center justify-between gap-3 border-t border-[#d7d3c8] p-5">
+              {mode === "edit" && selected && (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => openDelete(selected)}
+                  className="inline-flex h-9 items-center gap-1.5 border border-[#b84837] px-3 text-[13px] font-semibold text-[#b84837] hover:bg-[#b84837]/8 disabled:opacity-50"
+                >
+                  <Trash2 size={14} /> Delete
+                </button>
+              )}
+              <button type="submit" disabled={saving} className={`${buttonClass} ml-auto`}>
+                {saving && <Loader2 className="animate-spin" size={16} aria-hidden />}
+                {saving ? "Saving..." : mode === "edit" ? "Save changes" : isStore ? "Save item" : "Save part"}
+              </button>
             </div>
           </form>
         </div>
@@ -427,16 +500,22 @@ export default function PartsPage() {
       {mode === "restock" && selected && (
         <div
           className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4"
-          onClick={() => setMode(null)}
+          onClick={() => { if (!saving) setMode(null); }}
         >
           <form
             onSubmit={restock}
             onClick={(event) => event.stopPropagation()}
-            className="my-8 w-full max-w-md bg-[#f3f0e8]"
+            aria-busy={saving}
+            className="relative my-8 w-full max-w-md bg-[#f3f0e8]"
           >
+            {saving && (
+              <div className="absolute inset-0 z-10 grid place-items-center bg-[#f3f0e8]/80" role="status" aria-live="polite" aria-label="Saving">
+                <Loader2 className="animate-spin text-[#167c73]" size={36} />
+              </div>
+            )}
             <div className="flex items-center justify-between border-b border-[#d7d3c8] p-5">
               <h2 className="font-display text-3xl font-semibold uppercase">Restock</h2>
-              <button type="button" onClick={() => setMode(null)} aria-label="Close"><X /></button>
+              <button type="button" onClick={() => setMode(null)} disabled={saving} aria-label="Close"><X /></button>
             </div>
             <div className="space-y-4 p-5">
               <p className="text-sm text-[#6f746e]">
@@ -484,7 +563,10 @@ export default function PartsPage() {
               </label>
             </div>
             <div className="flex justify-end border-t border-[#d7d3c8] p-5">
-              <button className={buttonClass}>Add to stock</button>
+              <button type="submit" disabled={saving} className={buttonClass}>
+                {saving && <Loader2 className="animate-spin" size={16} />}
+                {saving ? "Saving..." : "Add to stock"}
+              </button>
             </div>
           </form>
         </div>
@@ -520,6 +602,20 @@ export default function PartsPage() {
           </div>
         </div>
       )}
+      <ConfirmModal
+        open={Boolean(pendingDelete)}
+        title={`Delete ${itemNoun}`}
+        message={
+          pendingDelete
+            ? `Delete “${pendingDelete.name}” from inventory? Existing bills keep the line, without this catalog item.`
+            : ""
+        }
+        confirmLabel="Delete"
+        tone="danger"
+        busy={deleting}
+        onCancel={() => { if (!deleting) setPendingDelete(null); }}
+        onConfirm={confirmDelete}
+      />
     </AppShell>
   );
 }
