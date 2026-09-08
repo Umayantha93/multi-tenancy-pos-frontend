@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Barlow_Condensed, DM_Sans } from "next/font/google";
+import { Barlow_Condensed, DM_Sans, Noto_Sans_Sinhala } from "next/font/google";
+import { LocaleProvider } from "@/lib/locale";
 import "./globals.css";
 
 const bodyFont = DM_Sans({
@@ -11,6 +12,12 @@ const displayFont = Barlow_Condensed({
   variable: "--font-display",
   subsets: ["latin"],
   weight: ["500", "600", "700"],
+});
+
+const sinhalaFont = Noto_Sans_Sinhala({
+  variable: "--font-sinhala",
+  subsets: ["sinhala"],
+  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -26,9 +33,11 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${bodyFont.variable} ${displayFont.variable} h-full antialiased`}
+      className={`${bodyFont.variable} ${displayFont.variable} ${sinhalaFont.variable} h-full antialiased`}
     >
-      <body>{children}</body>
+      <body>
+        <LocaleProvider>{children}</LocaleProvider>
+      </body>
     </html>
   );
 }

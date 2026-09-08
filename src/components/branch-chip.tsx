@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, Branch, currentBranch, currentBranches, currentUser, isMultiBranch, setCurrentBranchId, storeSession } from "@/lib/api";
-import { ConfirmModal, inputClass } from "@/components/ui";
+import { ConfirmModal } from "@/components/ui";
 
 export function BranchChip() {
   const [branch, setBranch] = useState<Branch | null>(null);
@@ -10,6 +10,7 @@ export function BranchChip() {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<Branch | null>(null);
   const [busy, setBusy] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
   const user = currentUser();
   const canSwitch = user?.role === "business_owner";
 
@@ -25,6 +26,22 @@ export function BranchChip() {
     window.addEventListener("garage-branch-changed", onChange);
     return () => window.removeEventListener("garage-branch-changed", onChange);
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
 
   if (!isMultiBranch() || !branch) return null;
 
@@ -48,29 +65,36 @@ export function BranchChip() {
   }
 
   return (
-    <div className="relative">
+    <div className="relative z-50" ref={rootRef}>
       {canSwitch ? (
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
+          aria-expanded={open}
+          aria-haspopup="listbox"
           className="inline-flex items-center gap-2 border border-[#20221f] bg-white px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wide"
         >
-          <span className="size-2 rounded-full bg-[#167c73]" />
-          {branch.name}
+          <span className="size-2 shrink-0 rounded-full bg-[#167c73]" />
+          <span className="max-w-36 truncate">{branch.name}</span>
           <span className="text-[#6f746e]">▾</span>
         </button>
       ) : (
         <span className="inline-flex items-center gap-2 border border-[#6b1e2a] bg-[#f8ecee] px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-[#6b1e2a]">
-          <span className="size-2 rounded-full bg-[#6b1e2a]" />
+          <span className="size-2 shrink-0 rounded-full bg-[#6b1e2a]" />
           {branch.name} · locked
         </span>
       )}
       {open && canSwitch && (
-        <div className="absolute right-0 z-30 mt-2 w-56 border border-[#20221f] bg-white p-2 shadow-lg">
+        <div
+          role="listbox"
+          className="absolute right-0 top-full z-[60] mt-2 w-56 border border-[#20221f] bg-white p-2 shadow-[0_12px_28px_rgba(32,34,31,0.18)]"
+        >
           {branches.map((item) => (
             <button
               key={item.id}
               type="button"
+              role="option"
+              aria-selected={item.id === branch.id}
               onClick={() => {
                 setOpen(false);
                 if (item.id !== branch.id) setPending(item);
@@ -108,9 +132,13 @@ export function ShopFilter({
 }) {
   if (!isMultiBranch() || currentUser()?.role !== "business_owner") return null;
   return (
-    <label className={className}>
+    <label className={`relative z-0 inline-flex max-w-full flex-col ${className}`}>
       <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">Shop</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)} className={`${inputClass} w-auto min-w-40`}>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-9 w-auto min-w-40 max-w-full border border-[#c9c5b9] bg-white px-2.5 text-[13px] outline-none focus:border-[#167c73]"
+      >
         <option value="">This shop</option>
         <option value="all">All shops</option>
         {currentBranches().filter((branch) => branch.status !== "inactive").map((branch) => (

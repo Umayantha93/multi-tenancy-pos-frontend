@@ -62,7 +62,7 @@ export default function DashboardPage() {
 
   return <AppShell title="Business overview" eyebrow={eyebrow || undefined} action={cta}>
     {error && <ErrorMessage message={error} />}
-    <ShopFilter value={shopFilter} onChange={setShopFilter} className="mb-5 block" />
+    <ShopFilter value={shopFilter} onChange={setShopFilter} className="mb-5" />
     {!data && !error ? <PageState message="Loading your business dashboard..." /> : data && <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map(([label, value, Icon, color]) => <Panel key={label} className="relative overflow-hidden p-5"><div className="mb-8 flex items-start justify-between"><p className="text-xs font-bold uppercase text-[#6f746e]">{label}</p><Icon size={20} style={{ color }} /></div><p className="font-display text-3xl font-semibold sm:text-4xl">{value}</p><span className="absolute bottom-0 left-0 h-1 w-16" style={{ background: color }} /></Panel>)}

@@ -3,6 +3,12 @@ export const APP_ORIGIN = API_URL.replace(/\/api\/?$/, "");
 
 type ApiOptions = RequestInit & { authenticated?: boolean };
 
+export function currentLocale(): "en" | "si" {
+  if (typeof window === "undefined") return "en";
+  const stored = localStorage.getItem("garage_locale");
+  return stored === "si" ? "si" : "en";
+}
+
 export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const token = typeof window === "undefined" ? null : localStorage.getItem("garage_token");
   const headers = new Headers(options.headers);
@@ -10,6 +16,7 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
   if (options.authenticated !== false && token) headers.set("Authorization", `Bearer ${token}`);
   const branchId = typeof window === "undefined" ? null : currentBranchId();
   if (options.authenticated !== false && branchId) headers.set("X-Branch-Id", String(branchId));
+  headers.set("X-Locale", currentLocale());
   const response = await fetch(`${API_URL}${path}`, { ...options, headers });
   if (response.status === 401 && typeof window !== "undefined") {
     clearSession();
@@ -99,6 +106,7 @@ export type User = {
   email: string;
   role: "super_admin" | "business_owner" | "staff";
   status: "active" | "inactive";
+  locale?: "en" | "si" | string | null;
   employee_id?: number | null;
   home_branch_id?: number | null;
   last_branch_id?: number | null;
@@ -120,6 +128,9 @@ export function storeSession(token: string, user: User, features: string[], extr
   localStorage.setItem("garage_token", token);
   localStorage.setItem("garage_user", JSON.stringify(user));
   localStorage.setItem("garage_features", JSON.stringify(features));
+  if (user.locale === "si" || user.locale === "en") {
+    localStorage.setItem("garage_locale", user.locale);
+  }
   if (extras?.branches) localStorage.setItem("garage_branches", JSON.stringify(extras.branches));
   if (extras?.active_branch?.id) localStorage.setItem("garage_branch_id", String(extras.active_branch.id));
 }

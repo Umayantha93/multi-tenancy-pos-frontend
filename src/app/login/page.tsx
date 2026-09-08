@@ -4,7 +4,9 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Building2, LockKeyhole, Store } from "lucide-react";
 import { PasswordInput } from "@/components/ui";
+import { LanguageToggle } from "@/components/language-toggle";
 import { api, mediaUrl, SessionPayload, storeSession } from "@/lib/api";
+import { useLocale, useT } from "@/lib/locale";
 
 type Branding = {
   business_name: string | null;
@@ -14,6 +16,8 @@ type Branding = {
 
 export default function LoginPage() {
   const router = useRouter();
+  const t = useT();
+  const { setLocale } = useLocale();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -47,9 +51,12 @@ export default function LoginPage() {
         branches: result.branches,
         active_branch: result.active_branch,
       });
+      if (result.user.locale === "si" || result.user.locale === "en") {
+        await setLocale(result.user.locale);
+      }
       router.push(result.user.role === "super_admin" ? "/super-admin/dashboard" : "/dashboard");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to sign in.");
+      setError(caught instanceof Error ? caught.message : t("login.unable_to_sign_in"));
     } finally {
       setLoading(false);
     }
@@ -71,54 +78,60 @@ export default function LoginPage() {
           )}
           <div>
             <strong className="font-display text-2xl uppercase">{businessLabel || "Bay 06"}</strong>
-            <p className="text-xs text-white/55">{businessLabel ? "Business login" : "Multi-business POS"}</p>
+            <p className="text-xs text-white/55">{businessLabel ? t("login.business_login") : t("login.multi_business_pos")}</p>
           </div>
         </div>
         <div className="relative max-w-xl">
-          <p className="mb-4 font-display text-lg uppercase text-[#f5c842]">One platform. Many businesses.</p>
+          <p className="mb-4 font-display text-lg uppercase text-[#f5c842]">{t("login.one_platform")}</p>
           <h1 className="font-display text-7xl font-semibold uppercase leading-[0.88]">
-            Garages.<br />Studios.<br />Garments.<br />Cottages.
+            {t("login.garages")}<br />{t("login.studios")}<br />{t("login.garments")}<br />{t("login.cottages")}
           </h1>
           <p className="mt-6 max-w-md text-sm leading-6 text-white/55">
-            Billing, inventory, team, and finance — shaped to each business type, under one sign-in.
+            {t("login.pitch")}
           </p>
           <div className="mt-10 flex flex-wrap gap-x-8 gap-y-3 border-t border-white/20 pt-6 text-sm text-white/60">
-            <span>POS & billing</span>
-            <span>Stock & inventory</span>
-            <span>Team & payroll</span>
-            <span>Finance</span>
+            <span>{t("login.pos_billing")}</span>
+            <span>{t("login.stock_inventory")}</span>
+            <span>{t("login.team_payroll")}</span>
+            <span>{t("login.finance")}</span>
           </div>
         </div>
-        <p className="relative text-xs uppercase text-white/35">Sri Lanka · LKR · Built for every counter</p>
+        <div className="relative space-y-4">
+          <LanguageToggle />
+          <p className="text-xs uppercase text-white/35">{t("login.footer")}</p>
+        </div>
       </section>
 
       <section className="flex items-center justify-center px-6 py-12 sm:px-12">
         <form onSubmit={submit} className="page-enter w-full max-w-md">
-          <div className="mb-10 flex items-center gap-3 lg:hidden">
-            {logo ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={logo} alt="" className="h-10 w-auto max-w-[140px] object-contain" />
-            ) : (
-              <span className="grid size-10 place-items-center bg-[#f5c842]"><Building2 size={21} /></span>
-            )}
-            <strong className="font-display text-2xl uppercase">{businessLabel || "Bay 06"}</strong>
+          <div className="mb-10 flex items-center justify-between gap-3 lg:hidden">
+            <div className="flex items-center gap-3">
+              {logo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={logo} alt="" className="h-10 w-auto max-w-[140px] object-contain" />
+              ) : (
+                <span className="grid size-10 place-items-center bg-[#f5c842]"><Building2 size={21} /></span>
+              )}
+              <strong className="font-display text-2xl uppercase">{businessLabel || "Bay 06"}</strong>
+            </div>
           </div>
+          <div className="mb-6 lg:hidden"><LanguageToggle tone="light" /></div>
 
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase text-[#167c73]">
-            <Store size={17} />Business console
+            <Store size={17} />{t("login.business_console")}
           </div>
           <h2 className="font-display text-5xl font-semibold uppercase leading-none">
-            Sign in.<br />Open your counter.
+            {t("login.sign_in_title_1")}<br />{t("login.sign_in_title_2")}
           </h2>
           <p className="mt-4 text-sm text-[#6f746e]">
             {businessLabel
-              ? `Continue to ${businessLabel}.`
-              : "Use your business account — garage, studio, garments, or cottage."}
+              ? t("login.continue_to", { name: businessLabel })
+              : t("login.use_business_account")}
           </p>
 
           <div className="mt-9 space-y-5">
             <label className="block text-sm font-semibold">
-              Email address
+              {t("login.email")}
               <input
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -130,7 +143,7 @@ export default function LoginPage() {
               />
             </label>
             <label className="block text-sm font-semibold">
-              Password
+              {t("login.password")}
               <div className="mt-2">
                 <PasswordInput
                   value={password}
@@ -152,14 +165,14 @@ export default function LoginPage() {
             disabled={loading}
             className="mt-7 flex h-12 w-full items-center justify-between bg-[#20221f] px-5 font-semibold text-white transition hover:bg-[#167c73] disabled:opacity-60"
           >
-            <span>{loading ? "Signing in..." : "Enter business"}</span>
+            <span>{loading ? t("login.signing_in") : t("login.enter_business")}</span>
             <ArrowRight size={19} />
           </button>
 
           <div className="mt-8 grid grid-cols-2 gap-2 border-t border-[#e2ded4] pt-6 text-center sm:grid-cols-4">
-            {["Garages", "Studios", "Garments", "Cottages"].map((label) => (
+            {[t("login.garages"), t("login.studios"), t("login.garments"), t("login.cottages")].map((label) => (
               <div key={label} className="border border-[#d7d3c8] bg-[#fbfaf6] px-2 py-3">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-[#6f746e]">{label}</p>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-[#6f746e]">{label.replace(/\.$/, "")}</p>
               </div>
             ))}
           </div>

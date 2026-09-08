@@ -7,10 +7,14 @@ import { LogOut, Menu, Store, X } from "lucide-react";
 import { api, clearSession, currentFeatures, currentUser, mediaUrl, money, SessionPayload, storeSession, User } from "@/lib/api";
 import { profileFor } from "@/lib/business-profiles";
 import { BranchChip } from "@/components/branch-chip";
+import { LanguageToggle } from "@/components/language-toggle";
+import { useLocale, useT } from "@/lib/locale";
 
 export function AppShell({ children, title, eyebrow, action }: { children: ReactNode; title: string; eyebrow?: string; action?: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const t = useT();
+  const { setLocale } = useLocale();
   const [user, setUser] = useState<User | null>(null);
   const [features, setFeatures] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
@@ -42,11 +46,17 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
         });
         setUser(result.user);
         setFeatures(result.features);
+        if (result.user.locale === "si" || result.user.locale === "en") {
+          const stored = localStorage.getItem("garage_locale");
+          if (stored !== result.user.locale) {
+            void setLocale(result.user.locale, { persist: false });
+          }
+        }
       })
       .catch(() => {
         /* Keep cached session if refresh fails briefly. */
       });
-  }, [router]);
+  }, [router, setLocale]);
 
   useEffect(() => {
     if (!user) return;
@@ -74,6 +84,9 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
     return true;
   });
   const logoUrl = mediaUrl(user?.tenant?.logo_url || user?.tenant?.logo);
+  const roleLabel = user?.role ? t(`roles.${user.role}`) : t("shell.account");
+  const amountLabel = paymentAmount != null ? money(paymentAmount) : t("shell.plan_amount");
+
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[240px_1fr]">
       <aside className={`no-print fixed inset-y-0 left-0 z-40 flex w-[240px] flex-col bg-[#242723] text-white transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>
@@ -86,11 +99,11 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
               <span className="grid size-10 shrink-0 place-items-center bg-[#f5c842] text-[#20221f]"><Store size={20} /></span>
             )}
             <div className="min-w-0">
-              <strong className="block truncate font-display text-xl uppercase">{user?.tenant?.business_name ?? "Business"}</strong>
-              <p className="text-[10px] uppercase text-white/40">{profile.operationsLabel}</p>
+              <strong className="block truncate font-display text-xl uppercase">{user?.tenant?.business_name ?? t("shell.business")}</strong>
+              <p className="text-[10px] uppercase text-white/40">{t(`ops.${profile.operationsLabel}`)}</p>
             </div>
           </Link>
-          <button onClick={() => setOpen(false)} className="lg:hidden" aria-label="Close navigation"><X /></button>
+          <button onClick={() => setOpen(false)} className="lg:hidden" aria-label={t("shell.close_nav")}><X /></button>
         </div>
         <nav className="sidebar-scroll flex-1 space-y-1 overflow-y-auto overscroll-contain px-3 py-6">
           {links.map(({ href, label, icon: Icon }) => {
@@ -102,32 +115,40 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
                 onClick={() => setOpen(false)}
                 className={`flex h-11 items-center gap-3 px-3 text-sm transition ${active ? "bg-[#f5c842] font-semibold text-[#20221f]" : "text-white/65 hover:bg-white/8 hover:text-white"}`}
               >
-                <Icon size={18} />{label}
+                <Icon size={18} />{t(`nav.${label}`)}
               </Link>
             );
           })}
         </nav>
-        <div className="border-t border-white/10 p-4"><div className="mb-3 flex items-center gap-3"><span className="grid size-9 place-items-center bg-[#167c73] text-sm font-bold">{user?.name?.charAt(0) ?? "?"}</span><div className="min-w-0"><p className="truncate text-sm font-semibold">{user?.name ?? "Loading"}</p><p className="text-[10px] uppercase text-white/40">{user?.role ?? "account"}</p></div></div><button onClick={logout} className="flex w-full items-center gap-2 py-2 text-xs text-white/50 hover:text-white"><LogOut size={15} />Sign out</button></div>
+        <div className="border-t border-white/10 p-4">
+          <LanguageToggle />
+          <div className="mb-3 flex items-center gap-3">
+            <span className="grid size-9 place-items-center bg-[#167c73] text-sm font-bold">{user?.name?.charAt(0) ?? "?"}</span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">{user?.name ?? t("shell.loading")}</p>
+              <p className="text-[10px] uppercase text-white/40">{roleLabel}</p>
+            </div>
+          </div>
+          <button onClick={logout} className="flex w-full items-center gap-2 py-2 text-xs text-white/50 hover:text-white">
+            <LogOut size={15} />{t("shell.sign_out")}
+          </button>
+        </div>
       </aside>
-      {open && <button aria-label="Close navigation overlay" onClick={() => setOpen(false)} className="no-print fixed inset-0 z-30 bg-black/45 lg:hidden" />}
+      {open && <button aria-label={t("shell.close_overlay")} onClick={() => setOpen(false)} className="no-print fixed inset-0 z-30 bg-black/45 lg:hidden" />}
       <main className="min-w-0">
         {showPaymentReminder && (
           <div className="no-print flex min-h-20 items-center justify-center bg-[#6b1e2a] px-4 py-5 text-center sm:min-h-24 sm:px-7 sm:py-6">
             <p className="max-w-3xl font-display text-xl font-semibold uppercase leading-snug text-[#f8ebea] sm:text-2xl md:text-3xl">
-              Monthly payment due — please pay{" "}
-              <span className="underline decoration-[#f8ebea]/40 underline-offset-4">
-                {paymentAmount != null ? money(paymentAmount) : "your plan amount"}
-              </span>{" "}
-              before month end
+              {t("shell.payment_due", { amount: amountLabel })}
             </p>
           </div>
         )}
-        <header className="no-print flex min-h-20 items-center justify-between gap-3 border-b border-[#d7d3c8] bg-[#f3f0e8]/90 px-4 backdrop-blur sm:px-7">
+        <header className="no-print relative z-40 flex min-h-20 items-center justify-between gap-3 border-b border-[#d7d3c8] bg-[#f3f0e8]/95 px-4 backdrop-blur sm:px-7">
           <div className="flex min-w-0 items-center gap-3">
-            <button onClick={() => setOpen(true)} className="grid size-10 place-items-center border border-[#d7d3c8] lg:hidden" aria-label="Open navigation"><Menu size={20} /></button>
+            <button onClick={() => setOpen(true)} className="grid size-10 place-items-center border border-[#d7d3c8] lg:hidden" aria-label={t("shell.open_nav")}><Menu size={20} /></button>
             <div className="min-w-0">{eyebrow && <p className="text-[10px] font-bold uppercase text-[#167c73]">{eyebrow}</p>}<h1 className="font-display text-3xl font-semibold uppercase leading-none sm:text-4xl">{title}</h1></div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="relative z-50 flex shrink-0 items-center gap-2">
             <BranchChip />
             {action}
           </div>
