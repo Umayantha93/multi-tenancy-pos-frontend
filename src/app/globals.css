@@ -26,10 +26,18 @@ body {
   background-image: linear-gradient(rgba(32, 34, 31, 0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(32, 34, 31, 0.035) 1px, transparent 1px);
   background-size: 28px 28px;
   color: var(--ink);
-  font-family: var(--font-body), sans-serif;
+  font-family: var(--font-body), var(--font-sinhala), sans-serif;
 }
 
-h1, h2, h3, .font-display { font-family: var(--font-display), sans-serif; letter-spacing: 0; }
+h1, h2, h3, .font-display { font-family: var(--font-display), var(--font-sinhala), sans-serif; letter-spacing: 0; }
+html[lang="si"] h1,
+html[lang="si"] h2,
+html[lang="si"] h3,
+html[lang="si"] .font-display {
+  font-family: var(--font-sinhala), var(--font-display), sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+}
 button, input, select, textarea { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 
