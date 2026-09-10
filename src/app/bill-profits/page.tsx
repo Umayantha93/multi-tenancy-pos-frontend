@@ -79,13 +79,18 @@ function daysAgo(days: number) {
   return date.toISOString().slice(0, 10);
 }
 
+function todayStamp() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export default function BillProfitsPage() {
   const [isGarage, setIsGarage] = useState(false);
   const [isPaint, setIsPaint] = useState(false);
   const [isStore, setIsStore] = useState(false);
   const [hasRepair, setHasRepair] = useState(false);
-  const [dateFrom, setDateFrom] = useState(() => daysAgo(29));
-  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
+  // Dates are client-only so SSR HTML matches the first client paint.
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [jobKind, setJobKind] = useState<JobKindFilter>(null);
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState("");
@@ -98,6 +103,7 @@ export default function BillProfitsPage() {
   const effectiveKind = jobKind ?? (isStore && !hasRepair ? "parts_sale" : null);
 
   const load = useCallback(() => {
+    if (!dateFrom || !dateTo) return;
     if (rangeInvalid) {
       setError("From date must be on or before To date.");
       setLoading(false);
@@ -113,6 +119,11 @@ export default function BillProfitsPage() {
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load bill profits."))
       .finally(() => setLoading(false));
   }, [dateFrom, dateTo, effectiveKind, rangeInvalid, shopFilter]);
+
+  useEffect(() => {
+    setDateFrom(daysAgo(29));
+    setDateTo(todayStamp());
+  }, []);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {

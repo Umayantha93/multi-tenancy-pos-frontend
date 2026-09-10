@@ -130,7 +130,10 @@ export function ShopFilter({
   onChange: (value: string) => void;
   className?: string;
 }) {
-  if (!isMultiBranch() || currentUser()?.role !== "business_owner") return null;
+  // localStorage is client-only — first paint must match SSR (null).
+  const [ready, setReady] = useState(false);
+  useEffect(() => setReady(true), []);
+  if (!ready || !isMultiBranch() || currentUser()?.role !== "business_owner") return null;
   return (
     <label className={`relative z-0 inline-flex max-w-full flex-col ${className}`}>
       <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">Shop</span>
