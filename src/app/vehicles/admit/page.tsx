@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardCheck, Plus, Save, Search } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
@@ -19,6 +19,25 @@ type VehicleMatch = {
   year?: number;
   bills_count: number;
   customer: { id: number; name: string; phone: string; address?: string | null };
+};
+
+type CustomerMatch = {
+  id: number;
+  name: string;
+  phone: string;
+  address?: string | null;
+  vehicles_count?: number;
+};
+
+type CustomerDetail = CustomerMatch & {
+  vehicles: Array<{
+    id: number;
+    number_plate: string;
+    make?: string | null;
+    model?: string | null;
+    year?: number | null;
+    bills_count?: number;
+  }>;
 };
 
 type JobKind = "repair" | "service";
@@ -53,10 +72,19 @@ export default function AdmitVehiclePage() {
   const [lookingUp, setLookingUp] = useState(false);
   const [creatingId, setCreatingId] = useState<number | null>(null);
   const [formPlate, setFormPlate] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerAddress, setCustomerAddress] = useState("");
+  const [customerMatches, setCustomerMatches] = useState<CustomerMatch[]>([]);
+  const [lookingUpCustomer, setLookingUpCustomer] = useState(false);
+  const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
+  const [customerVehicles, setCustomerVehicles] = useState<CustomerDetail["vehicles"]>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [jobKind, setJobKind] = useState<JobKind>("repair");
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [employeeIds, setEmployeeIds] = useState<number[]>([]);
   const [canAssignEmployees, setCanAssignEmployees] = useState(false);
+  const phoneBoxRef = useRef<HTMLLabelElement>(null);
 
   useEffect(() => {
     const features = currentFeatures();
@@ -85,6 +113,58 @@ export default function AdmitVehiclePage() {
     return () => clearTimeout(timer);
   }, [plateQuery]);
 
+  useEffect(() => {
+    const digits = customerPhone.replace(/\D/g, "");
+    if (digits.length < 3) {
+      setCustomerMatches([]);
+      setLookingUpCustomer(false);
+      return;
+    }
+    setLookingUpCustomer(true);
+    const timer = setTimeout(() => {
+      api<{ data: CustomerMatch[] }>(`/customers?phone=${encodeURIComponent(customerPhone.trim())}&per_page=10`)
+        .then((result) => {
+          setCustomerMatches(result.data);
+          setShowCustomerSuggestions(true);
+        })
+        .catch(() => setCustomerMatches([]))
+        .finally(() => setLookingUpCustomer(false));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [customerPhone]);
+
+  useEffect(() => {
+    function onPointer(event: MouseEvent) {
+      if (!phoneBoxRef.current?.contains(event.target as Node)) {
+        setShowCustomerSuggestions(false);
+      }
+    }
+    window.addEventListener("mousedown", onPointer);
+    return () => window.removeEventListener("mousedown", onPointer);
+  }, []);
+
+  async function pickCustomer(match: CustomerMatch) {
+    setCustomerName(match.name || "");
+    setCustomerPhone(match.phone || "");
+    setCustomerAddress(match.address || "");
+    setSelectedCustomerId(match.id);
+    setShowCustomerSuggestions(false);
+    setCustomerMatches([]);
+    setError("");
+    try {
+      const detail = await api<CustomerDetail>(`/customers/${match.id}`);
+      setCustomerVehicles(detail.vehicles ?? []);
+    } catch {
+      setCustomerVehicles([]);
+    }
+  }
+
+  function onPhoneChange(value: string) {
+    setCustomerPhone(value);
+    setSelectedCustomerId(null);
+    setCustomerVehicles([]);
+  }
+
   async function openNewCard(vehicleId: number) {
     setCreatingId(vehicleId);
     setError("");
@@ -105,7 +185,13 @@ export default function AdmitVehiclePage() {
     setSaving(true);
     setError("");
     const form = Object.fromEntries(new FormData(event.currentTarget));
-    const payload: Record<string, unknown> = { ...form, employee_ids: employeeIds };
+    const payload: Record<string, unknown> = {
+      ...form,
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      customer_address: customerAddress,
+      employee_ids: employeeIds,
+    };
     if (isDevice) payload.asset_kind = "device";
     try {
       const bill = await api<{ id: number }>("/bills", { method: "POST", body: JSON.stringify(payload) });
@@ -125,8 +211,8 @@ export default function AdmitVehiclePage() {
             <p className="font-semibold">{isDevice ? "Search an existing device first" : "Search an existing plate first"}</p>
             <p className="text-sm text-[#6f746e]">
               {isPaint
-                ? "If it already exists, open another paint job. Otherwise fill the form below for a new admission."
-                : "If it already exists, open another job card. Otherwise fill the form below for a new admission."}
+                ? "If it already exists, open another paint job. Or type the customer phone below to reuse their details and pick another vehicle."
+                : "If it already exists, open another job card. Or type the customer phone below to reuse their details and pick another vehicle."}
             </p>
           </div>
         </div>
@@ -217,31 +303,131 @@ export default function AdmitVehiclePage() {
           <Panel>
             <div className="border-b border-[#d7d3c8] px-5 py-4">
               <h2 className="font-display text-2xl font-semibold uppercase">{isDevice ? "New customer & device" : "New customer & vehicle"}</h2>
+              <p className="mt-1 text-sm text-[#6f746e]">
+                Type a phone number to find an existing customer and fill their details. Then open a job on one of their vehicles, or enter a new plate below.
+              </p>
             </div>
             <div className="grid gap-5 p-5 sm:grid-cols-2">
-              {fields.map(([name, label, type, required]) => (
-                <label key={name} className="text-sm font-semibold">
-                  {label}{required && <span className="text-[#b84837]"> *</span>}
-                  {name === "number_plate" ? (
-                    <input
-                      name={name}
-                      type={type}
-                      required={required}
-                      value={formPlate}
-                      onChange={(event) => setFormPlate(event.target.value.toUpperCase())}
-                      className={`${inputClass} mt-2`}
-                    />
-                  ) : (
+              {fields.map(([name, label, type, required]) => {
+                if (name === "customer_phone") {
+                  return (
+                    <label key={name} ref={phoneBoxRef} className="relative text-sm font-semibold">
+                      {label}
+                      <input
+                        name={name}
+                        type={type}
+                        value={customerPhone}
+                        onChange={(event) => onPhoneChange(event.target.value)}
+                        onFocus={() => {
+                          if (customerMatches.length > 0) setShowCustomerSuggestions(true);
+                        }}
+                        autoComplete="off"
+                        className={`${inputClass} mt-2`}
+                        placeholder="e.g. 0771234567"
+                      />
+                      {lookingUpCustomer && (
+                        <p className="mt-1 text-xs font-normal text-[#6f746e]">Looking up customers…</p>
+                      )}
+                      {showCustomerSuggestions && customerMatches.length > 0 && (
+                        <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto border border-[#d7d3c8] bg-white shadow-lg">
+                          {customerMatches.map((match) => (
+                            <button
+                              key={match.id}
+                              type="button"
+                              onClick={() => void pickCustomer(match)}
+                              className="block w-full border-b border-[#e2ded4] px-3 py-2.5 text-left last:border-b-0 hover:bg-[#f7f5ef]"
+                            >
+                              <p className="font-semibold">{match.name}</p>
+                              <p className="text-xs font-normal text-[#6f746e]">
+                                {match.phone}
+                                {match.vehicles_count != null ? ` · ${match.vehicles_count} vehicle${match.vehicles_count === 1 ? "" : "s"}` : ""}
+                              </p>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </label>
+                  );
+                }
+                if (name === "customer_name") {
+                  return (
+                    <label key={name} className="text-sm font-semibold">
+                      {label}
+                      <input
+                        name={name}
+                        type={type}
+                        value={customerName}
+                        onChange={(event) => setCustomerName(event.target.value)}
+                        className={`${inputClass} mt-2`}
+                      />
+                    </label>
+                  );
+                }
+                if (name === "number_plate") {
+                  return (
+                    <label key={name} className="text-sm font-semibold">
+                      {label}{required && <span className="text-[#b84837]"> *</span>}
+                      <input
+                        name={name}
+                        type={type}
+                        required={required}
+                        value={formPlate}
+                        onChange={(event) => setFormPlate(event.target.value.toUpperCase())}
+                        className={`${inputClass} mt-2`}
+                      />
+                    </label>
+                  );
+                }
+                return (
+                  <label key={name} className="text-sm font-semibold">
+                    {label}{required && <span className="text-[#b84837]"> *</span>}
                     <input name={name} type={type} required={required} className={`${inputClass} mt-2`} />
-                  )}
-                </label>
-              ))}
+                  </label>
+                );
+              })}
               <AddressField
                 name="customer_address"
                 label="Customer address"
+                value={customerAddress}
+                onChange={setCustomerAddress}
                 className="sm:col-span-2"
                 placeholder="Home or business address"
               />
+              {selectedCustomerId && (
+                <div className="sm:col-span-2 border border-[#d7d3c8] bg-white">
+                  <div className="border-b border-[#e2ded4] px-4 py-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-[#167c73]">Existing vehicles for this customer</p>
+                    <p className="mt-1 text-sm text-[#6f746e]">
+                      Open a job on one of these, or fill a new {isDevice ? "device ID" : "number plate"} above.
+                    </p>
+                  </div>
+                  {customerVehicles.length === 0 ? (
+                    <p className="px-4 py-4 text-sm text-[#6f746e]">No vehicles on file yet — enter a new one in the form.</p>
+                  ) : (
+                    <div className="divide-y divide-[#e2ded4]">
+                      {customerVehicles.map((vehicle) => (
+                        <div key={vehicle.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                          <div>
+                            <p className="font-semibold">{vehicle.number_plate}</p>
+                            <p className="text-sm text-[#6f746e]">
+                              {[vehicle.make, vehicle.model, vehicle.year].filter(Boolean).join(" · ") || (isDevice ? "Device" : "Vehicle")}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={creatingId === vehicle.id}
+                            onClick={() => openNewCard(vehicle.id)}
+                            className={buttonClass}
+                          >
+                            <Plus size={16} />
+                            {creatingId === vehicle.id ? "Opening..." : (isPaint ? "New paint job" : "New job card")}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <label className="text-sm font-semibold sm:col-span-2">
                 {isGarage ? "Additional note" : "Internal note"}
                 <span className="ml-2 text-[11px] font-normal uppercase text-[#6f746e]">
