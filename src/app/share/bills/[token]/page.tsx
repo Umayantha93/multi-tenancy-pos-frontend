@@ -76,6 +76,17 @@ export default function SharedBillPage() {
   const token = shareTokenFromParam(params.token);
   const [bill, setBill] = useState<SharedBill | null>(null);
   const [error, setError] = useState("");
+  const [printWithLogo, setPrintWithLogo] = useState(true);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("bill-print-with-logo");
+      if (stored === "0") setPrintWithLogo(false);
+      if (stored === "1") setPrintWithLogo(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(() => {
     if (!token) {
@@ -159,18 +170,37 @@ export default function SharedBillPage() {
           <p className="text-[10px] font-bold uppercase tracking-wide text-[#6f746e]">{documentLabel}</p>
           <p className="font-display text-2xl uppercase leading-none">{bill.bill_number}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => window.print()}
-          className="inline-flex h-11 items-center gap-2 bg-[#20221f] px-4 text-sm font-semibold text-white"
-        >
-          <Download size={18} />
-          {downloadLabel}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="inline-flex h-11 cursor-pointer items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-xs font-bold uppercase">
+            <input
+              type="checkbox"
+              checked={printWithLogo}
+              onChange={(event) => {
+                const next = event.target.checked;
+                setPrintWithLogo(next);
+                try {
+                  window.localStorage.setItem("bill-print-with-logo", next ? "1" : "0");
+                } catch {
+                  /* ignore */
+                }
+              }}
+              className="size-3.5 accent-[#167c73]"
+            />
+            Watermark
+          </label>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="inline-flex h-11 items-center gap-2 bg-[#20221f] px-4 text-sm font-semibold text-white"
+          >
+            <Download size={18} />
+            {downloadLabel}
+          </button>
+        </div>
       </div>
 
       <div className="bill-print-sheet overflow-hidden border border-[#e2ddd0] bg-white print:border-0">
-        <BillWatermark src={logoUrl} />
+        <BillWatermark src={printWithLogo ? logoUrl : null} />
         <div className="bill-letterhead overflow-hidden border-b border-[#e2ddd0] p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex min-w-0 flex-wrap items-start gap-4">

@@ -381,11 +381,14 @@ export default function PartsPage() {
                     <button type="button" onClick={() => openRestock(part)} className={`flex flex-1 items-center justify-center gap-1.5 py-2 text-[10px] font-bold uppercase text-[#167c73] hover:bg-[#eeece5] ${admin ? "border-l border-[#d7d3c8]" : ""}`}>
                       <PackagePlus size={12} /> Restock
                     </button>
-                    {isStore && (
-                      <span className="flex flex-1 border-l border-[#d7d3c8]">
-                        <StickerPrintButton item={part} />
-                      </span>
-                    )}
+                    <span className="flex flex-1 border-l border-[#d7d3c8]">
+                      <StickerPrintButton
+                        item={part}
+                        onBarcodeAssigned={(barcode) => {
+                          setParts((current) => current.map((row) => (row.id === part.id ? { ...row, barcode } : row)));
+                        }}
+                      />
+                    </span>
                   </div>
               </Panel>
             );
@@ -417,7 +420,7 @@ export default function PartsPage() {
               {[
                 ["name", isPaint ? "Colour / product name" : isStore ? "Item name" : "Part name", selected?.name ?? ""],
                 ["sku", isPaint ? "Paint / formula code" : "SKU", selected?.sku ?? ""],
-                ["barcode", "Barcode", selected?.barcode ?? ""],
+                ["barcode", "Barcode (optional — auto if blank)", selected?.barcode ?? ""],
                 ["brand", isPaint ? "Paint system brand" : "Brand", selected?.brand ?? ""],
                 ["type", isPaint ? "Class" : isStore ? "Category" : "Category", selected?.type ?? ""],
                 ["model", isPaint ? "Vehicle fitment (optional)" : isStore ? "Model" : "Compatible model", selected?.model ?? ""],
