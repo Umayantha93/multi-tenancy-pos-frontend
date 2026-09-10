@@ -80,7 +80,8 @@ function daysAgo(days: number) {
 }
 
 function todayStamp() {
-  return new Date().toISOString().slice(0, 10);
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 export default function BillProfitsPage() {
@@ -227,6 +228,27 @@ export default function BillProfitsPage() {
         </label>
         <ShopFilter value={shopFilter} onChange={setShopFilter} />
         <button type="button" onClick={load} className={buttonClass}>Apply period</button>
+        <button
+          type="button"
+          onClick={() => {
+            const today = todayStamp();
+            const isToday = Boolean(dateFrom && dateTo && dateFrom === dateTo && dateFrom === today);
+            if (isToday) {
+              setDateFrom(daysAgo(29));
+              setDateTo(today);
+              return;
+            }
+            setDateFrom(today);
+            setDateTo(today);
+          }}
+          className={`inline-flex h-9 items-center border border-[#20221f] px-3 text-[13px] font-semibold ${
+            dateFrom && dateTo && dateFrom === dateTo && dateFrom === todayStamp()
+              ? "bg-[#20221f] text-white"
+              : "hover:bg-[#f5c842]"
+          }`}
+        >
+          Today
+        </button>
         {isGarage && (
           <div className="flex flex-wrap gap-2">
             {kindButton("service", isPaint ? "Packages" : "Services")}

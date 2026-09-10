@@ -83,6 +83,7 @@ function BalanceSheetPageInner() {
   const searchParams = useSearchParams();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
+  const [todayMode, setTodayMode] = useState(false);
   const [shopFilter, setShopFilter] = useState("");
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [error, setError] = useState("");
@@ -112,6 +113,24 @@ function BalanceSheetPageInner() {
   }, [month, year, shopFilter]);
 
   useEffect(() => { load(); }, [load]);
+
+  function localToday() {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+
+  function goToday() {
+    if (todayMode) {
+      setTodayMode(false);
+      setSelectedDay(null);
+      return;
+    }
+    const stamp = new Date();
+    setTodayMode(true);
+    setMonth(stamp.getMonth() + 1);
+    setYear(stamp.getFullYear());
+    setSelectedDay(null);
+  }
 
   useEffect(() => {
     const payable = Number(searchParams.get("payable") || "");
@@ -199,6 +218,18 @@ function BalanceSheetPageInner() {
       profit: roundMoney(day.credit - day.debit),
     }));
   }, [accounts]);
+  const visibleDailyAccounts = useMemo(() => {
+    if (!todayMode) return dailyAccounts;
+    const today = localToday();
+    return dailyAccounts.filter((day) => day.date === today);
+  }, [dailyAccounts, todayMode]);
+  const todayTotals = useMemo(() => {
+    const day = visibleDailyAccounts[0];
+    if (!todayMode || !day) {
+      return { income: sheet?.income ?? 0, expenses: sheet?.expenses ?? 0, net: sheet?.net_profit ?? 0 };
+    }
+    return { income: day.credit, expenses: day.debit, net: day.profit };
+  }, [visibleDailyAccounts, todayMode, sheet]);
   const dayDetail = dailyAccounts.find((day) => day.date === selectedDay) ?? null;
 
   async function settlePayable(event: FormEvent<HTMLFormElement>) {
@@ -292,7 +323,14 @@ function BalanceSheetPageInner() {
       <div className="mb-5 flex flex-wrap items-end gap-3">
         <label className="text-xs font-bold uppercase">
           Month
-          <select value={month} onChange={(event) => setMonth(Number(event.target.value))} className={`${inputClass} mt-2 w-40`}>
+          <select
+            value={month}
+            onChange={(event) => {
+              setTodayMode(false);
+              setMonth(Number(event.target.value));
+            }}
+            className={`${inputClass} mt-2 w-40`}
+          >
             {Array.from({ length: 12 }, (_, index) => (
               <option key={index + 1} value={index + 1}>{new Date(2026, index).toLocaleString("en", { month: "long" })}</option>
             ))}
@@ -300,20 +338,48 @@ function BalanceSheetPageInner() {
         </label>
         <label className="text-xs font-bold uppercase">
           Year
-          <input value={year} onChange={(event) => setYear(Number(event.target.value))} className={`${inputClass} mt-2 w-28`} type="number" />
+          <input
+            value={year}
+            onChange={(event) => {
+              setTodayMode(false);
+              setYear(Number(event.target.value));
+            }}
+            className={`${inputClass} mt-2 w-28`}
+            type="number"
+          />
         </label>
         <ShopFilter value={shopFilter} onChange={setShopFilter} />
-        <button onClick={load} className={buttonClass}>Apply period</button>
+        <button
+          onClick={() => {
+            setTodayMode(false);
+            load();
+          }}
+          className={buttonClass}
+        >
+          Apply period
+        </button>
+        <button
+          type="button"
+          onClick={goToday}
+          className={`inline-flex h-9 items-center border px-3 text-[13px] font-semibold ${
+            todayMode ? "border-[#20221f] bg-[#20221f] text-white" : "border-[#20221f] hover:bg-[#f5c842]"
+          }`}
+        >
+          Today
+        </button>
       </div>
 
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
+      {todayMode && (
+        <p className="mb-4 text-xs font-bold uppercase text-[#167c73]">Showing today · {formatDate(localToday())}</p>
+      )}
 
       {sheet && (
         <>
           <div className="grid gap-3 sm:grid-cols-3">
-            <Panel className="p-5"><Plus className="text-[#167c73]" /><p className="mt-6 text-xs font-bold uppercase text-[#6f746e]">Income</p><p className="font-display text-3xl font-semibold">{money(sheet.income)}</p></Panel>
-            <Panel className="p-5"><Minus className="text-[#b84837]" /><p className="mt-6 text-xs font-bold uppercase text-[#6f746e]">Expenses</p><p className="font-display text-3xl font-semibold">{money(sheet.expenses)}</p></Panel>
-            <Panel className="bg-[#242723] p-5 text-white"><TrendingUp className="text-[#f5c842]" /><p className="mt-6 text-xs font-bold uppercase text-white/50">Net profit</p><p className="font-display text-3xl font-semibold">{money(sheet.net_profit)}</p></Panel>
+            <Panel className="p-5"><Plus className="text-[#167c73]" /><p className="mt-6 text-xs font-bold uppercase text-[#6f746e]">{todayMode ? "Today's income" : "Income"}</p><p className="font-display text-3xl font-semibold">{money(todayTotals.income)}</p></Panel>
+            <Panel className="p-5"><Minus className="text-[#b84837]" /><p className="mt-6 text-xs font-bold uppercase text-[#6f746e]">{todayMode ? "Today's expenses" : "Expenses"}</p><p className="font-display text-3xl font-semibold">{money(todayTotals.expenses)}</p></Panel>
+            <Panel className="bg-[#242723] p-5 text-white"><TrendingUp className="text-[#f5c842]" /><p className="mt-6 text-xs font-bold uppercase text-white/50">{todayMode ? "Today's net" : "Net profit"}</p><p className="font-display text-3xl font-semibold">{money(todayTotals.net)}</p></Panel>
           </div>
 
           <div className="mt-5 grid gap-5 xl:grid-cols-[1.4fr_0.8fr]">
@@ -539,10 +605,12 @@ function BalanceSheetPageInner() {
             <div className="border-b border-[#d7d3c8] px-5 py-4">
               <p className="text-[10px] font-bold uppercase tracking-wide text-[#167c73]">{businessName}</p>
               <h2 className="mt-1 font-display text-2xl font-semibold uppercase sm:text-3xl">
-                Monthly accounts summary · {monthLabel}
+                {todayMode ? `Today's accounts · ${formatDate(localToday())}` : `Monthly accounts summary · ${monthLabel}`}
               </h2>
               <p className="mt-2 text-sm text-[#6f746e]">
-                Daily profit and expenses for this period. Open a day to see its credits and debits.
+                {todayMode
+                  ? "Income and expenses for today only. Open the day to see credits and debits."
+                  : "Daily profit and expenses for this period. Open a day to see its credits and debits."}
               </p>
             </div>
 
@@ -558,7 +626,7 @@ function BalanceSheetPageInner() {
                   </tr>
                 </thead>
                 <tbody>
-                  {dailyAccounts.map((day) => (
+                  {visibleDailyAccounts.map((day) => (
                     <tr key={day.date} className="bg-[#fbfaf6]">
                       <td className="border border-[#e2ded4] px-3 py-2.5 whitespace-nowrap font-semibold">{formatDate(day.date)}</td>
                       <td className="border border-[#e2ded4] px-3 py-2.5 text-right tabular-nums text-[#b84837]">
@@ -581,10 +649,10 @@ function BalanceSheetPageInner() {
                       </td>
                     </tr>
                   ))}
-                  {dailyAccounts.length === 0 && (
+                  {visibleDailyAccounts.length === 0 && (
                     <tr>
                       <td colSpan={5} className="border border-[#e2ded4] px-5 py-10 text-center text-sm text-[#6f746e]">
-                        No income or expense entries for this month yet.
+                        {todayMode ? "No income or expense entries for today yet." : "No income or expense entries for this month yet."}
                       </td>
                     </tr>
                   )}
@@ -592,20 +660,20 @@ function BalanceSheetPageInner() {
                 <tfoot>
                   <tr className="bg-[#f3f0e8] text-sm font-semibold">
                     <td className="border border-[#d7d3c8] px-3 py-4 uppercase tracking-wide text-[#4f544e]">
-                      Monthly totals
+                      {todayMode ? "Today's totals" : "Monthly totals"}
                     </td>
                     <td className="border border-[#d7d3c8] px-3 py-4 text-right text-[#b84837]">
                       <span className="block text-[10px] font-bold uppercase text-[#6f746e]">Total expenses (−)</span>
-                      {money(sheet.expenses)}
+                      {money(todayTotals.expenses)}
                     </td>
                     <td className="border border-[#d7d3c8] px-3 py-4 text-right text-[#167c73]">
                       <span className="block text-[10px] font-bold uppercase text-[#6f746e]">Total revenue (+)</span>
-                      {money(sheet.income)}
+                      {money(todayTotals.income)}
                     </td>
                     <td className="border border-[#d7d3c8] px-3 py-4 text-right">
-                      <span className="block text-[10px] font-bold uppercase text-[#6f746e]">Monthly profit</span>
-                      <span className={sheet.net_profit >= 0 ? "text-[#167c73]" : "text-[#b84837]"}>
-                        {money(sheet.net_profit)}
+                      <span className="block text-[10px] font-bold uppercase text-[#6f746e]">{todayMode ? "Today's profit" : "Monthly profit"}</span>
+                      <span className={todayTotals.net >= 0 ? "text-[#167c73]" : "text-[#b84837]"}>
+                        {money(todayTotals.net)}
                       </span>
                     </td>
                     <td className="border border-[#d7d3c8] px-3 py-4" />
