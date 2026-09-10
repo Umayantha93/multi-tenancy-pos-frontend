@@ -55,6 +55,7 @@ export default function PartsPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [importPayment, setImportPayment] = useState("paid");
   const [importDue, setImportDue] = useState("");
+  const [importSupplierId, setImportSupplierId] = useState("");
   const importInputRef = useRef<HTMLInputElement>(null);
   const profile = useBusinessProfile();
   const isPaint = profile.type === "paint";
@@ -83,6 +84,18 @@ export default function PartsPage() {
     });
     return () => cancelAnimationFrame(frame);
   }, [load]);
+
+  useEffect(() => {
+    if (!importOpen || suppliers.length === 0) return;
+    setImportSupplierId((current) => {
+      if (current && suppliers.some((row) => String(row.id) === current)) return current;
+      if (isGarage) {
+        const walkIn = suppliers.find((row) => row.is_system);
+        return String(walkIn?.id ?? suppliers[0]?.id ?? "");
+      }
+      return "";
+    });
+  }, [importOpen, suppliers, isGarage]);
 
   useEffect(() => {
     if (!mode) return;
@@ -150,6 +163,14 @@ export default function PartsPage() {
   }
 
   async function importExcel(file: File) {
+    if (importPayment === "credit" && !importSupplierId) {
+      setError("Pick a supplier for credit imports.");
+      return;
+    }
+    if (isGarage && suppliers.length > 0 && !importSupplierId) {
+      setError("Pick a supplier. Use Walk-in / unnamed for cash buys with no named house.");
+      return;
+    }
     setImporting(true);
     setError("");
     setNotice("");
@@ -159,10 +180,14 @@ export default function PartsPage() {
     if (importPayment === "credit" && importDue) {
       formData.append("due_date", importDue);
     }
+    if (importSupplierId) {
+      formData.append("supplier_id", importSupplierId);
+    }
     try {
       const result = await api<ImportResult>("/parts/import", { method: "POST", body: formData });
+      const supplierName = suppliers.find((row) => String(row.id) === importSupplierId)?.name;
       setNotice(
-        `${result.message} ${result.created} created, ${result.updated} updated, ${result.expenses_created} expenses (${money(result.expense_total)}). Default: ${importPayment === "credit" ? "credit (supplier owe)" : "paid (debit)"}.`,
+        `${result.message} ${result.created} created, ${result.updated} updated, ${result.expenses_created} expenses (${money(result.expense_total)}). Default: ${importPayment === "credit" ? "credit (supplier owe)" : "paid (debit)"}${supplierName ? ` · ${supplierName}` : ""}.`,
       );
       setImportOpen(false);
       load("");
@@ -579,8 +604,24 @@ export default function PartsPage() {
           <div className="w-full max-w-md bg-[#f3f0e8] p-5" onClick={(event) => event.stopPropagation()}>
             <h2 className="font-display text-2xl font-semibold uppercase">Import parts</h2>
             <p className="mt-2 text-sm text-[#6f746e]">
-              Choose paid (debit) or credit for rows that do not set payment_status in the sheet. A credit row also needs a due date.
+              Choose supplier and paid/credit for this file. Rows without payment_status in the sheet use these defaults. Credit also needs a due date.
             </p>
+            {suppliers.length > 0 && (
+              <label className="mt-4 block text-xs font-bold uppercase">
+                {isGarage || importPayment === "credit" ? "Supplier" : "Supplier (optional)"}
+                <select
+                  value={importSupplierId}
+                  onChange={(event) => setImportSupplierId(event.target.value)}
+                  required={isGarage || importPayment === "credit"}
+                  className={`${inputClass} mt-2`}
+                >
+                  {!(isGarage || importPayment === "credit") && <option value="">No supplier</option>}
+                  {suppliers.map((supplier) => (
+                    <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label className="mt-4 block text-xs font-bold uppercase">
               Default payment
               <select value={importPayment} onChange={(event) => setImportPayment(event.target.value)} className={`${inputClass} mt-2`}>
@@ -596,7 +637,11 @@ export default function PartsPage() {
             )}
             <button
               type="button"
-              disabled={importing || (importPayment === "credit" && !importDue)}
+              disabled={
+                importing
+                || (importPayment === "credit" && !importDue)
+                || ((isGarage || importPayment === "credit") && suppliers.length > 0 && !importSupplierId)
+              }
               onClick={() => importInputRef.current?.click()}
               className={`${buttonClass} mt-5 w-full`}
             >
