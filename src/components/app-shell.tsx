@@ -18,6 +18,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
   const [user, setUser] = useState<User | null>(null);
   const [features, setFeatures] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
+  const [dueCheques, setDueCheques] = useState<{ count: number; firstExpenseId?: number } | null>(null);
 
   const profile = useMemo(() => profileFor(user?.tenant?.business_type), [user?.tenant?.business_type]);
   const navigation = profile.navigation;
@@ -51,6 +52,19 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
           if (stored !== result.user.locale) {
             void setLocale(result.user.locale, { persist: false });
           }
+        }
+        if (result.features.includes("balance_sheet")) {
+          api<{ count: number; items: Array<{ expense_id: number }> }>("/expenses/cheques/due")
+            .then((due) => {
+              if (due.count > 0) {
+                setDueCheques({ count: due.count, firstExpenseId: due.items[0]?.expense_id });
+              } else {
+                setDueCheques(null);
+              }
+            })
+            .catch(() => setDueCheques(null));
+        } else {
+          setDueCheques(null);
         }
       })
       .catch(() => {
@@ -141,6 +155,18 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
             <p className="max-w-3xl font-display text-xl font-semibold uppercase leading-snug text-[#f8ebea] sm:text-2xl md:text-3xl">
               {t("shell.payment_due", { amount: amountLabel })}
             </p>
+          </div>
+        )}
+        {dueCheques && dueCheques.count > 0 && (
+          <div className="no-print flex min-h-14 items-center justify-center bg-[#167c73] px-4 py-4 text-center sm:px-7">
+            <Link
+              href={dueCheques.firstExpenseId ? `/balance-sheet?payable=${dueCheques.firstExpenseId}` : "/balance-sheet"}
+              className="max-w-3xl font-display text-lg font-semibold uppercase leading-snug text-white underline decoration-white/40 underline-offset-4 hover:decoration-white sm:text-xl"
+            >
+              {dueCheques.count === 1
+                ? t("shell.cheques_due_one")
+                : t("shell.cheques_due", { count: dueCheques.count })}
+            </Link>
           </div>
         )}
         <header className="no-print relative z-40 flex min-h-20 items-center justify-between gap-3 border-b border-[#d7d3c8] bg-[#f3f0e8]/95 px-4 backdrop-blur sm:px-7">

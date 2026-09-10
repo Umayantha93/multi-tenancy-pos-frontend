@@ -1,9 +1,10 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Minus, Plus, TrendingUp, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { buttonClass, ErrorMessage, inputClass, Panel } from "@/components/ui";
+import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { api, currentUser, formatDate, money } from "@/lib/api";
 import { ShopFilter } from "@/components/branch-chip";
 import { useBusinessProfile } from "@/lib/use-business-profile";
@@ -19,6 +20,14 @@ type AccountRow = {
   balance: number;
 };
 
+type PendingCheque = {
+  id: number;
+  amount: number;
+  cheque_number?: string | null;
+  cheque_date?: string | null;
+  status: string;
+};
+
 type PayableItem = {
   id: number;
   description: string;
@@ -27,9 +36,12 @@ type PayableItem = {
   amount: number;
   amount_paid?: number;
   remaining?: number;
+  pending_cheque_total?: number;
+  available_to_pay?: number;
   expense_date?: string | null;
   due_date?: string | null;
   category: string;
+  pending_cheques?: PendingCheque[];
   settlements?: Array<{ id: number; amount: number; settled_on: string | null }>;
 };
 
@@ -59,7 +71,16 @@ function entryTone(type: AccountRow["type"]) {
 }
 
 export default function BalanceSheetPage() {
+  return (
+    <Suspense fallback={<AppShell title="Finance"><PageState message="Loading finance..." /></AppShell>}>
+      <BalanceSheetPageInner />
+    </Suspense>
+  );
+}
+
+function BalanceSheetPageInner() {
   const now = new Date();
+  const searchParams = useSearchParams();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [shopFilter, setShopFilter] = useState("");
@@ -73,7 +94,14 @@ export default function BalanceSheetPage() {
   const [settlingId, setSettlingId] = useState<number | null>(null);
   const [settleItem, setSettleItem] = useState<PayableItem | null>(null);
   const [settleAmount, setSettleAmount] = useState("");
+  const [chequeItem, setChequeItem] = useState<PayableItem | null>(null);
+  const [chequeAmount, setChequeAmount] = useState("");
+  const [chequeDate, setChequeDate] = useState("");
+  const [chequeNumber, setChequeNumber] = useState("");
+  const [chequeBusyId, setChequeBusyId] = useState<number | null>(null);
+  const [highlightPayableId, setHighlightPayableId] = useState<number | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const payableRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const businessName = currentUser()?.tenant?.business_name ?? "Business";
   const isGarage = useBusinessProfile().type === "garage";
 
@@ -84,6 +112,18 @@ export default function BalanceSheetPage() {
   }, [month, year, shopFilter]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    const payable = Number(searchParams.get("payable") || "");
+    if (Number.isFinite(payable) && payable > 0) setHighlightPayableId(payable);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!highlightPayableId || !sheet) return;
+    const node = payableRefs.current[highlightPayableId];
+    if (!node) return;
+    node.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightPayableId, sheet]);
 
   useEffect(() => {
     if (category !== "inventory") return;
@@ -179,6 +219,72 @@ export default function BalanceSheetPage() {
     } finally {
       setSettlingId(null);
     }
+  }
+
+  async function issueCheque(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!chequeItem) return;
+    setChequeBusyId(chequeItem.id);
+    setError("");
+    try {
+      await api(`/expenses/${chequeItem.id}/cheques`, {
+        method: "POST",
+        body: JSON.stringify({
+          amount: Number(chequeAmount),
+          cheque_date: chequeDate,
+          cheque_number: chequeNumber || undefined,
+        }),
+      });
+      setChequeItem(null);
+      setChequeAmount("");
+      setChequeNumber("");
+      setChequeDate("");
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not issue cheque.");
+    } finally {
+      setChequeBusyId(null);
+    }
+  }
+
+  async function clearCheque(chequeId: number) {
+    setChequeBusyId(chequeId);
+    setError("");
+    try {
+      await api(`/expenses/cheques/${chequeId}/clear`, { method: "POST", body: JSON.stringify({}) });
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not clear cheque.");
+    } finally {
+      setChequeBusyId(null);
+    }
+  }
+
+  async function bounceCheque(chequeId: number) {
+    setChequeBusyId(chequeId);
+    setError("");
+    try {
+      await api(`/expenses/cheques/${chequeId}/bounce`, { method: "POST", body: JSON.stringify({}) });
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not bounce cheque.");
+    } finally {
+      setChequeBusyId(null);
+    }
+  }
+
+  function openSettle(item: PayableItem) {
+    const available = item.available_to_pay ?? Math.max(0, (item.remaining ?? item.amount) - (item.pending_cheque_total ?? 0));
+    setSettleItem(item);
+    setSettleAmount(String(available > 0 ? available : 0));
+  }
+
+  function openCheque(item: PayableItem) {
+    const available = item.available_to_pay ?? Math.max(0, (item.remaining ?? item.amount) - (item.pending_cheque_total ?? 0));
+    setChequeItem(item);
+    setChequeAmount(String(available > 0 ? available : 0));
+    setChequeDate(new Date().toISOString().slice(0, 10));
+    setChequeNumber("");
   }
 
   return (
@@ -337,34 +443,80 @@ export default function BalanceSheetPage() {
               <Panel className="p-5">
                 <h2 className="font-display text-2xl font-semibold uppercase">Inventory on credit</h2>
                 <p className="mt-1 text-sm text-[#6f746e]">
-                  Outstanding {money(sheet.inventory_payables?.payables_total ?? 0)}. These do not reduce profit until you pay the supplier.
+                  Outstanding {money(sheet.inventory_payables?.payables_total ?? 0)}. These do not reduce profit until you pay the supplier or a cheque clears.
                 </p>
                 <div className="mt-4 divide-y divide-[#e2ded4]">
                   {payables.map((item) => {
                     const remaining = item.remaining ?? item.amount;
                     const paid = item.amount_paid ?? 0;
+                    const pendingTotal = item.pending_cheque_total ?? 0;
+                    const available = item.available_to_pay ?? Math.max(0, remaining - pendingTotal);
+                    const pending = item.pending_cheques ?? [];
+                    const highlighted = highlightPayableId === item.id;
                     return (
-                      <div key={item.id} className="py-3 text-sm">
-                        <div className="flex items-center gap-3">
-                          <div className="min-w-0">
+                      <div
+                        key={item.id}
+                        ref={(node) => { payableRefs.current[item.id] = node; }}
+                        className={`py-3 text-sm ${highlighted ? "bg-[#f5c842]/15 px-2 -mx-2" : ""}`}
+                      >
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="min-w-0 flex-1">
                             <p className="font-semibold">{item.supplier || "No supplier"}</p>
                             <p className="text-xs text-[#6f746e]">{item.description}</p>
                             <p className="text-xs text-[#6f746e]">
                               Due {item.due_date ? formatDate(item.due_date) : "—"} · Paid {money(paid)} of {money(item.amount)}
+                              {pendingTotal > 0 ? ` · Cheque pending ${money(pendingTotal)}` : ""}
                             </p>
                           </div>
-                          <strong className="ml-auto tabular-nums text-[#b84837]">{money(remaining)}</strong>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSettleItem(item);
-                              setSettleAmount(String(remaining));
-                            }}
-                            className="border border-[#167c73] px-2 py-1 text-[10px] font-bold uppercase text-[#167c73]"
-                          >
-                            Settle
-                          </button>
+                          <strong className="tabular-nums text-[#b84837]">{money(remaining)}</strong>
+                          <div className="flex flex-wrap gap-1.5">
+                            <button
+                              type="button"
+                              disabled={available <= 0}
+                              onClick={() => openSettle(item)}
+                              className="border border-[#167c73] px-2 py-1 text-[10px] font-bold uppercase text-[#167c73] disabled:opacity-40"
+                            >
+                              Settle
+                            </button>
+                            <button
+                              type="button"
+                              disabled={available <= 0}
+                              onClick={() => openCheque(item)}
+                              className="border border-[#20221f] px-2 py-1 text-[10px] font-bold uppercase disabled:opacity-40"
+                            >
+                              Issue cheque
+                            </button>
+                          </div>
                         </div>
+                        {pending.length > 0 && (
+                          <ul className="mt-3 space-y-2 border-t border-[#e2ded4] pt-3">
+                            {pending.map((cheque) => (
+                              <li key={cheque.id} className="flex flex-wrap items-center gap-2 text-xs">
+                                <span className="font-semibold">
+                                  Cheque {cheque.cheque_number || "—"} · {cheque.cheque_date ? formatDate(cheque.cheque_date) : "—"}
+                                </span>
+                                <span className="tabular-nums">{money(cheque.amount)}</span>
+                                <span className="rounded bg-[#b8860b]/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-[#735a00]">Pending</span>
+                                <button
+                                  type="button"
+                                  disabled={chequeBusyId === cheque.id}
+                                  onClick={() => clearCheque(cheque.id)}
+                                  className="ml-auto border border-[#167c73] px-2 py-1 text-[10px] font-bold uppercase text-[#167c73]"
+                                >
+                                  Clear
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={chequeBusyId === cheque.id}
+                                  onClick={() => bounceCheque(cheque.id)}
+                                  className="border border-[#b84837] px-2 py-1 text-[10px] font-bold uppercase text-[#b84837]"
+                                >
+                                  Bounce
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                       </div>
                     );
                   })}
@@ -530,6 +682,8 @@ export default function BalanceSheetPage() {
               <div className="flex justify-between"><dt className="text-[#6f746e]">Original</dt><dd className="font-semibold">{money(settleItem.amount)}</dd></div>
               <div className="flex justify-between"><dt className="text-[#6f746e]">Paid so far</dt><dd className="font-semibold">{money(settleItem.amount_paid ?? 0)}</dd></div>
               <div className="flex justify-between"><dt className="text-[#6f746e]">Balance</dt><dd className="font-semibold text-[#b84837]">{money(settleItem.remaining ?? settleItem.amount)}</dd></div>
+              <div className="flex justify-between"><dt className="text-[#6f746e]">Cheque pending</dt><dd className="font-semibold">{money(settleItem.pending_cheque_total ?? 0)}</dd></div>
+              <div className="flex justify-between"><dt className="text-[#6f746e]">Available now</dt><dd className="font-semibold">{money(settleItem.available_to_pay ?? settleItem.remaining ?? settleItem.amount)}</dd></div>
             </dl>
             {(settleItem.settlements?.length ?? 0) > 0 && (
               <div className="mt-4 border-t border-[#e2ded4] pt-3">
@@ -551,7 +705,7 @@ export default function BalanceSheetPage() {
                 onChange={(event) => setSettleAmount(event.target.value)}
                 type="number"
                 min="0.01"
-                max={settleItem.remaining ?? settleItem.amount}
+                max={settleItem.available_to_pay ?? settleItem.remaining ?? settleItem.amount}
                 step="0.01"
                 required
                 className={`${inputClass} mt-2`}
@@ -561,6 +715,62 @@ export default function BalanceSheetPage() {
               <button type="button" onClick={() => setSettleItem(null)} className="h-9 border border-[#d7d3c8] px-3 text-[13px]">Cancel</button>
               <button disabled={settlingId === settleItem.id} className={buttonClass}>
                 {settlingId === settleItem.id ? "Saving..." : "Record payment"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {chequeItem && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+          <button type="button" aria-label="Close dialog" className="absolute inset-0 bg-[#181b19]/55" onClick={() => setChequeItem(null)} />
+          <form onSubmit={issueCheque} className="relative z-10 w-full max-w-md border border-[#d7d3c8] bg-[#fbfaf6] p-5">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-[#167c73]">Supplier cheque</p>
+            <h2 className="mt-1 font-display text-2xl font-semibold uppercase">Issue cheque</h2>
+            <p className="mt-2 text-sm font-semibold">{chequeItem.supplier || "No supplier"}</p>
+            <p className="mt-1 text-sm text-[#6f746e]">{chequeItem.description}</p>
+            <p className="mt-3 text-sm text-[#6f746e]">
+              Available to issue: <strong className="text-[#20221f]">{money(chequeItem.available_to_pay ?? chequeItem.remaining ?? chequeItem.amount)}</strong>
+            </p>
+            <label className="mt-4 block text-xs font-bold uppercase">
+              Cheque amount
+              <input
+                value={chequeAmount}
+                onChange={(event) => setChequeAmount(event.target.value)}
+                type="number"
+                min="0.01"
+                max={chequeItem.available_to_pay ?? chequeItem.remaining ?? chequeItem.amount}
+                step="0.01"
+                required
+                className={`${inputClass} mt-2`}
+              />
+            </label>
+            <label className="mt-4 block text-xs font-bold uppercase">
+              Cheque date
+              <input
+                value={chequeDate}
+                onChange={(event) => setChequeDate(event.target.value)}
+                type="date"
+                required
+                className={`${inputClass} mt-2`}
+              />
+            </label>
+            <label className="mt-4 block text-xs font-bold uppercase">
+              Cheque number <span className="font-normal normal-case text-[#6f746e]">(optional)</span>
+              <input
+                value={chequeNumber}
+                onChange={(event) => setChequeNumber(event.target.value)}
+                className={`${inputClass} mt-2`}
+                placeholder="e.g. 452189"
+              />
+            </label>
+            <p className="mt-3 text-xs text-[#6f746e]">
+              This does not reduce profit until you mark the cheque as cleared.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setChequeItem(null)} className="h-9 border border-[#d7d3c8] px-3 text-[13px]">Cancel</button>
+              <button disabled={chequeBusyId === chequeItem.id} className={buttonClass}>
+                {chequeBusyId === chequeItem.id ? "Saving..." : "Issue cheque"}
               </button>
             </div>
           </form>
