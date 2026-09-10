@@ -134,6 +134,7 @@ export default function BillDetailPage() {
   const [warrantyItem, setWarrantyItem] = useState<Bill["items"][number] | null>(null);
   const [savingWarranty, setSavingWarranty] = useState(false);
   const [savingJobWarranty, setSavingJobWarranty] = useState(false);
+  const [printWithLogo, setPrintWithLogo] = useState(true);
   const canSendSms = features.includes("bill_sms");
   const canOwnerSms = features.includes("owner_bill_sms");
   const canJobVideos = features.includes("job_videos");
@@ -221,6 +222,16 @@ export default function BillDetailPage() {
   const stamp = bill ? billStamp(bill) : "quote";
   const hidePrintMoney = Boolean(isGarage && bill?.hide_amounts && Number(bill.amount_paid) <= 0);
   const paymentDate = bill ? billStampDateLabel(latestPaymentAt(bill.payments)) : null;
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("bill-print-with-logo");
+      if (stored === "0") setPrintWithLogo(false);
+      if (stored === "1") setPrintWithLogo(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(() => {
     if (!itemTypes.length) return;
@@ -892,6 +903,23 @@ export default function BillDetailPage() {
               <MessageSquare size={19} />
             </button>
           )}
+          <label className="inline-flex h-10 cursor-pointer items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-xs font-bold uppercase">
+            <input
+              type="checkbox"
+              checked={printWithLogo}
+              onChange={(event) => {
+                const next = event.target.checked;
+                setPrintWithLogo(next);
+                try {
+                  window.localStorage.setItem("bill-print-with-logo", next ? "1" : "0");
+                } catch {
+                  /* ignore */
+                }
+              }}
+              className="size-3.5 accent-[#167c73]"
+            />
+            Watermark
+          </label>
           <button onClick={() => window.print()} className="grid size-10 place-items-center border border-[#c9c5b9]" title="Print bill">
             <Printer size={19} />
           </button>
@@ -1033,7 +1061,7 @@ export default function BillDetailPage() {
       )}
       <BillingBranchBanner />
       <div className="bill-print-sheet">
-      <BillWatermark src={logoUrl} printOnly />
+      <BillWatermark src={printWithLogo ? logoUrl : null} printOnly />
       <Panel className="bill-letterhead mb-5 overflow-hidden p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-4">

@@ -1,9 +1,10 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Minus, Plus, TrendingUp, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { buttonClass, ErrorMessage, inputClass, Panel } from "@/components/ui";
+import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { api, currentUser, formatDate, money } from "@/lib/api";
 import { ShopFilter } from "@/components/branch-chip";
 import { useBusinessProfile } from "@/lib/use-business-profile";
@@ -19,6 +20,14 @@ type AccountRow = {
   balance: number;
 };
 
+type PendingCheque = {
+  id: number;
+  amount: number;
+  cheque_number?: string | null;
+  cheque_date?: string | null;
+  status: string;
+};
+
 type PayableItem = {
   id: number;
   description: string;
@@ -27,9 +36,12 @@ type PayableItem = {
   amount: number;
   amount_paid?: number;
   remaining?: number;
+  pending_cheque_total?: number;
+  available_to_pay?: number;
   expense_date?: string | null;
   due_date?: string | null;
   category: string;
+  pending_cheques?: PendingCheque[];
   settlements?: Array<{ id: number; amount: number; settled_on: string | null }>;
 };
 
@@ -59,9 +71,19 @@ function entryTone(type: AccountRow["type"]) {
 }
 
 export default function BalanceSheetPage() {
+  return (
+    <Suspense fallback={<AppShell title="Finance"><PageState message="Loading finance..." /></AppShell>}>
+      <BalanceSheetPageInner />
+    </Suspense>
+  );
+}
+
+function BalanceSheetPageInner() {
   const now = new Date();
+  const searchParams = useSearchParams();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
+  const [todayMode, setTodayMode] = useState(false);
   const [shopFilter, setShopFilter] = useState("");
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [error, setError] = useState("");
@@ -73,7 +95,14 @@ export default function BalanceSheetPage() {
   const [settlingId, setSettlingId] = useState<number | null>(null);
   const [settleItem, setSettleItem] = useState<PayableItem | null>(null);
   const [settleAmount, setSettleAmount] = useState("");
+  const [chequeItem, setChequeItem] = useState<PayableItem | null>(null);
+  const [chequeAmount, setChequeAmount] = useState("");
+  const [chequeDate, setChequeDate] = useState("");
+  const [chequeNumber, setChequeNumber] = useState("");
+  const [chequeBusyId, setChequeBusyId] = useState<number | null>(null);
+  const [highlightPayableId, setHighlightPayableId] = useState<number | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const payableRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const businessName = currentUser()?.tenant?.business_name ?? "Business";
   const isGarage = useBusinessProfile().type === "garage";
 
@@ -84,6 +113,36 @@ export default function BalanceSheetPage() {
   }, [month, year, shopFilter]);
 
   useEffect(() => { load(); }, [load]);
+
+  function localToday() {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+
+  function goToday() {
+    if (todayMode) {
+      setTodayMode(false);
+      setSelectedDay(null);
+      return;
+    }
+    const stamp = new Date();
+    setTodayMode(true);
+    setMonth(stamp.getMonth() + 1);
+    setYear(stamp.getFullYear());
+    setSelectedDay(null);
+  }
+
+  useEffect(() => {
+    const payable = Number(searchParams.get("payable") || "");
+    if (Number.isFinite(payable) && payable > 0) setHighlightPayableId(payable);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!highlightPayableId || !sheet) return;
+    const node = payableRefs.current[highlightPayableId];
+    if (!node) return;
+    node.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightPayableId, sheet]);
 
   useEffect(() => {
     if (category !== "inventory") return;
@@ -159,6 +218,18 @@ export default function BalanceSheetPage() {
       profit: roundMoney(day.credit - day.debit),
     }));
   }, [accounts]);
+  const visibleDailyAccounts = useMemo(() => {
+    if (!todayMode) return dailyAccounts;
+    const today = localToday();
+    return dailyAccounts.filter((day) => day.date === today);
+  }, [dailyAccounts, todayMode]);
+  const todayTotals = useMemo(() => {
+    const day = visibleDailyAccounts[0];
+    if (!todayMode || !day) {
+      return { income: sheet?.income ?? 0, expenses: sheet?.expenses ?? 0, net: sheet?.net_profit ?? 0 };
+    }
+    return { income: day.credit, expenses: day.debit, net: day.profit };
+  }, [visibleDailyAccounts, todayMode, sheet]);
   const dayDetail = dailyAccounts.find((day) => day.date === selectedDay) ?? null;
 
   async function settlePayable(event: FormEvent<HTMLFormElement>) {
@@ -181,12 +252,85 @@ export default function BalanceSheetPage() {
     }
   }
 
+  async function issueCheque(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!chequeItem) return;
+    setChequeBusyId(chequeItem.id);
+    setError("");
+    try {
+      await api(`/expenses/${chequeItem.id}/cheques`, {
+        method: "POST",
+        body: JSON.stringify({
+          amount: Number(chequeAmount),
+          cheque_date: chequeDate,
+          cheque_number: chequeNumber || undefined,
+        }),
+      });
+      setChequeItem(null);
+      setChequeAmount("");
+      setChequeNumber("");
+      setChequeDate("");
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not issue cheque.");
+    } finally {
+      setChequeBusyId(null);
+    }
+  }
+
+  async function clearCheque(chequeId: number) {
+    setChequeBusyId(chequeId);
+    setError("");
+    try {
+      await api(`/expenses/cheques/${chequeId}/clear`, { method: "POST", body: JSON.stringify({}) });
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not clear cheque.");
+    } finally {
+      setChequeBusyId(null);
+    }
+  }
+
+  async function bounceCheque(chequeId: number) {
+    setChequeBusyId(chequeId);
+    setError("");
+    try {
+      await api(`/expenses/cheques/${chequeId}/bounce`, { method: "POST", body: JSON.stringify({}) });
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not bounce cheque.");
+    } finally {
+      setChequeBusyId(null);
+    }
+  }
+
+  function openSettle(item: PayableItem) {
+    const available = item.available_to_pay ?? Math.max(0, (item.remaining ?? item.amount) - (item.pending_cheque_total ?? 0));
+    setSettleItem(item);
+    setSettleAmount(String(available > 0 ? available : 0));
+  }
+
+  function openCheque(item: PayableItem) {
+    const available = item.available_to_pay ?? Math.max(0, (item.remaining ?? item.amount) - (item.pending_cheque_total ?? 0));
+    setChequeItem(item);
+    setChequeAmount(String(available > 0 ? available : 0));
+    setChequeDate(new Date().toISOString().slice(0, 10));
+    setChequeNumber("");
+  }
+
   return (
     <AppShell title="Finance" eyebrow="Income, expenses & profit">
       <div className="mb-5 flex flex-wrap items-end gap-3">
         <label className="text-xs font-bold uppercase">
           Month
-          <select value={month} onChange={(event) => setMonth(Number(event.target.value))} className={`${inputClass} mt-2 w-40`}>
+          <select
+            value={month}
+            onChange={(event) => {
+              setTodayMode(false);
+              setMonth(Number(event.target.value));
+            }}
+            className={`${inputClass} mt-2 w-40`}
+          >
             {Array.from({ length: 12 }, (_, index) => (
               <option key={index + 1} value={index + 1}>{new Date(2026, index).toLocaleString("en", { month: "long" })}</option>
             ))}
@@ -194,20 +338,48 @@ export default function BalanceSheetPage() {
         </label>
         <label className="text-xs font-bold uppercase">
           Year
-          <input value={year} onChange={(event) => setYear(Number(event.target.value))} className={`${inputClass} mt-2 w-28`} type="number" />
+          <input
+            value={year}
+            onChange={(event) => {
+              setTodayMode(false);
+              setYear(Number(event.target.value));
+            }}
+            className={`${inputClass} mt-2 w-28`}
+            type="number"
+          />
         </label>
         <ShopFilter value={shopFilter} onChange={setShopFilter} />
-        <button onClick={load} className={buttonClass}>Apply period</button>
+        <button
+          onClick={() => {
+            setTodayMode(false);
+            load();
+          }}
+          className={buttonClass}
+        >
+          Apply period
+        </button>
+        <button
+          type="button"
+          onClick={goToday}
+          className={`inline-flex h-9 items-center border px-3 text-[13px] font-semibold ${
+            todayMode ? "border-[#20221f] bg-[#20221f] text-white" : "border-[#20221f] hover:bg-[#f5c842]"
+          }`}
+        >
+          Today
+        </button>
       </div>
 
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
+      {todayMode && (
+        <p className="mb-4 text-xs font-bold uppercase text-[#167c73]">Showing today · {formatDate(localToday())}</p>
+      )}
 
       {sheet && (
         <>
           <div className="grid gap-3 sm:grid-cols-3">
-            <Panel className="p-5"><Plus className="text-[#167c73]" /><p className="mt-6 text-xs font-bold uppercase text-[#6f746e]">Income</p><p className="font-display text-3xl font-semibold">{money(sheet.income)}</p></Panel>
-            <Panel className="p-5"><Minus className="text-[#b84837]" /><p className="mt-6 text-xs font-bold uppercase text-[#6f746e]">Expenses</p><p className="font-display text-3xl font-semibold">{money(sheet.expenses)}</p></Panel>
-            <Panel className="bg-[#242723] p-5 text-white"><TrendingUp className="text-[#f5c842]" /><p className="mt-6 text-xs font-bold uppercase text-white/50">Net profit</p><p className="font-display text-3xl font-semibold">{money(sheet.net_profit)}</p></Panel>
+            <Panel className="p-5"><Plus className="text-[#167c73]" /><p className="mt-6 text-xs font-bold uppercase text-[#6f746e]">{todayMode ? "Today's income" : "Income"}</p><p className="font-display text-3xl font-semibold">{money(todayTotals.income)}</p></Panel>
+            <Panel className="p-5"><Minus className="text-[#b84837]" /><p className="mt-6 text-xs font-bold uppercase text-[#6f746e]">{todayMode ? "Today's expenses" : "Expenses"}</p><p className="font-display text-3xl font-semibold">{money(todayTotals.expenses)}</p></Panel>
+            <Panel className="bg-[#242723] p-5 text-white"><TrendingUp className="text-[#f5c842]" /><p className="mt-6 text-xs font-bold uppercase text-white/50">{todayMode ? "Today's net" : "Net profit"}</p><p className="font-display text-3xl font-semibold">{money(todayTotals.net)}</p></Panel>
           </div>
 
           <div className="mt-5 grid gap-5 xl:grid-cols-[1.4fr_0.8fr]">
@@ -337,34 +509,80 @@ export default function BalanceSheetPage() {
               <Panel className="p-5">
                 <h2 className="font-display text-2xl font-semibold uppercase">Inventory on credit</h2>
                 <p className="mt-1 text-sm text-[#6f746e]">
-                  Outstanding {money(sheet.inventory_payables?.payables_total ?? 0)}. These do not reduce profit until you pay the supplier.
+                  Outstanding {money(sheet.inventory_payables?.payables_total ?? 0)}. These do not reduce profit until you pay the supplier or a cheque clears.
                 </p>
                 <div className="mt-4 divide-y divide-[#e2ded4]">
                   {payables.map((item) => {
                     const remaining = item.remaining ?? item.amount;
                     const paid = item.amount_paid ?? 0;
+                    const pendingTotal = item.pending_cheque_total ?? 0;
+                    const available = item.available_to_pay ?? Math.max(0, remaining - pendingTotal);
+                    const pending = item.pending_cheques ?? [];
+                    const highlighted = highlightPayableId === item.id;
                     return (
-                      <div key={item.id} className="py-3 text-sm">
-                        <div className="flex items-center gap-3">
-                          <div className="min-w-0">
+                      <div
+                        key={item.id}
+                        ref={(node) => { payableRefs.current[item.id] = node; }}
+                        className={`py-3 text-sm ${highlighted ? "bg-[#f5c842]/15 px-2 -mx-2" : ""}`}
+                      >
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="min-w-0 flex-1">
                             <p className="font-semibold">{item.supplier || "No supplier"}</p>
                             <p className="text-xs text-[#6f746e]">{item.description}</p>
                             <p className="text-xs text-[#6f746e]">
                               Due {item.due_date ? formatDate(item.due_date) : "—"} · Paid {money(paid)} of {money(item.amount)}
+                              {pendingTotal > 0 ? ` · Cheque pending ${money(pendingTotal)}` : ""}
                             </p>
                           </div>
-                          <strong className="ml-auto tabular-nums text-[#b84837]">{money(remaining)}</strong>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSettleItem(item);
-                              setSettleAmount(String(remaining));
-                            }}
-                            className="border border-[#167c73] px-2 py-1 text-[10px] font-bold uppercase text-[#167c73]"
-                          >
-                            Settle
-                          </button>
+                          <strong className="tabular-nums text-[#b84837]">{money(remaining)}</strong>
+                          <div className="flex flex-wrap gap-1.5">
+                            <button
+                              type="button"
+                              disabled={available <= 0}
+                              onClick={() => openSettle(item)}
+                              className="border border-[#167c73] px-2 py-1 text-[10px] font-bold uppercase text-[#167c73] disabled:opacity-40"
+                            >
+                              Settle
+                            </button>
+                            <button
+                              type="button"
+                              disabled={available <= 0}
+                              onClick={() => openCheque(item)}
+                              className="border border-[#20221f] px-2 py-1 text-[10px] font-bold uppercase disabled:opacity-40"
+                            >
+                              Issue cheque
+                            </button>
+                          </div>
                         </div>
+                        {pending.length > 0 && (
+                          <ul className="mt-3 space-y-2 border-t border-[#e2ded4] pt-3">
+                            {pending.map((cheque) => (
+                              <li key={cheque.id} className="flex flex-wrap items-center gap-2 text-xs">
+                                <span className="font-semibold">
+                                  Cheque {cheque.cheque_number || "—"} · {cheque.cheque_date ? formatDate(cheque.cheque_date) : "—"}
+                                </span>
+                                <span className="tabular-nums">{money(cheque.amount)}</span>
+                                <span className="rounded bg-[#b8860b]/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-[#735a00]">Pending</span>
+                                <button
+                                  type="button"
+                                  disabled={chequeBusyId === cheque.id}
+                                  onClick={() => clearCheque(cheque.id)}
+                                  className="ml-auto border border-[#167c73] px-2 py-1 text-[10px] font-bold uppercase text-[#167c73]"
+                                >
+                                  Clear
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={chequeBusyId === cheque.id}
+                                  onClick={() => bounceCheque(cheque.id)}
+                                  className="border border-[#b84837] px-2 py-1 text-[10px] font-bold uppercase text-[#b84837]"
+                                >
+                                  Bounce
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                       </div>
                     );
                   })}
@@ -387,10 +605,12 @@ export default function BalanceSheetPage() {
             <div className="border-b border-[#d7d3c8] px-5 py-4">
               <p className="text-[10px] font-bold uppercase tracking-wide text-[#167c73]">{businessName}</p>
               <h2 className="mt-1 font-display text-2xl font-semibold uppercase sm:text-3xl">
-                Monthly accounts summary · {monthLabel}
+                {todayMode ? `Today's accounts · ${formatDate(localToday())}` : `Monthly accounts summary · ${monthLabel}`}
               </h2>
               <p className="mt-2 text-sm text-[#6f746e]">
-                Daily profit and expenses for this period. Open a day to see its credits and debits.
+                {todayMode
+                  ? "Income and expenses for today only. Open the day to see credits and debits."
+                  : "Daily profit and expenses for this period. Open a day to see its credits and debits."}
               </p>
             </div>
 
@@ -406,7 +626,7 @@ export default function BalanceSheetPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {dailyAccounts.map((day) => (
+                  {visibleDailyAccounts.map((day) => (
                     <tr key={day.date} className="bg-[#fbfaf6]">
                       <td className="border border-[#e2ded4] px-3 py-2.5 whitespace-nowrap font-semibold">{formatDate(day.date)}</td>
                       <td className="border border-[#e2ded4] px-3 py-2.5 text-right tabular-nums text-[#b84837]">
@@ -429,10 +649,10 @@ export default function BalanceSheetPage() {
                       </td>
                     </tr>
                   ))}
-                  {dailyAccounts.length === 0 && (
+                  {visibleDailyAccounts.length === 0 && (
                     <tr>
                       <td colSpan={5} className="border border-[#e2ded4] px-5 py-10 text-center text-sm text-[#6f746e]">
-                        No income or expense entries for this month yet.
+                        {todayMode ? "No income or expense entries for today yet." : "No income or expense entries for this month yet."}
                       </td>
                     </tr>
                   )}
@@ -440,20 +660,20 @@ export default function BalanceSheetPage() {
                 <tfoot>
                   <tr className="bg-[#f3f0e8] text-sm font-semibold">
                     <td className="border border-[#d7d3c8] px-3 py-4 uppercase tracking-wide text-[#4f544e]">
-                      Monthly totals
+                      {todayMode ? "Today's totals" : "Monthly totals"}
                     </td>
                     <td className="border border-[#d7d3c8] px-3 py-4 text-right text-[#b84837]">
                       <span className="block text-[10px] font-bold uppercase text-[#6f746e]">Total expenses (−)</span>
-                      {money(sheet.expenses)}
+                      {money(todayTotals.expenses)}
                     </td>
                     <td className="border border-[#d7d3c8] px-3 py-4 text-right text-[#167c73]">
                       <span className="block text-[10px] font-bold uppercase text-[#6f746e]">Total revenue (+)</span>
-                      {money(sheet.income)}
+                      {money(todayTotals.income)}
                     </td>
                     <td className="border border-[#d7d3c8] px-3 py-4 text-right">
-                      <span className="block text-[10px] font-bold uppercase text-[#6f746e]">Monthly profit</span>
-                      <span className={sheet.net_profit >= 0 ? "text-[#167c73]" : "text-[#b84837]"}>
-                        {money(sheet.net_profit)}
+                      <span className="block text-[10px] font-bold uppercase text-[#6f746e]">{todayMode ? "Today's profit" : "Monthly profit"}</span>
+                      <span className={todayTotals.net >= 0 ? "text-[#167c73]" : "text-[#b84837]"}>
+                        {money(todayTotals.net)}
                       </span>
                     </td>
                     <td className="border border-[#d7d3c8] px-3 py-4" />
@@ -530,6 +750,8 @@ export default function BalanceSheetPage() {
               <div className="flex justify-between"><dt className="text-[#6f746e]">Original</dt><dd className="font-semibold">{money(settleItem.amount)}</dd></div>
               <div className="flex justify-between"><dt className="text-[#6f746e]">Paid so far</dt><dd className="font-semibold">{money(settleItem.amount_paid ?? 0)}</dd></div>
               <div className="flex justify-between"><dt className="text-[#6f746e]">Balance</dt><dd className="font-semibold text-[#b84837]">{money(settleItem.remaining ?? settleItem.amount)}</dd></div>
+              <div className="flex justify-between"><dt className="text-[#6f746e]">Cheque pending</dt><dd className="font-semibold">{money(settleItem.pending_cheque_total ?? 0)}</dd></div>
+              <div className="flex justify-between"><dt className="text-[#6f746e]">Available now</dt><dd className="font-semibold">{money(settleItem.available_to_pay ?? settleItem.remaining ?? settleItem.amount)}</dd></div>
             </dl>
             {(settleItem.settlements?.length ?? 0) > 0 && (
               <div className="mt-4 border-t border-[#e2ded4] pt-3">
@@ -551,7 +773,7 @@ export default function BalanceSheetPage() {
                 onChange={(event) => setSettleAmount(event.target.value)}
                 type="number"
                 min="0.01"
-                max={settleItem.remaining ?? settleItem.amount}
+                max={settleItem.available_to_pay ?? settleItem.remaining ?? settleItem.amount}
                 step="0.01"
                 required
                 className={`${inputClass} mt-2`}
@@ -561,6 +783,62 @@ export default function BalanceSheetPage() {
               <button type="button" onClick={() => setSettleItem(null)} className="h-9 border border-[#d7d3c8] px-3 text-[13px]">Cancel</button>
               <button disabled={settlingId === settleItem.id} className={buttonClass}>
                 {settlingId === settleItem.id ? "Saving..." : "Record payment"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {chequeItem && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+          <button type="button" aria-label="Close dialog" className="absolute inset-0 bg-[#181b19]/55" onClick={() => setChequeItem(null)} />
+          <form onSubmit={issueCheque} className="relative z-10 w-full max-w-md border border-[#d7d3c8] bg-[#fbfaf6] p-5">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-[#167c73]">Supplier cheque</p>
+            <h2 className="mt-1 font-display text-2xl font-semibold uppercase">Issue cheque</h2>
+            <p className="mt-2 text-sm font-semibold">{chequeItem.supplier || "No supplier"}</p>
+            <p className="mt-1 text-sm text-[#6f746e]">{chequeItem.description}</p>
+            <p className="mt-3 text-sm text-[#6f746e]">
+              Available to issue: <strong className="text-[#20221f]">{money(chequeItem.available_to_pay ?? chequeItem.remaining ?? chequeItem.amount)}</strong>
+            </p>
+            <label className="mt-4 block text-xs font-bold uppercase">
+              Cheque amount
+              <input
+                value={chequeAmount}
+                onChange={(event) => setChequeAmount(event.target.value)}
+                type="number"
+                min="0.01"
+                max={chequeItem.available_to_pay ?? chequeItem.remaining ?? chequeItem.amount}
+                step="0.01"
+                required
+                className={`${inputClass} mt-2`}
+              />
+            </label>
+            <label className="mt-4 block text-xs font-bold uppercase">
+              Cheque date
+              <input
+                value={chequeDate}
+                onChange={(event) => setChequeDate(event.target.value)}
+                type="date"
+                required
+                className={`${inputClass} mt-2`}
+              />
+            </label>
+            <label className="mt-4 block text-xs font-bold uppercase">
+              Cheque number <span className="font-normal normal-case text-[#6f746e]">(optional)</span>
+              <input
+                value={chequeNumber}
+                onChange={(event) => setChequeNumber(event.target.value)}
+                className={`${inputClass} mt-2`}
+                placeholder="e.g. 452189"
+              />
+            </label>
+            <p className="mt-3 text-xs text-[#6f746e]">
+              This does not reduce profit until you mark the cheque as cleared.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setChequeItem(null)} className="h-9 border border-[#d7d3c8] px-3 text-[13px]">Cancel</button>
+              <button disabled={chequeBusyId === chequeItem.id} className={buttonClass}>
+                {chequeBusyId === chequeItem.id ? "Saving..." : "Issue cheque"}
               </button>
             </div>
           </form>

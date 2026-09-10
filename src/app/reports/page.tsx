@@ -70,6 +70,11 @@ function yearBounds(year: number) {
   return { from: `${year}-01-01`, to: `${year}-12-31` };
 }
 
+function localToday() {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 type ServiceOps = {
   from: string;
   to: string;
@@ -93,6 +98,7 @@ export default function ReportsPage() {
   const [period, setPeriod] = useState<"month" | "year">("month");
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
+  const [todayMode, setTodayMode] = useState(false);
   const [employeeId, setEmployeeId] = useState("");
   const [shopFilter, setShopFilter] = useState("");
   const [report, setReport] = useState<Report | null>(null);
@@ -105,7 +111,12 @@ export default function ReportsPage() {
   const canServiceOps = isGarage && currentFeatures().includes("service_ops_report");
 
   const load = useCallback(() => {
-    const range = period === "year" ? yearBounds(year) : monthBounds(month, year);
+    const today = localToday();
+    const range = todayMode
+      ? { from: today, to: today }
+      : period === "year"
+        ? yearBounds(year)
+        : monthBounds(month, year);
     const params = new URLSearchParams({ from: range.from, to: range.to });
     if (employeeId) params.set("employee_id", employeeId);
     if (shopFilter) params.set("branch_id", shopFilter);
@@ -115,9 +126,21 @@ export default function ReportsPage() {
         .then(setServiceOps)
         .catch(() => setServiceOps(null));
     }
-  }, [period, month, year, employeeId, shopFilter, canServiceOps]);
+  }, [period, month, year, employeeId, shopFilter, canServiceOps, todayMode]);
 
   useEffect(() => { load(); }, [load]);
+
+  function goToday() {
+    if (todayMode) {
+      setTodayMode(false);
+      return;
+    }
+    const stamp = new Date();
+    setTodayMode(true);
+    setPeriod("month");
+    setMonth(stamp.getMonth() + 1);
+    setYear(stamp.getFullYear());
+  }
 
   return (
     <AppShell title="Reports" eyebrow="Sales, stock, staff, and past jobs for the selected period">
@@ -130,7 +153,14 @@ export default function ReportsPage() {
       <form className="mb-5 flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); load(); }}>
         <label className="text-[11px] font-bold uppercase">
           Period
-          <select value={period} onChange={(event) => setPeriod(event.target.value as "month" | "year")} className={`${inputClass} mt-1.5 w-32`}>
+          <select
+            value={period}
+            onChange={(event) => {
+              setTodayMode(false);
+              setPeriod(event.target.value as "month" | "year");
+            }}
+            className={`${inputClass} mt-1.5 w-32`}
+          >
             <option value="month">Month</option>
             <option value="year">Year</option>
           </select>
@@ -138,7 +168,14 @@ export default function ReportsPage() {
         {period === "month" && (
           <label className="text-[11px] font-bold uppercase">
             Month
-            <select value={month} onChange={(event) => setMonth(Number(event.target.value))} className={`${inputClass} mt-1.5 w-40`}>
+            <select
+              value={month}
+              onChange={(event) => {
+                setTodayMode(false);
+                setMonth(Number(event.target.value));
+              }}
+              className={`${inputClass} mt-1.5 w-40`}
+            >
               {Array.from({ length: 12 }, (_, index) => (
                 <option key={index + 1} value={index + 1}>{new Date(2026, index).toLocaleString("en", { month: "long" })}</option>
               ))}
@@ -147,7 +184,15 @@ export default function ReportsPage() {
         )}
         <label className="text-[11px] font-bold uppercase">
           Year
-          <input value={year} onChange={(event) => setYear(Number(event.target.value))} type="number" className={`${inputClass} mt-1.5 w-24`} />
+          <input
+            value={year}
+            onChange={(event) => {
+              setTodayMode(false);
+              setYear(Number(event.target.value));
+            }}
+            type="number"
+            className={`${inputClass} mt-1.5 w-24`}
+          />
         </label>
         <label className="text-[11px] font-bold uppercase">
           Employee
@@ -159,7 +204,19 @@ export default function ReportsPage() {
           </select>
         </label>
         <ShopFilter value={shopFilter} onChange={setShopFilter} />
+        <button
+          type="button"
+          onClick={goToday}
+          className={`inline-flex h-9 items-center border px-3 text-[13px] font-semibold ${
+            todayMode ? "border-[#20221f] bg-[#20221f] text-white" : "border-[#20221f] hover:bg-[#f5c842]"
+          }`}
+        >
+          Today
+        </button>
       </form>
+      {todayMode && (
+        <p className="mb-4 text-xs font-bold uppercase text-[#167c73]">Showing today · {formatDate(localToday())}</p>
+      )}
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
       {canServiceOps && tab === "service" ? (
         serviceOps ? (

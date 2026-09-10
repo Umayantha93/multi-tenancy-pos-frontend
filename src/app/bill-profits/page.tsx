@@ -79,13 +79,19 @@ function daysAgo(days: number) {
   return date.toISOString().slice(0, 10);
 }
 
+function todayStamp() {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 export default function BillProfitsPage() {
   const [isGarage, setIsGarage] = useState(false);
   const [isPaint, setIsPaint] = useState(false);
   const [isStore, setIsStore] = useState(false);
   const [hasRepair, setHasRepair] = useState(false);
-  const [dateFrom, setDateFrom] = useState(() => daysAgo(29));
-  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
+  // Dates are client-only so SSR HTML matches the first client paint.
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [jobKind, setJobKind] = useState<JobKindFilter>(null);
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState("");
@@ -98,6 +104,7 @@ export default function BillProfitsPage() {
   const effectiveKind = jobKind ?? (isStore && !hasRepair ? "parts_sale" : null);
 
   const load = useCallback(() => {
+    if (!dateFrom || !dateTo) return;
     if (rangeInvalid) {
       setError("From date must be on or before To date.");
       setLoading(false);
@@ -113,6 +120,11 @@ export default function BillProfitsPage() {
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load bill profits."))
       .finally(() => setLoading(false));
   }, [dateFrom, dateTo, effectiveKind, rangeInvalid, shopFilter]);
+
+  useEffect(() => {
+    setDateFrom(daysAgo(29));
+    setDateTo(todayStamp());
+  }, []);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -216,6 +228,27 @@ export default function BillProfitsPage() {
         </label>
         <ShopFilter value={shopFilter} onChange={setShopFilter} />
         <button type="button" onClick={load} className={buttonClass}>Apply period</button>
+        <button
+          type="button"
+          onClick={() => {
+            const today = todayStamp();
+            const isToday = Boolean(dateFrom && dateTo && dateFrom === dateTo && dateFrom === today);
+            if (isToday) {
+              setDateFrom(daysAgo(29));
+              setDateTo(today);
+              return;
+            }
+            setDateFrom(today);
+            setDateTo(today);
+          }}
+          className={`inline-flex h-9 items-center border border-[#20221f] px-3 text-[13px] font-semibold ${
+            dateFrom && dateTo && dateFrom === dateTo && dateFrom === todayStamp()
+              ? "bg-[#20221f] text-white"
+              : "hover:bg-[#f5c842]"
+          }`}
+        >
+          Today
+        </button>
         {isGarage && (
           <div className="flex flex-wrap gap-2">
             {kindButton("service", isPaint ? "Packages" : "Services")}
