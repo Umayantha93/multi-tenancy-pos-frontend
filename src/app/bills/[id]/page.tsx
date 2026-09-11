@@ -871,12 +871,12 @@ export default function BillDetailPage() {
       title={bill.bill_number}
       eyebrow={`${bill.vehicle?.number_plate ?? bill.customer?.name ?? profile.billingSingular}${showJobKind ? ` · ${jobKindLabel}` : ""} · ${bill.status.replace("_", " ")}`}
       action={
-        <div className="no-print flex items-center gap-2">
+        <div className="no-print flex w-full min-w-0 flex-wrap items-center gap-2">
           {isGarage && Number(bill.amount_paid) <= 0 && (
             <button
               type="button"
               onClick={() => void toggleHideAmounts()}
-              className={`h-10 border px-3 text-xs font-bold uppercase ${bill.hide_amounts ? "border-[#167c73] bg-[#167c73] text-white" : "border-[#c9c5b9] bg-white"}`}
+              className={`h-10 shrink-0 whitespace-nowrap border px-3 text-xs font-bold uppercase ${bill.hide_amounts ? "border-[#167c73] bg-[#167c73] text-white" : "border-[#c9c5b9] bg-white"}`}
               title="Hide amounts on the customer print and SMS copy"
             >
               {bill.hide_amounts ? "Repair note" : "Hide amounts"}
@@ -887,7 +887,7 @@ export default function BillDetailPage() {
               type="button"
               onClick={sendBillSms}
               disabled={sendingSms || !bill.customer?.phone}
-              className="grid size-10 place-items-center border border-[#c9c5b9] disabled:cursor-not-allowed disabled:opacity-40"
+              className="grid size-10 shrink-0 place-items-center border border-[#c9c5b9] disabled:cursor-not-allowed disabled:opacity-40"
               title={
                 !bill.customer?.phone
                   ? "Customer phone required"
@@ -903,7 +903,7 @@ export default function BillDetailPage() {
               <MessageSquare size={19} />
             </button>
           )}
-          <label className="inline-flex h-10 cursor-pointer items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-xs font-bold uppercase">
+          <label className="inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap border border-[#c9c5b9] bg-white px-3 text-xs font-bold uppercase">
             <input
               type="checkbox"
               checked={printWithLogo}
@@ -920,11 +920,11 @@ export default function BillDetailPage() {
             />
             Watermark
           </label>
-          <button onClick={() => window.print()} className="grid size-10 place-items-center border border-[#c9c5b9]" title="Print bill">
+          <button onClick={() => window.print()} className="grid size-10 shrink-0 place-items-center border border-[#c9c5b9]" title="Print bill">
             <Printer size={19} />
           </button>
           {!isClosed && !isOweIn && (
-            <div ref={closeMenuRef} className="relative">
+            <div ref={closeMenuRef} className="relative shrink-0">
               <div className="inline-flex h-10 overflow-hidden border border-[#c9c5b9] bg-white">
                 <button
                   type="button"
@@ -1078,7 +1078,7 @@ export default function BillDetailPage() {
               </div>
             )}
             <div className="min-w-0">
-              <p className="font-display text-3xl font-semibold uppercase leading-none">
+              <p className="break-words font-display text-2xl font-semibold uppercase leading-tight sm:text-3xl sm:leading-none">
                 {tenant?.business_name ?? "Business"}
               </p>
               {isMultiBranch() && bill.branch?.name && (
@@ -1095,7 +1095,7 @@ export default function BillDetailPage() {
               </div>
             </div>
           </div>
-          <div className="flex shrink-0 flex-col items-end text-right text-xs uppercase text-[#6f746e]">
+          <div className="flex w-full flex-col items-start text-left text-xs uppercase text-[#6f746e] sm:w-auto sm:shrink-0 sm:items-end sm:text-right">
             <p className="font-bold text-[#167c73]">
               {hidePrintMoney ? "Repair note" : `Tax invoice / ${profile.billingSingular.toLowerCase()}`}
               {showJobKind && !hidePrintMoney ? ` · ${jobKindLabel}` : ""}
@@ -1148,14 +1148,14 @@ export default function BillDetailPage() {
                     )}
                     {!isLocked && (
                       <form onSubmit={saveMileage} className="no-print mt-2 space-y-2">
-                        <div className="flex h-9 items-stretch gap-2">
+                        <div className="flex h-9 min-w-0 items-stretch gap-2">
                           <input
                             type="number"
                             min="0"
                             step="1"
                             value={mileageDraft}
                             onChange={(event) => setMileageDraft(event.target.value)}
-                            className={inputClass}
+                            className={`${inputClass} min-w-0`}
                             placeholder="Current km"
                           />
                           {!isServiceJob && (
