@@ -105,10 +105,14 @@ export default function ReportsPage() {
   const [serviceOps, setServiceOps] = useState<ServiceOps | null>(null);
   const [tab, setTab] = useState<"overview" | "service">("overview");
   const [error, setError] = useState("");
+  const [canServiceOps, setCanServiceOps] = useState(false);
   const profile = useBusinessProfile();
   const isPaint = profile.type === "paint";
-  const isGarage = profile.type === "garage";
-  const canServiceOps = isGarage && currentFeatures().includes("service_ops_report");
+
+  useEffect(() => {
+    const isGarage = profile.type === "garage";
+    setCanServiceOps(isGarage && currentFeatures().includes("service_ops_report"));
+  }, [profile.type]);
 
   const load = useCallback(() => {
     const today = localToday();
