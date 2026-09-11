@@ -87,7 +87,7 @@ export function JobVideos({ billId }: { billId: number }) {
           <p className="font-display text-xl font-semibold uppercase">Job videos</p>
           <p className="text-xs text-[#6f746e]">Staff only · not printed · not on SMS · removed after 6 months · {videos.length} / 5</p>
         </div>
-        <label className="inline-flex h-10 cursor-pointer items-center bg-[#20221f] px-3 text-xs font-bold uppercase text-white">
+        <label className="inline-flex h-8 cursor-pointer items-center bg-[#20221f] px-3 text-xs font-bold uppercase text-white">
           {uploading ? "Converting..." : `Add video (${left} left)`}
           <input
             type="file"

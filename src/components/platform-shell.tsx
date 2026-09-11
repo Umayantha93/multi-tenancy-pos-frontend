@@ -75,7 +75,7 @@ export function PlatformShell({ children, title, eyebrow, action }: { children: 
     <main className="min-w-0">
       <header className="relative z-40 flex min-h-20 items-center justify-between border-b border-[#cbc7bc] bg-[#f7f5ee]/95 px-4 backdrop-blur sm:px-7">
         <div className="flex items-center gap-3">
-          <button onClick={() => setOpen(true)} className="grid size-10 place-items-center border border-[#cbc7bc] lg:hidden" aria-label={t("shell.open_nav")}><Menu size={20} /></button>
+          <button onClick={() => setOpen(true)} className="grid size-8 place-items-center border border-[#cbc7bc] lg:hidden" aria-label={t("shell.open_nav")}><Menu size={20} /></button>
           <div>
             <p className="text-[10px] font-bold uppercase text-[#167c73]">{headerEyebrow}</p>
             <h1 className="font-display text-3xl font-semibold uppercase leading-none sm:text-4xl">{title}</h1>

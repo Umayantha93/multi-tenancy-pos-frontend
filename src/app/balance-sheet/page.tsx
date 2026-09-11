@@ -361,7 +361,7 @@ function BalanceSheetPageInner() {
         <button
           type="button"
           onClick={goToday}
-          className={`inline-flex h-9 items-center border px-3 text-[13px] font-semibold ${
+          className={`inline-flex h-8 items-center border px-3 text-[11px] font-semibold ${
             todayMode ? "border-[#20221f] bg-[#20221f] text-white" : "border-[#20221f] hover:bg-[#f5c842]"
           }`}
         >
@@ -780,7 +780,7 @@ function BalanceSheetPageInner() {
               />
             </label>
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setSettleItem(null)} className="h-9 border border-[#d7d3c8] px-3 text-[13px]">Cancel</button>
+              <button type="button" onClick={() => setSettleItem(null)} className="h-8 border border-[#d7d3c8] px-2.5 text-[11px]">Cancel</button>
               <button disabled={settlingId === settleItem.id} className={buttonClass}>
                 {settlingId === settleItem.id ? "Saving..." : "Record payment"}
               </button>
@@ -836,7 +836,7 @@ function BalanceSheetPageInner() {
               This does not reduce profit until you mark the cheque as cleared.
             </p>
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setChequeItem(null)} className="h-9 border border-[#d7d3c8] px-3 text-[13px]">Cancel</button>
+              <button type="button" onClick={() => setChequeItem(null)} className="h-8 border border-[#d7d3c8] px-2.5 text-[11px]">Cancel</button>
               <button disabled={chequeBusyId === chequeItem.id} className={buttonClass}>
                 {chequeBusyId === chequeItem.id ? "Saving..." : "Issue cheque"}
               </button>

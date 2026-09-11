@@ -172,7 +172,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
         <header className="no-print relative z-40 border-b border-[#d7d3c8] bg-[#f3f0e8]/95 px-4 backdrop-blur sm:px-7">
           <div className="flex min-h-20 flex-col gap-3 py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
             <div className="flex min-w-0 items-center gap-3">
-              <button onClick={() => setOpen(true)} className="grid size-10 shrink-0 place-items-center border border-[#d7d3c8] lg:hidden" aria-label={t("shell.open_nav")}><Menu size={20} /></button>
+              <button onClick={() => setOpen(true)} className="grid size-8 shrink-0 place-items-center border border-[#d7d3c8] lg:hidden" aria-label={t("shell.open_nav")}><Menu size={16} /></button>
               <div className="min-w-0">
                 {eyebrow && <p className="truncate text-[10px] font-bold uppercase text-[#167c73]">{eyebrow}</p>}
                 <h1 className="break-words font-display text-2xl font-semibold uppercase leading-tight sm:text-4xl sm:leading-none">{title}</h1>

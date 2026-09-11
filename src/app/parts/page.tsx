@@ -298,7 +298,7 @@ export default function PartsPage() {
             type="button"
             onClick={downloadTemplate}
             disabled={downloadingTemplate}
-            className="flex h-10 items-center gap-2 border border-[#20221f] bg-white px-3 text-sm font-semibold"
+            className="flex h-8 items-center gap-2 border border-[#20221f] bg-white px-2.5 text-[11px] font-semibold"
           >
             <Download size={16} /><span className="hidden sm:inline">{downloadingTemplate ? "Downloading..." : "Download template"}</span>
           </button>
@@ -306,7 +306,7 @@ export default function PartsPage() {
             type="button"
             onClick={() => setImportOpen(true)}
             disabled={importing}
-            className="flex h-10 items-center gap-2 border border-[#167c73] bg-white px-3 text-sm font-semibold text-[#167c73]"
+            className="flex h-8 items-center gap-2 border border-[#167c73] bg-white px-2.5 text-[11px] font-semibold text-[#167c73]"
           >
             <Upload size={16} /><span className="hidden sm:inline">{importing ? "Importing..." : "Import Excel"}</span>
           </button>
@@ -320,7 +320,7 @@ export default function PartsPage() {
               if (file) void importExcel(file);
             }}
           />
-          <button onClick={openAdd} className="flex h-10 items-center gap-2 bg-[#f5c842] px-3 text-sm font-semibold">
+          <button onClick={openAdd} className="flex h-8 items-center gap-2 bg-[#f5c842] px-2.5 text-[11px] font-semibold">
             <Plus size={18} /><span className="hidden sm:inline">{isPaint ? "Add colour" : isStore ? "Add item" : "Add part"}</span>
           </button>
         </div>
@@ -511,7 +511,7 @@ export default function PartsPage() {
                   type="button"
                   disabled={saving}
                   onClick={() => openDelete(selected)}
-                  className="inline-flex h-9 items-center gap-1.5 border border-[#b84837] px-3 text-[13px] font-semibold text-[#b84837] hover:bg-[#b84837]/8 disabled:opacity-50"
+                  className="inline-flex h-8 items-center gap-1.5 border border-[#b84837] px-3 text-[11px] font-semibold text-[#b84837] hover:bg-[#b84837]/8 disabled:opacity-50"
                 >
                   <Trash2 size={14} /> Delete
                 </button>

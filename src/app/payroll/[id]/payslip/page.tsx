@@ -80,8 +80,8 @@ export default function PayslipPage() {
       eyebrow={`${row.employee.name} · ${monthName(row.month, row.year)}`}
       action={
         <div className="no-print flex gap-2">
-          <Link href="/payroll" className="grid size-10 place-items-center border border-[#c9c5b9]"><ArrowLeft size={18} /></Link>
-          <button type="button" onClick={() => window.print()} className="grid size-10 place-items-center border border-[#c9c5b9]" title="Print payslip">
+          <Link href="/payroll" className="grid size-8 place-items-center border border-[#c9c5b9]"><ArrowLeft size={18} /></Link>
+          <button type="button" onClick={() => window.print()} className="grid size-8 place-items-center border border-[#c9c5b9]" title="Print payslip">
             <Printer size={18} />
           </button>
         </div>

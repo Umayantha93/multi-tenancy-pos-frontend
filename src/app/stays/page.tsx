@@ -59,7 +59,7 @@ export default function StaysPage() {
       title="Stays"
       eyebrow="Bookings & check-in"
       action={
-        <Link href="/stays/new" className="flex h-10 items-center gap-2 bg-[#f5c842] px-3 text-sm font-semibold">
+        <Link href="/stays/new" className="flex h-8 items-center gap-2 bg-[#f5c842] px-2.5 text-[11px] font-semibold">
           <Plus size={18} /> New stay
         </Link>
       }

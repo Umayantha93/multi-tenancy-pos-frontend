@@ -12,8 +12,8 @@ export function Panel({ children, className = "" }: { children: ReactNode; class
 export function PageState({ message }: { message: string }) { return <div className="grid min-h-48 place-items-center border border-dashed border-[#bdb8ab] bg-[#fbfaf6]/60 text-sm text-[#6f746e]">{message}</div>; }
 export function ErrorMessage({ message }: { message: string }) { return <p className="border-l-4 border-[#b84837] bg-[#b84837]/8 px-4 py-3 text-sm text-[#8d3326]">{message}</p>; }
 export function SuccessMessage({ message }: { message: string }) { return <p className="border-l-4 border-[#167c73] bg-[#167c73]/8 px-4 py-3 text-sm text-[#0f5c56]">{message}</p>; }
-export const inputClass = "h-9 w-full border border-[#c9c5b9] bg-white px-2.5 text-[13px] outline-none focus:border-[#167c73] [&:is(textarea)]:h-auto [&:is(textarea)]:min-h-[4.5rem] [&:is(textarea)]:py-2";
-export const buttonClass = "inline-flex h-9 items-center justify-center gap-1.5 bg-[#20221f] px-3 text-[13px] font-semibold text-white transition hover:bg-[#167c73] disabled:opacity-50";
+export const inputClass = "h-8 w-full border border-[#c9c5b9] bg-white px-2 text-[11px] outline-none focus:border-[#167c73] [&:is(textarea)]:h-auto [&:is(textarea)]:min-h-[4rem] [&:is(textarea)]:py-1.5";
+export const buttonClass = "inline-flex h-8 items-center justify-center gap-1 bg-[#20221f] px-2.5 text-[11px] font-semibold text-white transition hover:bg-[#167c73] disabled:opacity-50";
 
 type PasswordInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & {
   leftIcon?: ReactNode;
@@ -111,7 +111,7 @@ export function ConfirmModal({
             aria-label="Close"
             disabled={busy}
             onClick={onCancel}
-            className="grid size-9 place-items-center border border-[#d7d3c8] text-[#6f746e] hover:border-[#167c73] hover:text-[#167c73] disabled:opacity-50"
+            className="grid size-8 place-items-center border border-[#d7d3c8] text-[#6f746e] hover:border-[#167c73] hover:text-[#167c73] disabled:opacity-50"
           >
             <X size={16} />
           </button>
@@ -125,7 +125,7 @@ export function ConfirmModal({
             type="button"
             disabled={busy}
             onClick={onCancel}
-            className="inline-flex h-9 items-center justify-center border border-[#c9c5b9] bg-white px-3 text-[13px] font-semibold text-[#20221f] hover:border-[#167c73] disabled:opacity-50"
+            className="inline-flex h-8 items-center justify-center border border-[#c9c5b9] bg-white px-2.5 text-[11px] font-semibold text-[#20221f] hover:border-[#167c73] disabled:opacity-50"
           >
             {cancelLabel}
           </button>
@@ -133,7 +133,7 @@ export function ConfirmModal({
             type="button"
             disabled={busy}
             onClick={onConfirm}
-            className={`inline-flex h-9 items-center justify-center px-3 text-[13px] font-semibold text-white transition disabled:opacity-50 ${confirmTone}`}
+            className={`inline-flex h-8 items-center justify-center px-2.5 text-[11px] font-semibold text-white transition disabled:opacity-50 ${confirmTone}`}
           >
             {busy ? "Working..." : confirmLabel}
           </button>

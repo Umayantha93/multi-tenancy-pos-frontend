@@ -876,7 +876,7 @@ export default function BillDetailPage() {
             <button
               type="button"
               onClick={() => void toggleHideAmounts()}
-              className={`h-10 shrink-0 whitespace-nowrap border px-3 text-xs font-bold uppercase ${bill.hide_amounts ? "border-[#167c73] bg-[#167c73] text-white" : "border-[#c9c5b9] bg-white"}`}
+              className={`h-8 shrink-0 whitespace-nowrap border px-2.5 text-[11px] font-bold uppercase ${bill.hide_amounts ? "border-[#167c73] bg-[#167c73] text-white" : "border-[#c9c5b9] bg-white"}`}
               title="Hide amounts on the customer print and SMS copy"
             >
               {bill.hide_amounts ? "Repair note" : "Hide amounts"}
@@ -887,7 +887,7 @@ export default function BillDetailPage() {
               type="button"
               onClick={sendBillSms}
               disabled={sendingSms || !bill.customer?.phone}
-              className="grid size-10 shrink-0 place-items-center border border-[#c9c5b9] disabled:cursor-not-allowed disabled:opacity-40"
+              className="grid size-8 shrink-0 place-items-center border border-[#c9c5b9] disabled:cursor-not-allowed disabled:opacity-40"
               title={
                 !bill.customer?.phone
                   ? "Customer phone required"
@@ -900,10 +900,10 @@ export default function BillDetailPage() {
                         : "Send quotation link by SMS"
               }
             >
-              <MessageSquare size={19} />
+              <MessageSquare size={15} />
             </button>
           )}
-          <label className="inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap border border-[#c9c5b9] bg-white px-3 text-xs font-bold uppercase">
+          <label className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap border border-[#c9c5b9] bg-white px-2.5 text-[11px] font-bold uppercase">
             <input
               type="checkbox"
               checked={printWithLogo}
@@ -920,31 +920,31 @@ export default function BillDetailPage() {
             />
             Watermark
           </label>
-          <button onClick={() => window.print()} className="grid size-10 shrink-0 place-items-center border border-[#c9c5b9]" title="Print bill">
-            <Printer size={19} />
+          <button onClick={() => window.print()} className="grid size-8 shrink-0 place-items-center border border-[#c9c5b9]" title="Print bill">
+            <Printer size={15} />
           </button>
           {!isClosed && !isOweIn && (
             <div ref={closeMenuRef} className="relative shrink-0">
-              <div className="inline-flex h-10 overflow-hidden border border-[#c9c5b9] bg-white">
+              <div className="inline-flex h-8 overflow-hidden border border-[#c9c5b9] bg-white">
                 <button
                   type="button"
                   disabled={!isPaid}
                   onClick={() => setPendingClose(true)}
-                  className="inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold hover:bg-[#f7f5ef] disabled:cursor-not-allowed disabled:opacity-40"
+                  className="inline-flex h-8 items-center gap-2 px-2.5 text-[11px] font-semibold hover:bg-[#f7f5ef] disabled:cursor-not-allowed disabled:opacity-40"
                   title={
                     isPaid
                       ? `Close this ${profile.billingSingular.toLowerCase()}`
                       : `Pay this ${profile.billingSingular.toLowerCase()} in full before closing`
                   }
                 >
-                  <Lock size={16} />
+                  <Lock size={14} />
                   <span className="hidden sm:inline">Close</span>
                 </button>
                 <span className="w-px self-stretch bg-[#c9c5b9]" />
                 <button
                   type="button"
                   onClick={() => setOweInMenu((open) => !open)}
-                  className="grid h-10 w-9 place-items-center hover:bg-[#f7f5ef]"
+                  className="grid h-8 w-8 place-items-center hover:bg-[#f7f5ef]"
                   title="More close options"
                   aria-label="More close options"
                   aria-expanded={oweInMenu}
@@ -974,7 +974,7 @@ export default function BillDetailPage() {
             <button
               type="button"
               onClick={() => setPendingClose(true)}
-              className="inline-flex h-10 items-center gap-2 border border-[#20221f] bg-white px-3 text-sm font-semibold hover:bg-[#20221f] hover:text-white"
+              className="inline-flex h-8 items-center gap-2 border border-[#20221f] bg-white px-2.5 text-[11px] font-semibold hover:bg-[#20221f] hover:text-white"
             >
               <Lock size={16} />
               <span className="hidden sm:inline">Close</span>
@@ -1060,7 +1060,7 @@ export default function BillDetailPage() {
         </div>
       )}
       <BillingBranchBanner />
-      <div className="bill-print-sheet">
+      <div className="bill-print-sheet min-w-0 max-w-full">
       <BillWatermark src={printWithLogo ? logoUrl : null} printOnly />
       <Panel className="bill-letterhead mb-5 overflow-hidden p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1106,8 +1106,8 @@ export default function BillDetailPage() {
         </div>
       </Panel>
 
-      <div className="grid items-start gap-5 xl:grid-cols-[1.55fr_0.75fr] print:block print:space-y-2">
-        <div className="space-y-5 print:space-y-2">
+      <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[1.55fr_0.75fr] print:block print:space-y-2">
+        <div className="min-w-0 space-y-5 print:space-y-2">
           <Panel>
             <div className="bill-meta grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
               <div>
@@ -1148,7 +1148,7 @@ export default function BillDetailPage() {
                     )}
                     {!isLocked && (
                       <form onSubmit={saveMileage} className="no-print mt-2 space-y-2">
-                        <div className="flex h-9 min-w-0 items-stretch gap-2">
+                        <div className="flex h-8 min-w-0 items-stretch gap-2">
                           <input
                             type="number"
                             min="0"
@@ -1159,7 +1159,7 @@ export default function BillDetailPage() {
                             placeholder="Current km"
                           />
                           {!isServiceJob && (
-                            <button type="submit" disabled={savingMileage} className="inline-flex h-9 shrink-0 items-center justify-center border border-[#20221f] px-3 text-[10px] font-bold uppercase">
+                            <button type="submit" disabled={savingMileage} className="inline-flex h-8 shrink-0 items-center justify-center border border-[#20221f] px-2.5 text-[10px] font-bold uppercase">
                               {savingMileage ? "..." : "Save"}
                             </button>
                           )}
@@ -1175,7 +1175,7 @@ export default function BillDetailPage() {
                               className={inputClass}
                               placeholder="Next service km"
                             />
-                            <button type="submit" disabled={savingMileage} className="inline-flex h-9 items-center justify-center border border-[#20221f] px-3 text-[10px] font-bold uppercase">
+                            <button type="submit" disabled={savingMileage} className="inline-flex h-8 items-center justify-center border border-[#20221f] px-3 text-[10px] font-bold uppercase">
                               {savingMileage ? "..." : "Save"}
                             </button>
                           </>
@@ -1318,8 +1318,8 @@ export default function BillDetailPage() {
             <div className="bill-section-head border-b border-[#d7d3c8] px-5 py-4">
               <h2 className="font-display text-2xl font-semibold uppercase">Bill items</h2>
             </div>
-            <div className="overflow-x-auto print:overflow-visible">
-              <table className="bill-items-table w-full table-fixed text-left text-sm">
+            <div className="bill-items-scroll print:overflow-visible">
+              <table className="bill-items-table w-full min-w-[36rem] text-left text-sm print:min-w-0">
                 <colgroup>
                   <col className="w-[36%]" />
                   <col className="w-[14%]" />
@@ -1345,7 +1345,7 @@ export default function BillDetailPage() {
                       return (
                         <Fragment key={row.groupId}>
                           <tr className="border-t border-[#e2ded4] align-top">
-                            <td className="px-4 py-3 break-words whitespace-normal">
+                            <td className="px-4 py-3 break-words">
                               <button
                                 type="button"
                                 onClick={() => setExpandedPanels((current) => ({ ...current, [row.groupId]: !open }))}
@@ -1357,10 +1357,10 @@ export default function BillDetailPage() {
                               </button>
                               <span className="font-semibold">{row.name}</span>
                             </td>
-                            <td className="px-3 py-3 text-[#6f746e]">Panel</td>
-                            <td className="px-3 py-3 text-right tabular-nums">—</td>
-                            <td className="px-3 py-3 text-right tabular-nums">—</td>
-                            <td className="px-4 py-3 text-right tabular-nums">
+                            <td className="px-3 py-3 whitespace-nowrap text-[#6f746e]">Panel</td>
+                            <td className="px-3 py-3 whitespace-nowrap text-right tabular-nums">—</td>
+                            <td className="px-3 py-3 whitespace-nowrap text-right tabular-nums">—</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-right tabular-nums">
                               <span className={hidePrintMoney ? "print:hidden" : ""}>{money(row.total)}</span>
                               {hidePrintMoney && <span className="hidden print:inline">—</span>}
                             </td>
@@ -1418,18 +1418,18 @@ export default function BillDetailPage() {
                     </tr>
                     {discountItems.map((item) => (
                       <tr key={item.id} className="bill-discount-row border-t border-[#167c73]/20 bg-[#e7f4f2] align-top text-[#167c73]">
-                        <td className="px-4 py-3 font-semibold break-words whitespace-normal">{item.description}</td>
-                        <td className="px-3 py-3 break-words whitespace-normal">
+                        <td className="px-4 py-3 font-semibold break-words">{item.description}</td>
+                        <td className="px-3 py-3 whitespace-nowrap">
                           {billItemLabel(item.type, profile)}
                         </td>
-                        <td className="px-3 py-3 text-right tabular-nums">
+                        <td className="px-3 py-3 whitespace-nowrap text-right tabular-nums">
                           {Number(item.quantity) > 1 ? Number(item.quantity) : "—"}
                         </td>
-                        <td className="px-3 py-3 text-right tabular-nums">
+                        <td className="px-3 py-3 whitespace-nowrap text-right tabular-nums">
                           <span className={hidePrintMoney ? "print:hidden" : ""}>{money(item.unit_price)}</span>
                           {hidePrintMoney && <span className="hidden print:inline">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                        <td className="px-4 py-3 whitespace-nowrap text-right font-semibold tabular-nums">
                           <span className={hidePrintMoney ? "print:hidden" : ""}>-{money(item.line_total)}</span>
                           {hidePrintMoney && <span className="hidden print:inline">—</span>}
                         </td>
@@ -1481,10 +1481,10 @@ export default function BillDetailPage() {
           <Panel className="no-print xl:sticky xl:top-4">
             {!isOweIn && (
             <div className="grid grid-cols-2 border-b border-[#d7d3c8]">
-              <button onClick={() => setMode("item")} className={`h-9 text-[13px] font-semibold ${mode === "item" ? "bg-[#20221f] text-white" : ""}`}>
+              <button onClick={() => setMode("item")} className={`h-8 text-[11px] font-semibold ${mode === "item" ? "bg-[#20221f] text-white" : ""}`}>
                 <Plus className="inline" size={16} /> Add item
               </button>
-              <button onClick={() => setMode("payment")} className={`h-9 text-[13px] font-semibold ${mode === "payment" ? "bg-[#167c73] text-white" : ""}`}>
+              <button onClick={() => setMode("payment")} className={`h-8 text-[11px] font-semibold ${mode === "payment" ? "bg-[#167c73] text-white" : ""}`}>
                 <CreditCard className="inline" size={16} /> Payment
               </button>
             </div>
@@ -2139,13 +2139,13 @@ function ChargeItemRow({
 
   return (
     <tr className={`border-t border-[#e2ded4] align-top ${hideOnPrint ? "no-print" : ""} ${hidden ? "hidden" : ""}`}>
-      <td className={`px-4 py-3 break-words whitespace-normal ${nested ? "pl-8" : ""}`}>
+      <td className={`px-4 py-3 break-words ${nested ? "pl-8" : ""}`}>
         <BillItemDescription item={item} />
       </td>
-      <td className="px-3 py-3 text-[#6f746e] break-words whitespace-normal">
+      <td className="px-3 py-3 whitespace-nowrap text-[#6f746e]">
         {billItemLabel(item.type, profile)}
       </td>
-      <td className="px-3 py-3 text-right tabular-nums">
+      <td className="px-3 py-3 whitespace-nowrap text-right tabular-nums">
         {isLaborLine ? (
           <>
             {!isLocked ? (
@@ -2174,7 +2174,7 @@ function ChargeItemRow({
           </>
         ) : showQty ? Number(item.quantity) : "—"}
       </td>
-      <td className="px-3 py-3 text-right break-words whitespace-normal">
+      <td className="px-3 py-3 whitespace-nowrap text-right">
         {fromCustomer ? (
           <span className="font-semibold text-[#167c73]">—</span>
         ) : isLaborLine ? (
@@ -2189,7 +2189,7 @@ function ChargeItemRow({
           </>
         )}
       </td>
-      <td className="px-4 py-3 text-right break-words whitespace-normal">
+      <td className="px-4 py-3 whitespace-nowrap text-right">
         {fromCustomer ? (
           <span className="inline-block max-w-full font-semibold leading-snug text-[#167c73]">
             Received from customer

@@ -78,7 +78,7 @@ export function EmployeePicker({
           {assigned.map((employee) => (
             <li key={employee.id} className="flex items-center gap-2 px-2.5 py-1.5">
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-semibold leading-tight">{employee.name}</span>
+                <span className="block truncate text-[11px] font-semibold leading-tight">{employee.name}</span>
                 {employee.position && (
                   <span className="block truncate text-[10px] uppercase text-[#6f746e]">{employee.position}</span>
                 )}

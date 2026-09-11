@@ -204,7 +204,7 @@ export default function BillProfitsPage() {
       <button
         type="button"
         onClick={() => toggleKind(kind)}
-        className={`inline-flex h-9 items-center border px-3 text-[13px] font-semibold ${
+        className={`inline-flex h-8 items-center border px-3 text-[11px] font-semibold ${
           selected
             ? "border-[#20221f] bg-[#20221f] text-white"
             : "border-[#c9c5b9] bg-white hover:border-[#20221f]"
@@ -241,7 +241,7 @@ export default function BillProfitsPage() {
             setDateFrom(today);
             setDateTo(today);
           }}
-          className={`inline-flex h-9 items-center border border-[#20221f] px-3 text-[13px] font-semibold ${
+          className={`inline-flex h-8 items-center border border-[#20221f] px-3 text-[11px] font-semibold ${
             dateFrom && dateTo && dateFrom === dateTo && dateFrom === todayStamp()
               ? "bg-[#20221f] text-white"
               : "hover:bg-[#f5c842]"

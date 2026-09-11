@@ -83,7 +83,7 @@ export default function CustomerDetailPage() {
                 <p className="text-[10px] font-bold uppercase text-[#167c73]">Customer</p>
                 <h2 className="mt-1 font-display text-3xl font-semibold uppercase">{customer.name}</h2>
               </div>
-              <button type="button" onClick={() => setEditing((value) => !value)} className="flex h-9 items-center gap-1 border border-[#d7d3c8] px-3 text-xs font-bold uppercase">
+              <button type="button" onClick={() => setEditing((value) => !value)} className="flex h-8 items-center gap-1 border border-[#d7d3c8] px-3 text-xs font-bold uppercase">
                 <Pencil size={13} /> {editing ? "Cancel" : "Edit"}
               </button>
             </div>

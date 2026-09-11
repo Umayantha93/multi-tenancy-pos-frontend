@@ -75,6 +75,17 @@ function localToday() {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+const fieldClass = `${inputClass} mt-1`;
+const labelClass = "block min-w-0 text-[10px] font-bold uppercase";
+const compactBtnClass =
+  "inline-flex h-8 w-full items-center justify-center border px-2 text-[11px] font-semibold";
+
+function tabClass(active: boolean) {
+  return `inline-flex h-7 w-40 items-center justify-center whitespace-nowrap px-2 text-[10px] font-semibold uppercase leading-none tracking-wide border ${
+    active ? "border-[#20221f] bg-[#20221f] text-white" : "border-[#c9c5b9] bg-white"
+  }`;
+}
+
 type ServiceOps = {
   from: string;
   to: string;
@@ -149,13 +160,17 @@ export default function ReportsPage() {
   return (
     <AppShell title="Reports" eyebrow="Sales, stock, staff, and past jobs for the selected period">
       {canServiceOps && (
-        <div className="mb-5 flex gap-2">
-          <button type="button" onClick={() => setTab("overview")} className={`h-10 px-4 text-xs font-bold uppercase ${tab === "overview" ? "bg-[#20221f] text-white" : "border border-[#c9c5b9]"}`}>Overview</button>
-          <button type="button" onClick={() => setTab("service")} className={`h-10 px-4 text-xs font-bold uppercase ${tab === "service" ? "bg-[#20221f] text-white" : "border border-[#c9c5b9]"}`}>Service operations</button>
+        <div className="mb-4 flex flex-wrap gap-1.5">
+          <button type="button" onClick={() => setTab("overview")} className={tabClass(tab === "overview")}>
+            Overview
+          </button>
+          <button type="button" onClick={() => setTab("service")} className={tabClass(tab === "service")}>
+            Service operations
+          </button>
         </div>
       )}
-      <form className="mb-5 flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); load(); }}>
-        <label className="text-[11px] font-bold uppercase">
+      <form className="mb-4 grid grid-cols-2 items-end gap-2 sm:grid-cols-3 lg:grid-cols-6" onSubmit={(event) => { event.preventDefault(); load(); }}>
+        <label className={labelClass}>
           Period
           <select
             value={period}
@@ -163,14 +178,14 @@ export default function ReportsPage() {
               setTodayMode(false);
               setPeriod(event.target.value as "month" | "year");
             }}
-            className={`${inputClass} mt-1.5 w-32`}
+            className={fieldClass}
           >
             <option value="month">Month</option>
             <option value="year">Year</option>
           </select>
         </label>
         {period === "month" && (
-          <label className="text-[11px] font-bold uppercase">
+          <label className={labelClass}>
             Month
             <select
               value={month}
@@ -178,7 +193,7 @@ export default function ReportsPage() {
                 setTodayMode(false);
                 setMonth(Number(event.target.value));
               }}
-              className={`${inputClass} mt-1.5 w-40`}
+              className={fieldClass}
             >
               {Array.from({ length: 12 }, (_, index) => (
                 <option key={index + 1} value={index + 1}>{new Date(2026, index).toLocaleString("en", { month: "long" })}</option>
@@ -186,7 +201,7 @@ export default function ReportsPage() {
             </select>
           </label>
         )}
-        <label className="text-[11px] font-bold uppercase">
+        <label className={labelClass}>
           Year
           <input
             value={year}
@@ -195,24 +210,24 @@ export default function ReportsPage() {
               setYear(Number(event.target.value));
             }}
             type="number"
-            className={`${inputClass} mt-1.5 w-24`}
+            className={fieldClass}
           />
         </label>
-        <label className="text-[11px] font-bold uppercase">
+        <label className={labelClass}>
           Employee
-          <select value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} className={`${inputClass} mt-1.5 w-52`}>
+          <select value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} className={fieldClass}>
             <option value="">All employees</option>
             {(report?.employees ?? []).map((employee) => (
               <option key={employee.id} value={employee.id}>{employee.name}</option>
             ))}
           </select>
         </label>
-        <ShopFilter value={shopFilter} onChange={setShopFilter} />
+        <ShopFilter value={shopFilter} onChange={setShopFilter} className="min-w-0" />
         <button
           type="button"
           onClick={goToday}
-          className={`inline-flex h-9 items-center border px-3 text-[13px] font-semibold ${
-            todayMode ? "border-[#20221f] bg-[#20221f] text-white" : "border-[#20221f] hover:bg-[#f5c842]"
+          className={`${compactBtnClass} ${
+            todayMode ? "border-[#20221f] bg-[#20221f] text-white" : "border-[#20221f] bg-white hover:bg-[#f5c842]"
           }`}
         >
           Today
