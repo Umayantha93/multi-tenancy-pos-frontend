@@ -883,11 +883,12 @@ export default function BillDetailPage() {
       .map((item) => {
         const maxQty = Math.max(0, Number(item.quantity) - (refundedQty.get(item.id) ?? 0));
         const canRestock = item.type === "part" && Boolean(item.part_id);
+        const disposition: RefundDraftLine["disposition"] = canRestock ? "restock" : "none";
         return {
           bill_item_id: item.id,
           selected: maxQty > 0,
           quantity: maxQty > 0 ? String(maxQty) : "0",
-          disposition: canRestock ? "restock" : "none",
+          disposition,
           maxQty,
           unitPrice: Number(item.unit_price),
           description: item.description,
