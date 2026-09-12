@@ -2,7 +2,7 @@
 
 import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { ChevronDown, CreditCard, Lock, MessageSquare, Plus, Printer, ShieldCheck, Trash2 } from "lucide-react";
+import { ChevronDown, CreditCard, Lock, MessageSquare, Plus, Printer, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { EmployeePicker } from "@/components/employee-picker";
 import { LaborCatalogPicker, type LaborCategory } from "@/components/labor-catalog-picker";
@@ -44,6 +44,7 @@ type Bill = {
   vat_amount?: string | number | null;
   sscl_amount?: string | number | null;
   amount_paid: string;
+  amount_refunded?: string | number;
   balance_due: string;
   customer_balance?: string | number;
   mileage?: number | string | null;
@@ -66,6 +67,7 @@ type Bill = {
     quantity: string;
     unit_price: string;
     line_total: string;
+    part_id?: number | null;
     panel_group_id?: string | null;
     panel_name?: string | null;
     warranty_months?: number | null;
@@ -73,7 +75,34 @@ type Bill = {
     warranty_until?: string | null;
   }>;
   payments: Array<{ id: number; amount: string; method: string; paid_at: string }>;
+  refunds?: Array<{
+    id: number;
+    refunded_at: string;
+    reason: string;
+    method: string;
+    amount: string;
+    items?: Array<{
+      id: number;
+      bill_item_id: number;
+      quantity: string;
+      amount: string;
+      disposition: string;
+      bill_item?: { description?: string | null; type?: string } | null;
+    }>;
+  }>;
   branch?: { id: number; name: string; address?: string | null; phone?: string | null } | null;
+};
+
+type RefundDraftLine = {
+  bill_item_id: number;
+  selected: boolean;
+  quantity: string;
+  disposition: "restock" | "write_off" | "none";
+  maxQty: number;
+  unitPrice: number;
+  description: string;
+  type: string;
+  canRestock: boolean;
 };
 
 type PendingDelete =
@@ -109,6 +138,12 @@ export default function BillDetailPage() {
   const [markingOweIn, setMarkingOweIn] = useState(false);
   const [sendingSms, setSendingSms] = useState(false);
   const [smsNotice, setSmsNotice] = useState("");
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refunding, setRefunding] = useState(false);
+  const [refundDate, setRefundDate] = useState("");
+  const [refundReason, setRefundReason] = useState("");
+  const [refundMethod, setRefundMethod] = useState("cash");
+  const [refundLines, setRefundLines] = useState<RefundDraftLine[]>([]);
   const [mileageDraft, setMileageDraft] = useState("");
   const [nextServiceMileageDraft, setNextServiceMileageDraft] = useState("");
   const [savingMileage, setSavingMileage] = useState(false);
@@ -219,9 +254,17 @@ export default function BillDetailPage() {
   const isOweIn = bill?.status === "owe_in";
   const isLocked = isClosed || isOweIn;
   const isPaid = Boolean(bill && Number(bill.amount_paid) > 0 && Number(bill.balance_due) <= 0);
+  const amountRefunded = Number(bill?.amount_refunded ?? 0);
+  const canRefund = Boolean(isClosed && Number(bill?.amount_paid ?? 0) - amountRefunded > 0.00001);
   const stamp = bill ? billStamp(bill) : "quote";
   const hidePrintMoney = Boolean(isGarage && bill?.hide_amounts && Number(bill.amount_paid) <= 0);
   const paymentDate = bill ? billStampDateLabel(latestPaymentAt(bill.payments)) : null;
+  const refundTotal = useMemo(
+    () => refundLines
+      .filter((line) => line.selected)
+      .reduce((sum, line) => sum + Number(line.quantity || 0) * line.unitPrice, 0),
+    [refundLines],
+  );
 
   useEffect(() => {
     try {
@@ -787,7 +830,7 @@ export default function BillDetailPage() {
 
   async function saveInternalNotes(event: FormEvent) {
     event.preventDefault();
-    if (!bill) return;
+    if (!bill || isClosed) return;
     setSavingNotes(true);
     setError("");
     try {
@@ -809,7 +852,7 @@ export default function BillDetailPage() {
   }
 
   async function saveEmployees(ids: number[]) {
-    if (!bill) return;
+    if (!bill || isClosed) return;
     setEmployeeIds(ids);
     setSavingEmployees(true);
     setError("");
@@ -824,6 +867,73 @@ export default function BillDetailPage() {
       setError(caught instanceof Error ? caught.message : "Could not assign employees.");
     } finally {
       setSavingEmployees(false);
+    }
+  }
+
+  function openRefundModal() {
+    if (!bill || !canRefund) return;
+    const refundedQty = new Map<number, number>();
+    for (const refund of bill.refunds ?? []) {
+      for (const line of refund.items ?? []) {
+        refundedQty.set(line.bill_item_id, (refundedQty.get(line.bill_item_id) ?? 0) + Number(line.quantity));
+      }
+    }
+    const drafts: RefundDraftLine[] = bill.items
+      .filter((item) => item.type !== "discount")
+      .map((item) => {
+        const maxQty = Math.max(0, Number(item.quantity) - (refundedQty.get(item.id) ?? 0));
+        const canRestock = item.type === "part" && Boolean(item.part_id);
+        return {
+          bill_item_id: item.id,
+          selected: maxQty > 0,
+          quantity: maxQty > 0 ? String(maxQty) : "0",
+          disposition: canRestock ? "restock" : "none",
+          maxQty,
+          unitPrice: Number(item.unit_price),
+          description: item.description,
+          type: item.type,
+          canRestock,
+        };
+      })
+      .filter((line) => line.maxQty > 0);
+
+    setRefundDate(new Date().toISOString().slice(0, 10));
+    setRefundReason("");
+    setRefundMethod("cash");
+    setRefundLines(drafts);
+    setRefundOpen(true);
+  }
+
+  async function submitRefund(event: FormEvent) {
+    event.preventDefault();
+    if (!bill || !canRefund) return;
+    const selected = refundLines.filter((line) => line.selected && Number(line.quantity) > 0);
+    if (!selected.length) {
+      setError("Select at least one line to refund.");
+      return;
+    }
+    setRefunding(true);
+    setError("");
+    try {
+      await api(`/bills/${id}/refunds`, {
+        method: "POST",
+        body: JSON.stringify({
+          refunded_at: refundDate,
+          reason: refundReason,
+          method: refundMethod,
+          items: selected.map((line) => ({
+            bill_item_id: line.bill_item_id,
+            quantity: Number(line.quantity),
+            disposition: line.canRestock ? line.disposition : "none",
+          })),
+        }),
+      });
+      setRefundOpen(false);
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not refund this bill.");
+    } finally {
+      setRefunding(false);
     }
   }
 
@@ -923,6 +1033,17 @@ export default function BillDetailPage() {
           <button onClick={() => window.print()} className="grid size-8 shrink-0 place-items-center border border-[#c9c5b9]" title="Print bill">
             <Printer size={15} />
           </button>
+          {canRefund && (
+            <button
+              type="button"
+              onClick={openRefundModal}
+              className="inline-flex h-8 shrink-0 items-center gap-2 border border-[#b84837]/40 bg-white px-2.5 text-[11px] font-semibold text-[#b84837] hover:bg-[#b84837]/5"
+              title="Refund this closed bill"
+            >
+              <RotateCcw size={14} />
+              <span className="hidden sm:inline">Refund</span>
+            </button>
+          )}
           {!isClosed && !isOweIn && (
             <div ref={closeMenuRef} className="relative shrink-0">
               <div className="inline-flex h-8 overflow-hidden border border-[#c9c5b9] bg-white">
@@ -1034,6 +1155,144 @@ export default function BillDetailPage() {
           />
         </label>
       </ConfirmModal>
+      {refundOpen && (
+        <div className="no-print fixed inset-0 z-50 grid place-items-center bg-black/55 p-4" onClick={() => !refunding && setRefundOpen(false)}>
+          <form
+            onSubmit={submitRefund}
+            onClick={(event) => event.stopPropagation()}
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto bg-[#f3f0e8] p-5"
+          >
+            <h2 className="font-display text-2xl font-semibold uppercase">Refund bill</h2>
+            <p className="mt-1 text-sm text-[#6f746e]">
+              Choose lines to refund. For stock items, return to inventory or write off as a loss.
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="block text-xs font-bold uppercase">
+                Refund date
+                <input
+                  type="date"
+                  required
+                  value={refundDate}
+                  onChange={(event) => setRefundDate(event.target.value)}
+                  className={`${inputClass} mt-2`}
+                />
+              </label>
+              <label className="block text-xs font-bold uppercase">
+                Method
+                <select
+                  value={refundMethod}
+                  onChange={(event) => setRefundMethod(event.target.value)}
+                  className={`${inputClass} mt-2`}
+                >
+                  <option value="cash">Cash</option>
+                  <option value="card">Card</option>
+                  <option value="bank_transfer">Bank transfer</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+            </div>
+            <label className="mt-3 block text-xs font-bold uppercase">
+              Reason
+              <textarea
+                required
+                rows={3}
+                value={refundReason}
+                onChange={(event) => setRefundReason(event.target.value)}
+                className={`${inputClass} mt-2`}
+                placeholder="Why is this being refunded?"
+              />
+            </label>
+            <div className="mt-4 space-y-3">
+              {refundLines.map((line) => (
+                <div key={line.bill_item_id} className="border border-[#d7d3c8] bg-white p-3 text-sm">
+                  <label className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={line.selected}
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        setRefundLines((rows) => rows.map((row) => (
+                          row.bill_item_id === line.bill_item_id ? { ...row, selected: checked } : row
+                        )));
+                      }}
+                      className="mt-1 size-4 accent-[#167c73]"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="font-semibold">{line.description}</span>
+                      <span className="mt-0.5 block text-[11px] uppercase text-[#6f746e]">
+                        {line.type.replace("_", " ")} · up to {line.maxQty} · {money(line.unitPrice)} each
+                      </span>
+                    </span>
+                  </label>
+                  {line.selected && (
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <label className="block text-[11px] font-bold uppercase">
+                        Quantity
+                        <input
+                          type="number"
+                          min={line.canRestock ? 1 : 0.01}
+                          max={line.maxQty}
+                          step={line.canRestock ? 1 : 0.01}
+                          value={line.quantity}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setRefundLines((rows) => rows.map((row) => (
+                              row.bill_item_id === line.bill_item_id ? { ...row, quantity: value } : row
+                            )));
+                          }}
+                          className={`${inputClass} mt-1`}
+                        />
+                      </label>
+                      {line.canRestock ? (
+                        <div>
+                          <p className="text-[11px] font-bold uppercase">Stock</p>
+                          <div className="mt-1 flex flex-wrap gap-2">
+                            {([
+                              ["restock", "Return to stock"],
+                              ["write_off", "Write off (loss)"],
+                            ] as const).map(([value, label]) => (
+                              <button
+                                key={value}
+                                type="button"
+                                onClick={() => setRefundLines((rows) => rows.map((row) => (
+                                  row.bill_item_id === line.bill_item_id ? { ...row, disposition: value } : row
+                                )))}
+                                className={`h-8 border px-2.5 text-[11px] font-semibold ${
+                                  line.disposition === value
+                                    ? "border-[#20221f] bg-[#20221f] text-white"
+                                    : "border-[#c9c5b9] bg-white"
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="self-end text-[11px] text-[#6f746e]">Money refund only (no stock change).</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {refundLines.length === 0 && (
+                <p className="text-sm text-[#6f746e]">Nothing left to refund on this bill.</p>
+              )}
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#d7d3c8] pt-4">
+              <p className="text-sm font-semibold">Refund total {money(refundTotal)}</p>
+              <div className="flex gap-2">
+                <button type="button" disabled={refunding} onClick={() => setRefundOpen(false)} className={`${buttonClass} bg-white`}>
+                  Cancel
+                </button>
+                <button type="submit" disabled={refunding || refundTotal <= 0} className={buttonClass}>
+                  {refunding ? "Refunding..." : "Confirm refund"}
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
       {warrantyItem && (
         <div className="no-print fixed inset-0 z-50 grid place-items-center bg-black/55 p-4" onClick={() => !savingWarranty && setWarrantyItem(null)}>
           <form
@@ -1235,9 +1494,11 @@ export default function BillDetailPage() {
             <div className="border-b border-[#d7d3c8] px-5 py-3">
               <h2 className="font-display text-xl font-semibold uppercase">Staff only</h2>
               <p className="text-[11px] text-[#6f746e]">
-                {isGarage
-                  ? "Assigned staff stay off the customer bill. The additional note prints at the end."
-                  : "Hidden from the customer bill, print, and SMS link."}
+                {isClosed
+                  ? "Closed bills are locked. Notes and staff assignment cannot be changed."
+                  : isGarage
+                    ? "Assigned staff stay off the customer bill. The additional note prints at the end."
+                    : "Hidden from the customer bill, print, and SMS link."}
               </p>
             </div>
             <div className="grid gap-5 p-5 lg:grid-cols-2">
@@ -1248,7 +1509,8 @@ export default function BillDetailPage() {
                     value={internalNotes}
                     onChange={(event) => setInternalNotes(event.target.value)}
                     rows={4}
-                    className={`${inputClass} mt-2`}
+                    disabled={isClosed}
+                    className={`${inputClass} mt-2 disabled:opacity-60`}
                     placeholder={isGarage
                       ? "Printed at the end of the bill for the customer"
                       : "Workshop notes the customer should not see"}
@@ -1262,10 +1524,11 @@ export default function BillDetailPage() {
                         <button
                           key={color}
                           type="button"
+                          disabled={isClosed}
                           onClick={() => setNoteColor(color)}
                           aria-label={color === "red" ? "Maroon" : "Navy"}
                           aria-pressed={noteColor === color}
-                          className={`size-7 border ${
+                          className={`size-7 border disabled:opacity-50 ${
                             color === "red" ? "bg-[#7a1c2e]" : "bg-[#1b365d]"
                           } ${noteColor === color ? "border-[#20221f] ring-2 ring-[#20221f] ring-offset-1" : "border-transparent"}`}
                         />
@@ -1273,9 +1536,11 @@ export default function BillDetailPage() {
                     </div>
                   </div>
                 )}
-                <button type="submit" disabled={savingNotes} className={buttonClass}>
-                  {savingNotes ? "Saving..." : "Save note"}
-                </button>
+                {!isClosed && (
+                  <button type="submit" disabled={savingNotes} className={buttonClass}>
+                    {savingNotes ? "Saving..." : "Save note"}
+                  </button>
+                )}
               </form>
               {canAssignEmployees && (
                 <div className="space-y-2">
@@ -1284,7 +1549,7 @@ export default function BillDetailPage() {
                     employees={employeeOptions}
                     selectedIds={employeeIds}
                     onChange={(ids) => { void saveEmployees(ids); }}
-                    disabled={savingEmployees}
+                    disabled={savingEmployees || isClosed}
                   />
                   {savingEmployees && <p className="text-[11px] text-[#6f746e]">Saving…</p>}
                 </div>
@@ -1299,12 +1564,14 @@ export default function BillDetailPage() {
             </div>
           )}
           {canJobVideos && isGarage && bill.job_kind !== "parts_sale" && (
-            <JobVideos billId={bill.id} />
+            <JobVideos billId={bill.id} readOnly={isClosed} />
           )}
           {isClosed && (
-            <div className="no-print flex items-center gap-2 border border-[#20221f]/15 bg-[#20221f]/5 px-4 py-3 text-sm text-[#20221f]">
+            <div className="no-print flex flex-wrap items-center gap-2 border border-[#20221f]/15 bg-[#20221f]/5 px-4 py-3 text-sm text-[#20221f]">
               <Lock size={16} />
-              This {profile.billingSingular.toLowerCase()} is closed and cannot be edited.
+              This {profile.billingSingular.toLowerCase()} is closed and locked.
+              {amountRefunded > 0 ? ` Refunded ${money(amountRefunded)}.` : ""}
+              {" "}Only refund, SMS, watermark, and print remain available.
             </div>
           )}
           {isOweIn && (
@@ -1469,6 +1736,42 @@ export default function BillDetailPage() {
                         <Trash2 size={16} />
                       </button>
                     )}
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          )}
+
+          {(bill.refunds?.length ?? 0) > 0 && (
+            <Panel className="no-print">
+              <div className="bill-section-head border-b border-[#d7d3c8] px-5 py-4">
+                <h2 className="font-display text-2xl font-semibold uppercase">Refunds</h2>
+              </div>
+              <div className="divide-y divide-[#e2ded4]">
+                {(bill.refunds ?? []).map((refund) => (
+                  <div key={refund.id} className="space-y-2 px-5 py-3 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-[#b84837]">{money(refund.amount)}</span>
+                      <span className="uppercase text-[#6f746e]">{refund.method.replace("_", " ")}</span>
+                      <span className="text-[#6f746e]">{formatDate(refund.refunded_at)}</span>
+                    </div>
+                    <p className="text-[#4f544e]">{refund.reason}</p>
+                    <ul className="space-y-1 text-[12px] text-[#6f746e]">
+                      {(refund.items ?? []).map((item) => (
+                        <li key={item.id}>
+                          {item.bill_item?.description ?? `Item #${item.bill_item_id}`}
+                          {" · "}
+                          qty {item.quantity}
+                          {" · "}
+                          {money(item.amount)}
+                          {item.disposition === "restock"
+                            ? " · returned to stock"
+                            : item.disposition === "write_off"
+                              ? " · written off"
+                              : ""}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 ))}
               </div>

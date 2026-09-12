@@ -49,5 +49,6 @@ export function billStatusClass(status: string, dueDate?: string | null): string
 }
 
 export function billStatusLabel(status: string): string {
+  if (status === "partially_refunded") return "partially refunded";
   return status.replaceAll("_", " ");
 }

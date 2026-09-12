@@ -14,7 +14,7 @@ type AccountRow = {
   description: string;
   reference?: string | null;
   category: string;
-  type: "income" | "expense" | "payable" | "bill";
+  type: "income" | "expense" | "payable" | "bill" | "refund";
   debit: number;
   credit: number;
   balance: number;
@@ -66,6 +66,7 @@ function roundMoney(value: number) {
 function entryTone(type: AccountRow["type"]) {
   if (type === "income") return "bg-[#167c73]/10 text-[#167c73]";
   if (type === "expense") return "bg-[#b84837]/10 text-[#b84837]";
+  if (type === "refund") return "bg-[#b84837]/15 text-[#8a3426]";
   if (type === "payable") return "bg-[#b8860b]/15 text-[#735a00]";
   return "bg-[#2b6cb0]/10 text-[#2b6cb0]";
 }
@@ -204,7 +205,7 @@ function BalanceSheetPageInner() {
       const date = row.date;
       const current = days.get(date) ?? { date, debit: 0, credit: 0, balance: 0, entries: [] };
       current.entries.push(row);
-      if (row.type === "income" || row.type === "expense") {
+      if (row.type === "income" || row.type === "expense" || row.type === "refund") {
         current.debit += row.debit;
         current.credit += row.credit;
       }

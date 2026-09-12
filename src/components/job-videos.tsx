@@ -21,7 +21,7 @@ function authHeaders(): HeadersInit {
   return headers;
 }
 
-export function JobVideos({ billId }: { billId: number }) {
+export function JobVideos({ billId, readOnly = false }: { billId: number; readOnly?: boolean }) {
   const [videos, setVideos] = useState<JobVideo[]>([]);
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -87,20 +87,22 @@ export function JobVideos({ billId }: { billId: number }) {
           <p className="font-display text-xl font-semibold uppercase">Job videos</p>
           <p className="text-xs text-[#6f746e]">Staff only · not printed · not on SMS · removed after 6 months · {videos.length} / 5</p>
         </div>
-        <label className="inline-flex h-8 cursor-pointer items-center bg-[#20221f] px-3 text-xs font-bold uppercase text-white">
-          {uploading ? "Converting..." : `Add video (${left} left)`}
-          <input
-            type="file"
-            accept="video/mp4,video/quicktime,video/webm,video/3gpp"
-            className="hidden"
-            disabled={uploading || left <= 0}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (file) void upload(file);
-            }}
-          />
-        </label>
+        {!readOnly && (
+          <label className="inline-flex h-8 cursor-pointer items-center bg-[#20221f] px-3 text-xs font-bold uppercase text-white">
+            {uploading ? "Converting..." : `Add video (${left} left)`}
+            <input
+              type="file"
+              accept="video/mp4,video/quicktime,video/webm,video/3gpp"
+              className="hidden"
+              disabled={uploading || left <= 0}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void upload(file);
+              }}
+            />
+          </label>
+        )}
       </div>
       {error && <p className="mt-3 text-sm text-[#b84837]">{error}</p>}
       <div className="mt-4 space-y-2">
@@ -112,10 +114,12 @@ export function JobVideos({ billId }: { billId: number }) {
               {video.expires_at ? ` · until ${video.expires_at}` : ""}
             </span>
             <button type="button" className="ml-auto text-[#167c73]" onClick={() => void play(video)}>Play</button>
-            <button type="button" className="text-[#b84837]" onClick={() => void remove(video.id)}>Delete</button>
+            {!readOnly && (
+              <button type="button" className="text-[#b84837]" onClick={() => void remove(video.id)}>Delete</button>
+            )}
           </div>
         ))}
-        {videos.length === 0 && <p className="text-sm text-[#6f746e]">No clips yet. Film on the phone, then upload.</p>}
+        {videos.length === 0 && <p className="text-sm text-[#6f746e]">{readOnly ? "No clips on this job." : "No clips yet. Film on the phone, then upload."}</p>}
       </div>
       {playing && (
         <video className="mt-4 w-full max-w-lg bg-black" src={playing.url} controls autoPlay />
