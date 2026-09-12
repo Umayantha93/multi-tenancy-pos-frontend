@@ -230,7 +230,7 @@ export default function SuperAdminInvoiceDetailPage() {
             <button
               type="button"
               onClick={() => setConfirm("reopen")}
-              className="inline-flex h-10 items-center gap-2 border border-[#167c73] bg-white px-3 text-sm font-semibold text-[#167c73]"
+              className="inline-flex h-8 items-center gap-2 border border-[#167c73] bg-white px-2.5 text-[11px] font-semibold text-[#167c73]"
             >
               <RotateCcw size={16} /> Reopen
             </button>
@@ -238,7 +238,7 @@ export default function SuperAdminInvoiceDetailPage() {
             <button
               type="button"
               onClick={() => setConfirm("close")}
-              className="inline-flex h-10 items-center gap-2 border border-[#20221f] bg-white px-3 text-sm font-semibold"
+              className="inline-flex h-8 items-center gap-2 border border-[#20221f] bg-white px-2.5 text-[11px] font-semibold"
             >
               <Lock size={16} /> Close
             </button>
@@ -246,7 +246,7 @@ export default function SuperAdminInvoiceDetailPage() {
           <button
             type="button"
             onClick={() => setConfirm("delete")}
-            className="inline-flex h-10 items-center gap-2 border border-[#b84837] bg-white px-3 text-sm font-semibold text-[#b84837]"
+            className="inline-flex h-8 items-center gap-2 border border-[#b84837] bg-white px-2.5 text-[11px] font-semibold text-[#b84837]"
           >
             <Trash2 size={16} /> Delete
           </button>
@@ -352,7 +352,7 @@ export default function SuperAdminInvoiceDetailPage() {
                           <input
                             value={draft.description}
                             onChange={(event) => setDrafts((current) => ({ ...current, [item.id]: { ...draft, description: event.target.value } }))}
-                            className={`${inputClass} h-9`}
+                            className={inputClass}
                           />
                         </td>
                         <td className="py-2 text-[#6f746e]">{billItemLabel(item.type, profile)}</td>
@@ -363,7 +363,7 @@ export default function SuperAdminInvoiceDetailPage() {
                             step="0.01"
                             value={draft.quantity}
                             onChange={(event) => setDrafts((current) => ({ ...current, [item.id]: { ...draft, quantity: event.target.value } }))}
-                            className={`${inputClass} h-9 w-20 text-right`}
+                            className={`${inputClass} w-20 text-right`}
                           />
                         </td>
                         <td className="py-2">
@@ -373,7 +373,7 @@ export default function SuperAdminInvoiceDetailPage() {
                             step="0.01"
                             value={draft.unit_price}
                             onChange={(event) => setDrafts((current) => ({ ...current, [item.id]: { ...draft, unit_price: event.target.value } }))}
-                            className={`${inputClass} h-9 w-28 text-right`}
+                            className={`${inputClass} w-28 text-right`}
                             disabled={item.type === "customer_part"}
                           />
                         </td>

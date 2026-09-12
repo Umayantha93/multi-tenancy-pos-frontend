@@ -129,7 +129,7 @@ export default function TenantUsersPage() {
       title="Tenant users"
       eyebrow="Identity administration"
       action={
-        <Link href={`/super-admin/tenants/${id}`} className="flex h-10 items-center gap-2 border border-[#cbc7bc] px-3 text-sm font-semibold">
+        <Link href={`/super-admin/tenants/${id}`} className="flex h-8 items-center gap-2 border border-[#cbc7bc] px-2.5 text-[11px] font-semibold">
           <ArrowLeft size={17} />Tenant
         </Link>
       }

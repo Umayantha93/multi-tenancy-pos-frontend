@@ -205,7 +205,7 @@ export default function LaborCatalogPage() {
                         className="mb-4 flex max-w-md items-stretch gap-2"
                       >
                         <input name="name" defaultValue={category.name} className={inputClass} />
-                        <button type="submit" className="h-9 border border-[#c9c5b9] bg-white px-3 text-[13px] font-semibold">Rename</button>
+                        <button type="submit" className="h-8 border border-[#c9c5b9] bg-white px-3 text-[11px] font-semibold">Rename</button>
                       </form>
                     )}
                     <div className="overflow-x-auto">
@@ -299,7 +299,7 @@ function LaborItemRow({
             type="button"
             disabled={!dirty}
             onClick={() => onSave(item, { name, hourly_rate: Number(rate), standard_hours: Number(hours) })}
-            className="inline-flex h-9 items-center gap-1 border border-[#c9c5b9] bg-white px-2 text-[12px] font-semibold disabled:opacity-40"
+            className="inline-flex h-8 items-center gap-1 border border-[#c9c5b9] bg-white px-2 text-[12px] font-semibold disabled:opacity-40"
           >
             <Save size={13} /> Save
           </button>

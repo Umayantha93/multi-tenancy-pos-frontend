@@ -171,7 +171,7 @@ export default function SharedBillPage() {
           <p className="font-display text-2xl uppercase leading-none">{bill.bill_number}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <label className="inline-flex h-11 cursor-pointer items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-xs font-bold uppercase">
+          <label className="inline-flex h-8 cursor-pointer items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-xs font-bold uppercase">
             <input
               type="checkbox"
               checked={printWithLogo}
@@ -191,7 +191,7 @@ export default function SharedBillPage() {
           <button
             type="button"
             onClick={() => window.print()}
-            className="inline-flex h-11 items-center gap-2 bg-[#20221f] px-4 text-sm font-semibold text-white"
+            className="inline-flex h-8 items-center gap-2 bg-[#20221f] px-2.5 text-[11px] font-semibold text-white"
           >
             <Download size={18} />
             {downloadLabel}

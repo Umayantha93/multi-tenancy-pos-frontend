@@ -14,7 +14,7 @@ type AccountRow = {
   description: string;
   reference?: string | null;
   category: string;
-  type: "income" | "expense" | "payable" | "bill";
+  type: "income" | "expense" | "payable" | "bill" | "refund";
   debit: number;
   credit: number;
   balance: number;
@@ -66,6 +66,7 @@ function roundMoney(value: number) {
 function entryTone(type: AccountRow["type"]) {
   if (type === "income") return "bg-[#167c73]/10 text-[#167c73]";
   if (type === "expense") return "bg-[#b84837]/10 text-[#b84837]";
+  if (type === "refund") return "bg-[#b84837]/15 text-[#8a3426]";
   if (type === "payable") return "bg-[#b8860b]/15 text-[#735a00]";
   return "bg-[#2b6cb0]/10 text-[#2b6cb0]";
 }
@@ -204,7 +205,7 @@ function BalanceSheetPageInner() {
       const date = row.date;
       const current = days.get(date) ?? { date, debit: 0, credit: 0, balance: 0, entries: [] };
       current.entries.push(row);
-      if (row.type === "income" || row.type === "expense") {
+      if (row.type === "income" || row.type === "expense" || row.type === "refund") {
         current.debit += row.debit;
         current.credit += row.credit;
       }
@@ -361,7 +362,7 @@ function BalanceSheetPageInner() {
         <button
           type="button"
           onClick={goToday}
-          className={`inline-flex h-9 items-center border px-3 text-[13px] font-semibold ${
+          className={`inline-flex h-8 items-center border px-3 text-[11px] font-semibold ${
             todayMode ? "border-[#20221f] bg-[#20221f] text-white" : "border-[#20221f] hover:bg-[#f5c842]"
           }`}
         >
@@ -780,7 +781,7 @@ function BalanceSheetPageInner() {
               />
             </label>
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setSettleItem(null)} className="h-9 border border-[#d7d3c8] px-3 text-[13px]">Cancel</button>
+              <button type="button" onClick={() => setSettleItem(null)} className="h-8 border border-[#d7d3c8] px-2.5 text-[11px]">Cancel</button>
               <button disabled={settlingId === settleItem.id} className={buttonClass}>
                 {settlingId === settleItem.id ? "Saving..." : "Record payment"}
               </button>
@@ -836,7 +837,7 @@ function BalanceSheetPageInner() {
               This does not reduce profit until you mark the cheque as cleared.
             </p>
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setChequeItem(null)} className="h-9 border border-[#d7d3c8] px-3 text-[13px]">Cancel</button>
+              <button type="button" onClick={() => setChequeItem(null)} className="h-8 border border-[#d7d3c8] px-2.5 text-[11px]">Cancel</button>
               <button disabled={chequeBusyId === chequeItem.id} className={buttonClass}>
                 {chequeBusyId === chequeItem.id ? "Saving..." : "Issue cheque"}
               </button>

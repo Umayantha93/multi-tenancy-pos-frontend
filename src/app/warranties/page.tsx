@@ -57,7 +57,7 @@ export default function WarrantiesPage() {
           />
         </label>
         <button type="button" onClick={() => load(search, includeExpired)} className={buttonClass}>Look up</button>
-        <label className="flex h-9 items-center gap-2 text-sm">
+        <label className="flex h-8 items-center gap-2 text-sm">
           <input type="checkbox" checked={includeExpired} onChange={(event) => setIncludeExpired(event.target.checked)} className="size-4 accent-[#167c73]" />
           Include expired
         </label>

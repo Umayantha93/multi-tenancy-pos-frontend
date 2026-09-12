@@ -2,7 +2,7 @@
 
 import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { ChevronDown, CreditCard, Lock, MessageSquare, Plus, Printer, ShieldCheck, Trash2 } from "lucide-react";
+import { ChevronDown, CreditCard, Lock, MessageSquare, Plus, Printer, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { EmployeePicker } from "@/components/employee-picker";
 import { LaborCatalogPicker, type LaborCategory } from "@/components/labor-catalog-picker";
@@ -44,6 +44,7 @@ type Bill = {
   vat_amount?: string | number | null;
   sscl_amount?: string | number | null;
   amount_paid: string;
+  amount_refunded?: string | number;
   balance_due: string;
   customer_balance?: string | number;
   mileage?: number | string | null;
@@ -66,6 +67,7 @@ type Bill = {
     quantity: string;
     unit_price: string;
     line_total: string;
+    part_id?: number | null;
     panel_group_id?: string | null;
     panel_name?: string | null;
     warranty_months?: number | null;
@@ -73,7 +75,34 @@ type Bill = {
     warranty_until?: string | null;
   }>;
   payments: Array<{ id: number; amount: string; method: string; paid_at: string }>;
+  refunds?: Array<{
+    id: number;
+    refunded_at: string;
+    reason: string;
+    method: string;
+    amount: string;
+    items?: Array<{
+      id: number;
+      bill_item_id: number;
+      quantity: string;
+      amount: string;
+      disposition: string;
+      bill_item?: { description?: string | null; type?: string } | null;
+    }>;
+  }>;
   branch?: { id: number; name: string; address?: string | null; phone?: string | null } | null;
+};
+
+type RefundDraftLine = {
+  bill_item_id: number;
+  selected: boolean;
+  quantity: string;
+  disposition: "restock" | "write_off" | "none";
+  maxQty: number;
+  unitPrice: number;
+  description: string;
+  type: string;
+  canRestock: boolean;
 };
 
 type PendingDelete =
@@ -109,6 +138,12 @@ export default function BillDetailPage() {
   const [markingOweIn, setMarkingOweIn] = useState(false);
   const [sendingSms, setSendingSms] = useState(false);
   const [smsNotice, setSmsNotice] = useState("");
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refunding, setRefunding] = useState(false);
+  const [refundDate, setRefundDate] = useState("");
+  const [refundReason, setRefundReason] = useState("");
+  const [refundMethod, setRefundMethod] = useState("cash");
+  const [refundLines, setRefundLines] = useState<RefundDraftLine[]>([]);
   const [mileageDraft, setMileageDraft] = useState("");
   const [nextServiceMileageDraft, setNextServiceMileageDraft] = useState("");
   const [savingMileage, setSavingMileage] = useState(false);
@@ -219,9 +254,17 @@ export default function BillDetailPage() {
   const isOweIn = bill?.status === "owe_in";
   const isLocked = isClosed || isOweIn;
   const isPaid = Boolean(bill && Number(bill.amount_paid) > 0 && Number(bill.balance_due) <= 0);
+  const amountRefunded = Number(bill?.amount_refunded ?? 0);
+  const canRefund = Boolean(isClosed && Number(bill?.amount_paid ?? 0) - amountRefunded > 0.00001);
   const stamp = bill ? billStamp(bill) : "quote";
   const hidePrintMoney = Boolean(isGarage && bill?.hide_amounts && Number(bill.amount_paid) <= 0);
   const paymentDate = bill ? billStampDateLabel(latestPaymentAt(bill.payments)) : null;
+  const refundTotal = useMemo(
+    () => refundLines
+      .filter((line) => line.selected)
+      .reduce((sum, line) => sum + Number(line.quantity || 0) * line.unitPrice, 0),
+    [refundLines],
+  );
 
   useEffect(() => {
     try {
@@ -787,7 +830,7 @@ export default function BillDetailPage() {
 
   async function saveInternalNotes(event: FormEvent) {
     event.preventDefault();
-    if (!bill) return;
+    if (!bill || isClosed) return;
     setSavingNotes(true);
     setError("");
     try {
@@ -809,7 +852,7 @@ export default function BillDetailPage() {
   }
 
   async function saveEmployees(ids: number[]) {
-    if (!bill) return;
+    if (!bill || isClosed) return;
     setEmployeeIds(ids);
     setSavingEmployees(true);
     setError("");
@@ -824,6 +867,73 @@ export default function BillDetailPage() {
       setError(caught instanceof Error ? caught.message : "Could not assign employees.");
     } finally {
       setSavingEmployees(false);
+    }
+  }
+
+  function openRefundModal() {
+    if (!bill || !canRefund) return;
+    const refundedQty = new Map<number, number>();
+    for (const refund of bill.refunds ?? []) {
+      for (const line of refund.items ?? []) {
+        refundedQty.set(line.bill_item_id, (refundedQty.get(line.bill_item_id) ?? 0) + Number(line.quantity));
+      }
+    }
+    const drafts: RefundDraftLine[] = bill.items
+      .filter((item) => item.type !== "discount")
+      .map((item) => {
+        const maxQty = Math.max(0, Number(item.quantity) - (refundedQty.get(item.id) ?? 0));
+        const canRestock = item.type === "part" && Boolean(item.part_id);
+        return {
+          bill_item_id: item.id,
+          selected: maxQty > 0,
+          quantity: maxQty > 0 ? String(maxQty) : "0",
+          disposition: canRestock ? "restock" : "none",
+          maxQty,
+          unitPrice: Number(item.unit_price),
+          description: item.description,
+          type: item.type,
+          canRestock,
+        };
+      })
+      .filter((line) => line.maxQty > 0);
+
+    setRefundDate(new Date().toISOString().slice(0, 10));
+    setRefundReason("");
+    setRefundMethod("cash");
+    setRefundLines(drafts);
+    setRefundOpen(true);
+  }
+
+  async function submitRefund(event: FormEvent) {
+    event.preventDefault();
+    if (!bill || !canRefund) return;
+    const selected = refundLines.filter((line) => line.selected && Number(line.quantity) > 0);
+    if (!selected.length) {
+      setError("Select at least one line to refund.");
+      return;
+    }
+    setRefunding(true);
+    setError("");
+    try {
+      await api(`/bills/${id}/refunds`, {
+        method: "POST",
+        body: JSON.stringify({
+          refunded_at: refundDate,
+          reason: refundReason,
+          method: refundMethod,
+          items: selected.map((line) => ({
+            bill_item_id: line.bill_item_id,
+            quantity: Number(line.quantity),
+            disposition: line.canRestock ? line.disposition : "none",
+          })),
+        }),
+      });
+      setRefundOpen(false);
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not refund this bill.");
+    } finally {
+      setRefunding(false);
     }
   }
 
@@ -871,12 +981,12 @@ export default function BillDetailPage() {
       title={bill.bill_number}
       eyebrow={`${bill.vehicle?.number_plate ?? bill.customer?.name ?? profile.billingSingular}${showJobKind ? ` · ${jobKindLabel}` : ""} · ${bill.status.replace("_", " ")}`}
       action={
-        <div className="no-print flex items-center gap-2">
+        <div className="no-print flex w-full min-w-0 flex-wrap items-center gap-2">
           {isGarage && Number(bill.amount_paid) <= 0 && (
             <button
               type="button"
               onClick={() => void toggleHideAmounts()}
-              className={`h-10 border px-3 text-xs font-bold uppercase ${bill.hide_amounts ? "border-[#167c73] bg-[#167c73] text-white" : "border-[#c9c5b9] bg-white"}`}
+              className={`h-8 shrink-0 whitespace-nowrap border px-2.5 text-[11px] font-bold uppercase ${bill.hide_amounts ? "border-[#167c73] bg-[#167c73] text-white" : "border-[#c9c5b9] bg-white"}`}
               title="Hide amounts on the customer print and SMS copy"
             >
               {bill.hide_amounts ? "Repair note" : "Hide amounts"}
@@ -887,7 +997,7 @@ export default function BillDetailPage() {
               type="button"
               onClick={sendBillSms}
               disabled={sendingSms || !bill.customer?.phone}
-              className="grid size-10 place-items-center border border-[#c9c5b9] disabled:cursor-not-allowed disabled:opacity-40"
+              className="grid size-8 shrink-0 place-items-center border border-[#c9c5b9] disabled:cursor-not-allowed disabled:opacity-40"
               title={
                 !bill.customer?.phone
                   ? "Customer phone required"
@@ -900,10 +1010,10 @@ export default function BillDetailPage() {
                         : "Send quotation link by SMS"
               }
             >
-              <MessageSquare size={19} />
+              <MessageSquare size={15} />
             </button>
           )}
-          <label className="inline-flex h-10 cursor-pointer items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-xs font-bold uppercase">
+          <label className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap border border-[#c9c5b9] bg-white px-2.5 text-[11px] font-bold uppercase">
             <input
               type="checkbox"
               checked={printWithLogo}
@@ -920,31 +1030,42 @@ export default function BillDetailPage() {
             />
             Watermark
           </label>
-          <button onClick={() => window.print()} className="grid size-10 place-items-center border border-[#c9c5b9]" title="Print bill">
-            <Printer size={19} />
+          <button onClick={() => window.print()} className="grid size-8 shrink-0 place-items-center border border-[#c9c5b9]" title="Print bill">
+            <Printer size={15} />
           </button>
+          {canRefund && (
+            <button
+              type="button"
+              onClick={openRefundModal}
+              className="inline-flex h-8 shrink-0 items-center gap-2 border border-[#b84837]/40 bg-white px-2.5 text-[11px] font-semibold text-[#b84837] hover:bg-[#b84837]/5"
+              title="Refund this closed bill"
+            >
+              <RotateCcw size={14} />
+              <span className="hidden sm:inline">Refund</span>
+            </button>
+          )}
           {!isClosed && !isOweIn && (
-            <div ref={closeMenuRef} className="relative">
-              <div className="inline-flex h-10 overflow-hidden border border-[#c9c5b9] bg-white">
+            <div ref={closeMenuRef} className="relative shrink-0">
+              <div className="inline-flex h-8 overflow-hidden border border-[#c9c5b9] bg-white">
                 <button
                   type="button"
                   disabled={!isPaid}
                   onClick={() => setPendingClose(true)}
-                  className="inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold hover:bg-[#f7f5ef] disabled:cursor-not-allowed disabled:opacity-40"
+                  className="inline-flex h-8 items-center gap-2 px-2.5 text-[11px] font-semibold hover:bg-[#f7f5ef] disabled:cursor-not-allowed disabled:opacity-40"
                   title={
                     isPaid
                       ? `Close this ${profile.billingSingular.toLowerCase()}`
                       : `Pay this ${profile.billingSingular.toLowerCase()} in full before closing`
                   }
                 >
-                  <Lock size={16} />
+                  <Lock size={14} />
                   <span className="hidden sm:inline">Close</span>
                 </button>
                 <span className="w-px self-stretch bg-[#c9c5b9]" />
                 <button
                   type="button"
                   onClick={() => setOweInMenu((open) => !open)}
-                  className="grid h-10 w-9 place-items-center hover:bg-[#f7f5ef]"
+                  className="grid h-8 w-8 place-items-center hover:bg-[#f7f5ef]"
                   title="More close options"
                   aria-label="More close options"
                   aria-expanded={oweInMenu}
@@ -974,7 +1095,7 @@ export default function BillDetailPage() {
             <button
               type="button"
               onClick={() => setPendingClose(true)}
-              className="inline-flex h-10 items-center gap-2 border border-[#20221f] bg-white px-3 text-sm font-semibold hover:bg-[#20221f] hover:text-white"
+              className="inline-flex h-8 items-center gap-2 border border-[#20221f] bg-white px-2.5 text-[11px] font-semibold hover:bg-[#20221f] hover:text-white"
             >
               <Lock size={16} />
               <span className="hidden sm:inline">Close</span>
@@ -1034,6 +1155,144 @@ export default function BillDetailPage() {
           />
         </label>
       </ConfirmModal>
+      {refundOpen && (
+        <div className="no-print fixed inset-0 z-50 grid place-items-center bg-black/55 p-4" onClick={() => !refunding && setRefundOpen(false)}>
+          <form
+            onSubmit={submitRefund}
+            onClick={(event) => event.stopPropagation()}
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto bg-[#f3f0e8] p-5"
+          >
+            <h2 className="font-display text-2xl font-semibold uppercase">Refund bill</h2>
+            <p className="mt-1 text-sm text-[#6f746e]">
+              Choose lines to refund. For stock items, return to inventory or write off as a loss.
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="block text-xs font-bold uppercase">
+                Refund date
+                <input
+                  type="date"
+                  required
+                  value={refundDate}
+                  onChange={(event) => setRefundDate(event.target.value)}
+                  className={`${inputClass} mt-2`}
+                />
+              </label>
+              <label className="block text-xs font-bold uppercase">
+                Method
+                <select
+                  value={refundMethod}
+                  onChange={(event) => setRefundMethod(event.target.value)}
+                  className={`${inputClass} mt-2`}
+                >
+                  <option value="cash">Cash</option>
+                  <option value="card">Card</option>
+                  <option value="bank_transfer">Bank transfer</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+            </div>
+            <label className="mt-3 block text-xs font-bold uppercase">
+              Reason
+              <textarea
+                required
+                rows={3}
+                value={refundReason}
+                onChange={(event) => setRefundReason(event.target.value)}
+                className={`${inputClass} mt-2`}
+                placeholder="Why is this being refunded?"
+              />
+            </label>
+            <div className="mt-4 space-y-3">
+              {refundLines.map((line) => (
+                <div key={line.bill_item_id} className="border border-[#d7d3c8] bg-white p-3 text-sm">
+                  <label className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={line.selected}
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        setRefundLines((rows) => rows.map((row) => (
+                          row.bill_item_id === line.bill_item_id ? { ...row, selected: checked } : row
+                        )));
+                      }}
+                      className="mt-1 size-4 accent-[#167c73]"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="font-semibold">{line.description}</span>
+                      <span className="mt-0.5 block text-[11px] uppercase text-[#6f746e]">
+                        {line.type.replace("_", " ")} · up to {line.maxQty} · {money(line.unitPrice)} each
+                      </span>
+                    </span>
+                  </label>
+                  {line.selected && (
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <label className="block text-[11px] font-bold uppercase">
+                        Quantity
+                        <input
+                          type="number"
+                          min={line.canRestock ? 1 : 0.01}
+                          max={line.maxQty}
+                          step={line.canRestock ? 1 : 0.01}
+                          value={line.quantity}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setRefundLines((rows) => rows.map((row) => (
+                              row.bill_item_id === line.bill_item_id ? { ...row, quantity: value } : row
+                            )));
+                          }}
+                          className={`${inputClass} mt-1`}
+                        />
+                      </label>
+                      {line.canRestock ? (
+                        <div>
+                          <p className="text-[11px] font-bold uppercase">Stock</p>
+                          <div className="mt-1 flex flex-wrap gap-2">
+                            {([
+                              ["restock", "Return to stock"],
+                              ["write_off", "Write off (loss)"],
+                            ] as const).map(([value, label]) => (
+                              <button
+                                key={value}
+                                type="button"
+                                onClick={() => setRefundLines((rows) => rows.map((row) => (
+                                  row.bill_item_id === line.bill_item_id ? { ...row, disposition: value } : row
+                                )))}
+                                className={`h-8 border px-2.5 text-[11px] font-semibold ${
+                                  line.disposition === value
+                                    ? "border-[#20221f] bg-[#20221f] text-white"
+                                    : "border-[#c9c5b9] bg-white"
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="self-end text-[11px] text-[#6f746e]">Money refund only (no stock change).</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {refundLines.length === 0 && (
+                <p className="text-sm text-[#6f746e]">Nothing left to refund on this bill.</p>
+              )}
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#d7d3c8] pt-4">
+              <p className="text-sm font-semibold">Refund total {money(refundTotal)}</p>
+              <div className="flex gap-2">
+                <button type="button" disabled={refunding} onClick={() => setRefundOpen(false)} className={`${buttonClass} bg-white`}>
+                  Cancel
+                </button>
+                <button type="submit" disabled={refunding || refundTotal <= 0} className={buttonClass}>
+                  {refunding ? "Refunding..." : "Confirm refund"}
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
       {warrantyItem && (
         <div className="no-print fixed inset-0 z-50 grid place-items-center bg-black/55 p-4" onClick={() => !savingWarranty && setWarrantyItem(null)}>
           <form
@@ -1060,7 +1319,7 @@ export default function BillDetailPage() {
         </div>
       )}
       <BillingBranchBanner />
-      <div className="bill-print-sheet">
+      <div className="bill-print-sheet min-w-0 max-w-full">
       <BillWatermark src={printWithLogo ? logoUrl : null} printOnly />
       <Panel className="bill-letterhead mb-5 overflow-hidden p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1078,7 +1337,7 @@ export default function BillDetailPage() {
               </div>
             )}
             <div className="min-w-0">
-              <p className="font-display text-3xl font-semibold uppercase leading-none">
+              <p className="break-words font-display text-2xl font-semibold uppercase leading-tight sm:text-3xl sm:leading-none">
                 {tenant?.business_name ?? "Business"}
               </p>
               {isMultiBranch() && bill.branch?.name && (
@@ -1095,7 +1354,7 @@ export default function BillDetailPage() {
               </div>
             </div>
           </div>
-          <div className="flex shrink-0 flex-col items-end text-right text-xs uppercase text-[#6f746e]">
+          <div className="flex w-full flex-col items-start text-left text-xs uppercase text-[#6f746e] sm:w-auto sm:shrink-0 sm:items-end sm:text-right">
             <p className="font-bold text-[#167c73]">
               {hidePrintMoney ? "Repair note" : `Tax invoice / ${profile.billingSingular.toLowerCase()}`}
               {showJobKind && !hidePrintMoney ? ` · ${jobKindLabel}` : ""}
@@ -1106,8 +1365,8 @@ export default function BillDetailPage() {
         </div>
       </Panel>
 
-      <div className="grid items-start gap-5 xl:grid-cols-[1.55fr_0.75fr] print:block print:space-y-2">
-        <div className="space-y-5 print:space-y-2">
+      <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[1.55fr_0.75fr] print:block print:space-y-2">
+        <div className="min-w-0 space-y-5 print:space-y-2">
           <Panel>
             <div className="bill-meta grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
               <div>
@@ -1148,18 +1407,18 @@ export default function BillDetailPage() {
                     )}
                     {!isLocked && (
                       <form onSubmit={saveMileage} className="no-print mt-2 space-y-2">
-                        <div className="flex h-9 items-stretch gap-2">
+                        <div className="flex h-8 min-w-0 items-stretch gap-2">
                           <input
                             type="number"
                             min="0"
                             step="1"
                             value={mileageDraft}
                             onChange={(event) => setMileageDraft(event.target.value)}
-                            className={inputClass}
+                            className={`${inputClass} min-w-0`}
                             placeholder="Current km"
                           />
                           {!isServiceJob && (
-                            <button type="submit" disabled={savingMileage} className="inline-flex h-9 shrink-0 items-center justify-center border border-[#20221f] px-3 text-[10px] font-bold uppercase">
+                            <button type="submit" disabled={savingMileage} className="inline-flex h-8 shrink-0 items-center justify-center border border-[#20221f] px-2.5 text-[10px] font-bold uppercase">
                               {savingMileage ? "..." : "Save"}
                             </button>
                           )}
@@ -1175,7 +1434,7 @@ export default function BillDetailPage() {
                               className={inputClass}
                               placeholder="Next service km"
                             />
-                            <button type="submit" disabled={savingMileage} className="inline-flex h-9 items-center justify-center border border-[#20221f] px-3 text-[10px] font-bold uppercase">
+                            <button type="submit" disabled={savingMileage} className="inline-flex h-8 items-center justify-center border border-[#20221f] px-3 text-[10px] font-bold uppercase">
                               {savingMileage ? "..." : "Save"}
                             </button>
                           </>
@@ -1235,9 +1494,11 @@ export default function BillDetailPage() {
             <div className="border-b border-[#d7d3c8] px-5 py-3">
               <h2 className="font-display text-xl font-semibold uppercase">Staff only</h2>
               <p className="text-[11px] text-[#6f746e]">
-                {isGarage
-                  ? "Assigned staff stay off the customer bill. The additional note prints at the end."
-                  : "Hidden from the customer bill, print, and SMS link."}
+                {isClosed
+                  ? "Closed bills are locked. Notes and staff assignment cannot be changed."
+                  : isGarage
+                    ? "Assigned staff stay off the customer bill. The additional note prints at the end."
+                    : "Hidden from the customer bill, print, and SMS link."}
               </p>
             </div>
             <div className="grid gap-5 p-5 lg:grid-cols-2">
@@ -1248,7 +1509,8 @@ export default function BillDetailPage() {
                     value={internalNotes}
                     onChange={(event) => setInternalNotes(event.target.value)}
                     rows={4}
-                    className={`${inputClass} mt-2`}
+                    disabled={isClosed}
+                    className={`${inputClass} mt-2 disabled:opacity-60`}
                     placeholder={isGarage
                       ? "Printed at the end of the bill for the customer"
                       : "Workshop notes the customer should not see"}
@@ -1262,10 +1524,11 @@ export default function BillDetailPage() {
                         <button
                           key={color}
                           type="button"
+                          disabled={isClosed}
                           onClick={() => setNoteColor(color)}
                           aria-label={color === "red" ? "Maroon" : "Navy"}
                           aria-pressed={noteColor === color}
-                          className={`size-7 border ${
+                          className={`size-7 border disabled:opacity-50 ${
                             color === "red" ? "bg-[#7a1c2e]" : "bg-[#1b365d]"
                           } ${noteColor === color ? "border-[#20221f] ring-2 ring-[#20221f] ring-offset-1" : "border-transparent"}`}
                         />
@@ -1273,9 +1536,11 @@ export default function BillDetailPage() {
                     </div>
                   </div>
                 )}
-                <button type="submit" disabled={savingNotes} className={buttonClass}>
-                  {savingNotes ? "Saving..." : "Save note"}
-                </button>
+                {!isClosed && (
+                  <button type="submit" disabled={savingNotes} className={buttonClass}>
+                    {savingNotes ? "Saving..." : "Save note"}
+                  </button>
+                )}
               </form>
               {canAssignEmployees && (
                 <div className="space-y-2">
@@ -1284,7 +1549,7 @@ export default function BillDetailPage() {
                     employees={employeeOptions}
                     selectedIds={employeeIds}
                     onChange={(ids) => { void saveEmployees(ids); }}
-                    disabled={savingEmployees}
+                    disabled={savingEmployees || isClosed}
                   />
                   {savingEmployees && <p className="text-[11px] text-[#6f746e]">Saving…</p>}
                 </div>
@@ -1299,12 +1564,14 @@ export default function BillDetailPage() {
             </div>
           )}
           {canJobVideos && isGarage && bill.job_kind !== "parts_sale" && (
-            <JobVideos billId={bill.id} />
+            <JobVideos billId={bill.id} readOnly={isClosed} />
           )}
           {isClosed && (
-            <div className="no-print flex items-center gap-2 border border-[#20221f]/15 bg-[#20221f]/5 px-4 py-3 text-sm text-[#20221f]">
+            <div className="no-print flex flex-wrap items-center gap-2 border border-[#20221f]/15 bg-[#20221f]/5 px-4 py-3 text-sm text-[#20221f]">
               <Lock size={16} />
-              This {profile.billingSingular.toLowerCase()} is closed and cannot be edited.
+              This {profile.billingSingular.toLowerCase()} is closed and locked.
+              {amountRefunded > 0 ? ` Refunded ${money(amountRefunded)}.` : ""}
+              {" "}Only refund, SMS, watermark, and print remain available.
             </div>
           )}
           {isOweIn && (
@@ -1318,8 +1585,8 @@ export default function BillDetailPage() {
             <div className="bill-section-head border-b border-[#d7d3c8] px-5 py-4">
               <h2 className="font-display text-2xl font-semibold uppercase">Bill items</h2>
             </div>
-            <div className="overflow-x-auto print:overflow-visible">
-              <table className="bill-items-table w-full table-fixed text-left text-sm">
+            <div className="bill-items-scroll print:overflow-visible">
+              <table className="bill-items-table w-full min-w-[36rem] text-left text-sm print:min-w-0">
                 <colgroup>
                   <col className="w-[36%]" />
                   <col className="w-[14%]" />
@@ -1345,7 +1612,7 @@ export default function BillDetailPage() {
                       return (
                         <Fragment key={row.groupId}>
                           <tr className="border-t border-[#e2ded4] align-top">
-                            <td className="px-4 py-3 break-words whitespace-normal">
+                            <td className="px-4 py-3 break-words">
                               <button
                                 type="button"
                                 onClick={() => setExpandedPanels((current) => ({ ...current, [row.groupId]: !open }))}
@@ -1357,10 +1624,10 @@ export default function BillDetailPage() {
                               </button>
                               <span className="font-semibold">{row.name}</span>
                             </td>
-                            <td className="px-3 py-3 text-[#6f746e]">Panel</td>
-                            <td className="px-3 py-3 text-right tabular-nums">—</td>
-                            <td className="px-3 py-3 text-right tabular-nums">—</td>
-                            <td className="px-4 py-3 text-right tabular-nums">
+                            <td className="px-3 py-3 whitespace-nowrap text-[#6f746e]">Panel</td>
+                            <td className="px-3 py-3 whitespace-nowrap text-right tabular-nums">—</td>
+                            <td className="px-3 py-3 whitespace-nowrap text-right tabular-nums">—</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-right tabular-nums">
                               <span className={hidePrintMoney ? "print:hidden" : ""}>{money(row.total)}</span>
                               {hidePrintMoney && <span className="hidden print:inline">—</span>}
                             </td>
@@ -1418,18 +1685,18 @@ export default function BillDetailPage() {
                     </tr>
                     {discountItems.map((item) => (
                       <tr key={item.id} className="bill-discount-row border-t border-[#167c73]/20 bg-[#e7f4f2] align-top text-[#167c73]">
-                        <td className="px-4 py-3 font-semibold break-words whitespace-normal">{item.description}</td>
-                        <td className="px-3 py-3 break-words whitespace-normal">
+                        <td className="px-4 py-3 font-semibold break-words">{item.description}</td>
+                        <td className="px-3 py-3 whitespace-nowrap">
                           {billItemLabel(item.type, profile)}
                         </td>
-                        <td className="px-3 py-3 text-right tabular-nums">
+                        <td className="px-3 py-3 whitespace-nowrap text-right tabular-nums">
                           {Number(item.quantity) > 1 ? Number(item.quantity) : "—"}
                         </td>
-                        <td className="px-3 py-3 text-right tabular-nums">
+                        <td className="px-3 py-3 whitespace-nowrap text-right tabular-nums">
                           <span className={hidePrintMoney ? "print:hidden" : ""}>{money(item.unit_price)}</span>
                           {hidePrintMoney && <span className="hidden print:inline">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                        <td className="px-4 py-3 whitespace-nowrap text-right font-semibold tabular-nums">
                           <span className={hidePrintMoney ? "print:hidden" : ""}>-{money(item.line_total)}</span>
                           {hidePrintMoney && <span className="hidden print:inline">—</span>}
                         </td>
@@ -1474,6 +1741,42 @@ export default function BillDetailPage() {
               </div>
             </Panel>
           )}
+
+          {(bill.refunds?.length ?? 0) > 0 && (
+            <Panel className="no-print">
+              <div className="bill-section-head border-b border-[#d7d3c8] px-5 py-4">
+                <h2 className="font-display text-2xl font-semibold uppercase">Refunds</h2>
+              </div>
+              <div className="divide-y divide-[#e2ded4]">
+                {(bill.refunds ?? []).map((refund) => (
+                  <div key={refund.id} className="space-y-2 px-5 py-3 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-[#b84837]">{money(refund.amount)}</span>
+                      <span className="uppercase text-[#6f746e]">{refund.method.replace("_", " ")}</span>
+                      <span className="text-[#6f746e]">{formatDate(refund.refunded_at)}</span>
+                    </div>
+                    <p className="text-[#4f544e]">{refund.reason}</p>
+                    <ul className="space-y-1 text-[12px] text-[#6f746e]">
+                      {(refund.items ?? []).map((item) => (
+                        <li key={item.id}>
+                          {item.bill_item?.description ?? `Item #${item.bill_item_id}`}
+                          {" · "}
+                          qty {item.quantity}
+                          {" · "}
+                          {money(item.amount)}
+                          {item.disposition === "restock"
+                            ? " · returned to stock"
+                            : item.disposition === "write_off"
+                              ? " · written off"
+                              : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          )}
         </div>
 
         <div className="space-y-5 print:mt-2">
@@ -1481,10 +1784,10 @@ export default function BillDetailPage() {
           <Panel className="no-print xl:sticky xl:top-4">
             {!isOweIn && (
             <div className="grid grid-cols-2 border-b border-[#d7d3c8]">
-              <button onClick={() => setMode("item")} className={`h-9 text-[13px] font-semibold ${mode === "item" ? "bg-[#20221f] text-white" : ""}`}>
+              <button onClick={() => setMode("item")} className={`h-8 text-[11px] font-semibold ${mode === "item" ? "bg-[#20221f] text-white" : ""}`}>
                 <Plus className="inline" size={16} /> Add item
               </button>
-              <button onClick={() => setMode("payment")} className={`h-9 text-[13px] font-semibold ${mode === "payment" ? "bg-[#167c73] text-white" : ""}`}>
+              <button onClick={() => setMode("payment")} className={`h-8 text-[11px] font-semibold ${mode === "payment" ? "bg-[#167c73] text-white" : ""}`}>
                 <CreditCard className="inline" size={16} /> Payment
               </button>
             </div>
@@ -2139,13 +2442,13 @@ function ChargeItemRow({
 
   return (
     <tr className={`border-t border-[#e2ded4] align-top ${hideOnPrint ? "no-print" : ""} ${hidden ? "hidden" : ""}`}>
-      <td className={`px-4 py-3 break-words whitespace-normal ${nested ? "pl-8" : ""}`}>
+      <td className={`px-4 py-3 break-words ${nested ? "pl-8" : ""}`}>
         <BillItemDescription item={item} />
       </td>
-      <td className="px-3 py-3 text-[#6f746e] break-words whitespace-normal">
+      <td className="px-3 py-3 whitespace-nowrap text-[#6f746e]">
         {billItemLabel(item.type, profile)}
       </td>
-      <td className="px-3 py-3 text-right tabular-nums">
+      <td className="px-3 py-3 whitespace-nowrap text-right tabular-nums">
         {isLaborLine ? (
           <>
             {!isLocked ? (
@@ -2174,7 +2477,7 @@ function ChargeItemRow({
           </>
         ) : showQty ? Number(item.quantity) : "—"}
       </td>
-      <td className="px-3 py-3 text-right break-words whitespace-normal">
+      <td className="px-3 py-3 whitespace-nowrap text-right">
         {fromCustomer ? (
           <span className="font-semibold text-[#167c73]">—</span>
         ) : isLaborLine ? (
@@ -2189,7 +2492,7 @@ function ChargeItemRow({
           </>
         )}
       </td>
-      <td className="px-4 py-3 text-right break-words whitespace-normal">
+      <td className="px-4 py-3 whitespace-nowrap text-right">
         {fromCustomer ? (
           <span className="inline-block max-w-full font-semibold leading-snug text-[#167c73]">
             Received from customer

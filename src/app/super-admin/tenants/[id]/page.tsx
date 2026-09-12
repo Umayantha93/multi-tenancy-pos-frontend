@@ -371,19 +371,19 @@ export default function TenantDetailPage() {
         <div className="flex flex-wrap items-center justify-end gap-2">
           <button
             onClick={requestStatusChange}
-            className={`flex h-10 items-center gap-2 px-4 text-sm font-semibold text-white ${tenant.status === "active" ? "bg-[#b84837]" : "bg-[#167c73]"}`}
+            className={`flex h-8 items-center gap-2 px-2.5 text-[11px] font-semibold text-white ${tenant.status === "active" ? "bg-[#b84837]" : "bg-[#167c73]"}`}
           >
             <Power size={17} />{tenant.status === "active" ? "Deactivate" : "Activate"}
           </button>
           <button
             onClick={grantDemo}
-            className="flex h-10 items-center gap-2 border border-[#167c73] bg-white px-4 text-sm font-semibold text-[#167c73]"
+            className="flex h-8 items-center gap-2 border border-[#167c73] bg-white px-2.5 text-[11px] font-semibold text-[#167c73]"
           >
             Grant 21-day demo
           </button>
           <button
             onClick={requestDelete}
-            className="flex h-10 items-center gap-2 border border-[#b84837] bg-white px-4 text-sm font-semibold text-[#b84837]"
+            className="flex h-8 items-center gap-2 border border-[#b84837] bg-white px-2.5 text-[11px] font-semibold text-[#b84837]"
           >
             <Trash2 size={17} /> Delete
           </button>
@@ -439,10 +439,10 @@ export default function TenantDetailPage() {
               <Link href={`/super-admin/tenants/${id}/users`} className={`${buttonClass} mt-6 w-full`}>
                 <Users size={18} />Manage tenant users
               </Link>
-              <Link href={`/super-admin/invoices?tenant=${id}`} className="mt-2 inline-flex h-11 w-full items-center justify-center border border-[#20221f] bg-white px-4 text-sm font-semibold hover:bg-[#20221f] hover:text-white">
+              <Link href={`/super-admin/invoices?tenant=${id}`} className="mt-2 inline-flex h-8 w-full items-center justify-center border border-[#20221f] bg-white px-2.5 text-[11px] font-semibold hover:bg-[#20221f] hover:text-white">
                 Tenants invoices
               </Link>
-              <Link href={`/super-admin/inventory?tenant=${id}`} className="mt-2 inline-flex h-11 w-full items-center justify-center border border-[#20221f] bg-white px-4 text-sm font-semibold hover:bg-[#20221f] hover:text-white">
+              <Link href={`/super-admin/inventory?tenant=${id}`} className="mt-2 inline-flex h-8 w-full items-center justify-center border border-[#20221f] bg-white px-2.5 text-[11px] font-semibold hover:bg-[#20221f] hover:text-white">
                 Tenant inventory
               </Link>
             </Panel>

@@ -81,7 +81,7 @@ export default function TenantsPage() {
     <PlatformShell
       title="Business registry"
       action={
-        <Link href="/super-admin/tenants/new" className="flex h-10 items-center gap-2 bg-[#f5c842] px-4 text-sm font-semibold">
+        <Link href="/super-admin/tenants/new" className="flex h-8 items-center gap-2 bg-[#f5c842] px-2.5 text-[11px] font-semibold">
           <Plus size={18} />
           Onboard
         </Link>
@@ -108,7 +108,7 @@ export default function TenantsPage() {
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
         </select>
-        <button className="h-9 bg-[#20221f] px-4 text-[13px] font-semibold text-white">Filter</button>
+        <button className="h-8 bg-[#20221f] px-4 text-[11px] font-semibold text-white">Filter</button>
       </form>
       {error && <ErrorMessage message={error} />}
       {!page && !error ? (

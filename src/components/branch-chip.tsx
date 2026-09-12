@@ -72,14 +72,14 @@ export function BranchChip() {
           onClick={() => setOpen((value) => !value)}
           aria-expanded={open}
           aria-haspopup="listbox"
-          className="inline-flex items-center gap-2 border border-[#20221f] bg-white px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wide"
+          className="inline-flex h-8 items-center gap-2 border border-[#20221f] bg-white px-2.5 text-[11px] font-bold uppercase tracking-wide"
         >
           <span className="size-2 shrink-0 rounded-full bg-[#167c73]" />
           <span className="max-w-36 truncate">{branch.name}</span>
           <span className="text-[#6f746e]">▾</span>
         </button>
       ) : (
-        <span className="inline-flex items-center gap-2 border border-[#6b1e2a] bg-[#f8ecee] px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-[#6b1e2a]">
+        <span className="inline-flex h-8 items-center gap-2 border border-[#6b1e2a] bg-[#f8ecee] px-2.5 text-[11px] font-bold uppercase tracking-wide text-[#6b1e2a]">
           <span className="size-2 shrink-0 rounded-full bg-[#6b1e2a]" />
           {branch.name} · locked
         </span>
@@ -124,7 +124,7 @@ export function BranchChip() {
 export function ShopFilter({
   value,
   onChange,
-  className = "block",
+  className = "min-w-40",
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -135,12 +135,12 @@ export function ShopFilter({
   useEffect(() => setReady(true), []);
   if (!ready || !isMultiBranch() || currentUser()?.role !== "business_owner") return null;
   return (
-    <label className={`relative z-0 inline-flex max-w-full flex-col ${className}`}>
+    <label className={`relative z-0 flex min-w-0 flex-col ${className}`}>
       <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">Shop</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-9 w-auto min-w-40 max-w-full border border-[#c9c5b9] bg-white px-2.5 text-[13px] outline-none focus:border-[#167c73]"
+        className="h-8 w-full min-w-0 border border-[#c9c5b9] bg-white px-2 text-[11px] outline-none focus:border-[#167c73]"
       >
         <option value="">This shop</option>
         <option value="all">All shops</option>

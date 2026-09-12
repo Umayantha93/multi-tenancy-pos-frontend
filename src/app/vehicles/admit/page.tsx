@@ -220,11 +220,11 @@ export default function AdmitVehiclePage() {
         <Panel className="p-5">
           <h2 className="font-display text-2xl font-semibold uppercase">{isDevice ? "Search by device ID" : "Search by number plate"}</h2>
           <label className="relative mt-4 block max-w-xl">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f746e]" size={16} />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6f746e]" size={14} />
             <input
               value={plateQuery}
               onChange={(event) => setPlateQuery(event.target.value.toUpperCase())}
-              className={`${inputClass} pl-10`}
+              className={`${inputClass} pl-8`}
               placeholder={isDevice ? "e.g. IMEI or serial" : "e.g. CAB-1234"}
             />
           </label>
@@ -278,7 +278,7 @@ export default function AdmitVehiclePage() {
                   key={value}
                   type="button"
                   onClick={() => setJobKind(value)}
-                  className={`h-9 border text-[13px] font-semibold ${
+                  className={`h-8 border text-[11px] font-semibold ${
                     selected
                       ? "border-[#20221f] bg-[#20221f] text-white"
                       : "border-[#d7d3c8] bg-white hover:border-[#20221f]"
@@ -291,7 +291,7 @@ export default function AdmitVehiclePage() {
           </div>
           {canAssignEmployees && (
             <div className="mt-5">
-              <p className="mb-2 text-sm font-semibold">Assign employees <span className="font-normal text-[#6f746e]">(optional — applies to new and existing vehicles)</span></p>
+              <p className="mb-2 text-xs font-semibold">Assign employees <span className="font-normal text-[#6f746e]">(optional — applies to new and existing vehicles)</span></p>
               <EmployeePicker employees={employees} selectedIds={employeeIds} onChange={setEmployeeIds} />
             </div>
           )}
@@ -311,7 +311,7 @@ export default function AdmitVehiclePage() {
               {fields.map(([name, label, type, required]) => {
                 if (name === "customer_phone") {
                   return (
-                    <label key={name} ref={phoneBoxRef} className="relative text-sm font-semibold">
+                    <label key={name} ref={phoneBoxRef} className="relative text-xs font-semibold">
                       {label}
                       <input
                         name={name}
@@ -351,7 +351,7 @@ export default function AdmitVehiclePage() {
                 }
                 if (name === "customer_name") {
                   return (
-                    <label key={name} className="text-sm font-semibold">
+                    <label key={name} className="text-xs font-semibold">
                       {label}
                       <input
                         name={name}
@@ -365,7 +365,7 @@ export default function AdmitVehiclePage() {
                 }
                 if (name === "number_plate") {
                   return (
-                    <label key={name} className="text-sm font-semibold">
+                    <label key={name} className="text-xs font-semibold">
                       {label}{required && <span className="text-[#b84837]"> *</span>}
                       <input
                         name={name}
@@ -379,7 +379,7 @@ export default function AdmitVehiclePage() {
                   );
                 }
                 return (
-                  <label key={name} className="text-sm font-semibold">
+                  <label key={name} className="text-xs font-semibold">
                     {label}{required && <span className="text-[#b84837]"> *</span>}
                     <input name={name} type={type} required={required} className={`${inputClass} mt-2`} />
                   </label>
@@ -428,7 +428,7 @@ export default function AdmitVehiclePage() {
                   )}
                 </div>
               )}
-              <label className="text-sm font-semibold sm:col-span-2">
+              <label className="text-xs font-semibold sm:col-span-2">
                 {isGarage ? "Additional note" : "Internal note"}
                 <span className="ml-2 text-[11px] font-normal uppercase text-[#6f746e]">
                   {isGarage ? "Prints at the end of the bill" : "Staff only — not printed or sent to the customer"}

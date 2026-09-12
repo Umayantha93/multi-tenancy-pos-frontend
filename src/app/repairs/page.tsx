@@ -43,7 +43,7 @@ export default function RepairBillsPage() {
       title="Repair bills"
       eyebrow="Jobs opened from the counter"
       action={
-        <Link href="/repairs/new" className="flex h-10 items-center gap-2 bg-[#f5c842] px-3 text-sm font-semibold">
+        <Link href="/repairs/new" className="flex h-8 items-center gap-2 bg-[#f5c842] px-2.5 text-[11px] font-semibold">
           <ClipboardPlus size={18} /><span className="hidden sm:inline">New repair</span>
         </Link>
       }

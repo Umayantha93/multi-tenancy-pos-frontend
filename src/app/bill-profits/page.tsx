@@ -18,6 +18,9 @@ type ProfitLine = {
   unit_price: string;
   purchase_unit_cost?: string | null;
   line_total: string;
+  refunded_quantity?: number;
+  refunded_amount?: number;
+  restocked_quantity?: number;
   cogs: number;
   profit: number;
 };
@@ -31,6 +34,7 @@ type ProfitBill = {
   customer: { name: string; phone?: string } | null;
   vehicle: { number_plate: string } | null;
   amount_paid: string;
+  amount_refunded?: string | number;
   balance_due: string;
   subtotal: string;
   revenue: number;
@@ -39,6 +43,7 @@ type ProfitBill = {
   margin: number;
   billing_type: "instant" | "credit";
   payment_status: string;
+  refund_status?: string;
   job_kind?: "service" | "repair" | "parts_sale";
   lines?: ProfitLine[];
   payments?: Array<{ id: number; amount: string; method: string; paid_at: string }>;
@@ -204,7 +209,7 @@ export default function BillProfitsPage() {
       <button
         type="button"
         onClick={() => toggleKind(kind)}
-        className={`inline-flex h-9 items-center border px-3 text-[13px] font-semibold ${
+        className={`inline-flex h-8 items-center border px-3 text-[11px] font-semibold ${
           selected
             ? "border-[#20221f] bg-[#20221f] text-white"
             : "border-[#c9c5b9] bg-white hover:border-[#20221f]"
@@ -241,7 +246,7 @@ export default function BillProfitsPage() {
             setDateFrom(today);
             setDateTo(today);
           }}
-          className={`inline-flex h-9 items-center border border-[#20221f] px-3 text-[13px] font-semibold ${
+          className={`inline-flex h-8 items-center border border-[#20221f] px-3 text-[11px] font-semibold ${
             dateFrom && dateTo && dateFrom === dateTo && dateFrom === todayStamp()
               ? "bg-[#20221f] text-white"
               : "hover:bg-[#f5c842]"
@@ -356,9 +361,16 @@ export default function BillProfitsPage() {
                       )}
                       <td>{bill.customer?.name ?? "Walk-in"}</td>
                       <td>
-                        <span className={`px-2 py-1 text-[10px] font-bold uppercase ${billStatusClass(bill.status, bill.owe_in_due_date)}`}>
-                          {billStatusLabel(bill.payment_status)}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className={`px-2 py-1 text-[10px] font-bold uppercase ${billStatusClass(bill.status, bill.owe_in_due_date)}`}>
+                            {billStatusLabel(bill.payment_status)}
+                          </span>
+                          {bill.refund_status && bill.refund_status !== "none" && (
+                            <span className="bg-[#b84837]/10 px-2 py-1 text-[10px] font-bold uppercase text-[#b84837]">
+                              {billStatusLabel(bill.refund_status)}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="capitalize">{bill.billing_type}</td>
                       <td className="text-right tabular-nums">{money(bill.revenue)}</td>
@@ -406,6 +418,12 @@ export default function BillProfitsPage() {
                     <div className="border border-[#e2ded4] p-3"><p className="text-[10px] font-bold uppercase text-[#6f746e]">COGS</p><p className="mt-1 font-semibold">{money(detail.cogs)}</p></div>
                     <div className="border border-[#e2ded4] p-3"><p className="text-[10px] font-bold uppercase text-[#6f746e]">Profit</p><p className="mt-1 font-semibold text-[#167c73]">{money(detail.profit)}</p></div>
                   </div>
+                  {Number(detail.amount_refunded ?? 0) > 0 && (
+                    <p className="text-sm text-[#b84837]">
+                      Refunded {money(detail.amount_refunded ?? 0)}
+                      {detail.refund_status && detail.refund_status !== "none" ? ` · ${billStatusLabel(detail.refund_status)}` : ""}
+                    </p>
+                  )}
                   <table className="w-full text-left text-sm">
                     <thead className="bg-[#eeece5] text-[10px] uppercase text-[#6f746e]">
                       <tr>

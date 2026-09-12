@@ -121,13 +121,13 @@ export default function StaffPage() {
                   <span className={`px-2 py-1 text-[10px] font-bold uppercase ${user.status === "active" ? "bg-[#167c73]/10 text-[#167c73]" : "bg-[#b84837]/10 text-[#b84837]"}`}>
                     {user.status}
                   </span>
-                  <button onClick={() => edit(user)} className="h-9 border border-[#cbc7bc] px-3 text-xs font-semibold hover:bg-[#f5c842]">Permissions</button>
+                  <button onClick={() => edit(user)} className="h-8 border border-[#cbc7bc] px-3 text-xs font-semibold hover:bg-[#f5c842]">Permissions</button>
                   {user.status === "active" ? (
                     <button onClick={() => deactivate(user)} title="Deactivate staff" className="grid size-9 place-items-center border border-[#cbc7bc] text-[#b84837]">
                       <Power size={16} />
                     </button>
                   ) : (
-                    <button onClick={() => activate(user)} title="Activate staff" className="h-9 border border-[#167c73] px-3 text-xs font-semibold text-[#167c73]">
+                    <button onClick={() => activate(user)} title="Activate staff" className="h-8 border border-[#167c73] px-3 text-xs font-semibold text-[#167c73]">
                       Activate
                     </button>
                   )}

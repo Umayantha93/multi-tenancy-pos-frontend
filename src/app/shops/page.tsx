@@ -150,7 +150,7 @@ export default function ShopsPage() {
                         <span>{summary.staff_count} staff</span>
                       </div>
                     )}
-                    <button onClick={() => setEditing(branch)} className="h-9 border border-[#cbc7bc] px-3 text-xs font-semibold hover:bg-[#f5c842]">Rename</button>
+                    <button onClick={() => setEditing(branch)} className="h-8 border border-[#cbc7bc] px-3 text-xs font-semibold hover:bg-[#f5c842]">Rename</button>
                   </div>
                 );
               })}
@@ -166,7 +166,7 @@ export default function ShopsPage() {
                   <label className="block text-sm font-semibold">Phone<input name="phone" defaultValue={editing.phone ?? ""} className={`mt-1 ${inputClass}`} /></label>
                   <div className="flex gap-2">
                     <button disabled={saving} className={buttonClass}>{saving ? "Saving..." : "Save"}</button>
-                    <button type="button" onClick={() => setEditing(null)} className="h-9 border border-[#cbc7bc] px-3 text-xs">Cancel</button>
+                    <button type="button" onClick={() => setEditing(null)} className="h-8 border border-[#cbc7bc] px-3 text-xs">Cancel</button>
                   </div>
                 </form>
               </Panel>

@@ -136,10 +136,10 @@ export default function EmployeesPage() {
       eyebrow={`${employees.length} ${showInactive ? "" : "active "}employees`}
       action={
         <div className="flex gap-2">
-          <button type="button" onClick={() => setShowInactive((value) => !value)} className="flex h-10 items-center border border-[#20221f] bg-white px-3 text-xs font-bold uppercase">
+          <button type="button" onClick={() => setShowInactive((value) => !value)} className="flex h-8 items-center border border-[#20221f] bg-white px-3 text-xs font-bold uppercase">
             {showInactive ? "Active only" : "Show inactive"}
           </button>
-          <button onClick={openAdd} className="flex h-10 items-center gap-2 bg-[#f5c842] px-3 text-sm font-semibold">
+          <button onClick={openAdd} className="flex h-8 items-center gap-2 bg-[#f5c842] px-2.5 text-[11px] font-semibold">
             <Plus size={18} /><span className="hidden sm:inline">Add employee</span>
           </button>
         </div>
@@ -214,11 +214,11 @@ export default function EmployeesPage() {
             </div>
             <div className="flex justify-end gap-2 border-t border-[#d7d3c8] p-5">
               {selected.active ? (
-                <button type="button" onClick={() => deactivate(selected)} className="flex h-9 items-center gap-2 border border-[#b84837] bg-white px-3 text-[13px] font-semibold text-[#b84837]">
+                <button type="button" onClick={() => deactivate(selected)} className="flex h-8 items-center gap-2 border border-[#b84837] bg-white px-3 text-[11px] font-semibold text-[#b84837]">
                   <Power size={16} /> Deactivate
                 </button>
               ) : (
-                <button type="button" onClick={() => reactivate(selected)} className="flex h-9 items-center gap-2 border border-[#167c73] bg-white px-3 text-[13px] font-semibold text-[#167c73]">
+                <button type="button" onClick={() => reactivate(selected)} className="flex h-8 items-center gap-2 border border-[#167c73] bg-white px-3 text-[11px] font-semibold text-[#167c73]">
                   <Power size={16} /> Reactivate
                 </button>
               )}

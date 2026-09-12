@@ -55,8 +55,8 @@ export default function DashboardPage() {
   ].filter(Boolean) as Array<[string, string, typeof Banknote, string]> : [];
 
   const cta = can(profile.primaryCta.feature) ? (
-    <Link href={profile.primaryCta.href} className="flex h-10 items-center gap-2 bg-[#f5c842] px-3 text-sm font-semibold sm:px-4">
-      <ClipboardPlus size={18} /><span className="hidden sm:inline">{profile.primaryCta.label}</span>
+    <Link href={profile.primaryCta.href} className="flex h-8 items-center gap-2 bg-[#f5c842] px-2.5 text-[11px] font-semibold sm:px-4">
+      <ClipboardPlus size={14} /><span className="hidden sm:inline">{profile.primaryCta.label}</span>
     </Link>
   ) : undefined;
 

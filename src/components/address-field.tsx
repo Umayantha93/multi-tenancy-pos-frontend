@@ -89,7 +89,7 @@ export function AddressField({
   return (
     <div className={className}>
       <div className="mb-2 flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold">
+        <p className="text-xs font-semibold">
           {label}
           {required && <span className="text-[#b84837]"> *</span>}
         </p>

@@ -192,7 +192,7 @@ function InventoryPageInner() {
           </select>
         </label>
         <div className="flex items-end">
-          <div className="flex h-11 items-center gap-2 border border-[#d7d3c8] bg-white px-3 text-xs font-bold uppercase text-[#6f746e]">
+          <div className="flex h-8 items-center gap-2 border border-[#d7d3c8] bg-white px-3 text-[11px] font-bold uppercase text-[#6f746e]">
             <Boxes size={16} /> {total} items
           </div>
         </div>

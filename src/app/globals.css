@@ -38,7 +38,7 @@ html[lang="si"] .font-display {
   letter-spacing: 0;
   text-transform: none;
 }
-button, input, select, textarea { font: inherit; }
+button, input, select, textarea { font-family: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 
 .sidebar-scroll {
@@ -77,6 +77,22 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .bill-print-sheet {
   position: relative;
   isolation: isolate;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.bill-items-scroll {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.bill-items-table {
+  min-width: 36rem;
+}
+.bill-items-table th:not(:first-child),
+.bill-items-table td:not(:first-child) {
+  white-space: nowrap;
 }
 
 .bill-watermark {
@@ -196,6 +212,9 @@ button, a { -webkit-tap-highlight-color: transparent; }
     padding: 6px 10px !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+  .bill-items-scroll {
+    overflow: visible !important;
   }
   .bill-items-table {
     table-layout: fixed;
