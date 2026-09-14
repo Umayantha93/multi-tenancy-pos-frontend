@@ -41,14 +41,25 @@ export function isOweInUrgent(dueDate?: string | null, withinDays = 3): boolean 
 }
 
 export function billStatusClass(status: string, dueDate?: string | null): string {
+  if (status === "cheque") return "bg-[#b8860b]/15 text-[#735a00]";
   if (status === "owe_in" && isOweInUrgent(dueDate)) return "bg-[#b84837] text-white";
   if (status === "owe_in") return "bg-[#2b6cb0]/15 text-[#2b6cb0]";
   if (status === "paid") return "bg-[#167c73]/10 text-[#167c73]";
   if (status === "closed") return "bg-[#20221f] text-white";
+  if (status === "refunded" || status === "partially_refunded") return "bg-[#b84837]/10 text-[#b84837]";
   return "bg-[#f5c842]/25 text-[#735a00]";
 }
 
 export function billStatusLabel(status: string): string {
   if (status === "partially_refunded") return "partially refunded";
   return status.replaceAll("_", " ");
+}
+
+export function billListStatus(bill: {
+  status: string;
+  has_pending_cheque?: boolean | null;
+  owe_in_due_date?: string | null;
+}): string {
+  if (bill.has_pending_cheque) return "cheque";
+  return bill.status;
 }

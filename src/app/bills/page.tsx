@@ -8,7 +8,7 @@ import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/compo
 import { api, currentUser, formatDate, money } from "@/lib/api";
 import { usesLaborCatalog, usesServiceAddonWorkspace, usesStoreCounter } from "@/lib/business-profiles";
 import { useBusinessProfile } from "@/lib/use-business-profile";
-import { billStatusClass, billStatusLabel, isOweInUrgent } from "@/lib/bill-stamp";
+import { billListStatus, billStatusClass, billStatusLabel, isOweInUrgent } from "@/lib/bill-stamp";
 import { BillingBranchBanner } from "@/components/branch-chip";
 import { useRouter } from "next/navigation";
 
@@ -20,6 +20,10 @@ type Bill = {
   job_kind?: string | null;
   subtotal: string;
   balance_due: string;
+  amount_refunded?: string | number;
+  has_pending_cheque?: boolean;
+  pending_cheque_date?: string | null;
+  refund_status?: string;
   owe_in_due_date?: string | null;
   notes?: string | null;
   customer: { name: string; phone: string } | null;
@@ -234,14 +238,31 @@ export default function BillsPage() {
                     <td>{bill.customer?.name ?? "Walk-in"}</td>
                     <td>{usesStoreCounter(profile.type) ? (bill.notes || "—") : (bill.vehicle?.number_plate ?? "—")}</td>
                     <td>
-                      <span className={`px-2 py-1 text-[10px] font-bold uppercase ${billStatusClass(bill.status, bill.owe_in_due_date)}`}>
-                        {billStatusLabel(bill.status)}
-                      </span>
-                      {bill.status === "owe_in" && bill.owe_in_due_date && (
-                        <p className={`mt-1 text-[10px] font-semibold ${urgent ? "text-[#b84837]" : "text-[#6f746e]"}`}>
-                          Due {formatDate(bill.owe_in_due_date)}
-                        </p>
-                      )}
+                      {(() => {
+                        const listStatus = billListStatus(bill);
+                        return (
+                          <>
+                            <span className={`px-2 py-1 text-[10px] font-bold uppercase ${billStatusClass(listStatus, bill.owe_in_due_date)}`}>
+                              {billStatusLabel(listStatus)}
+                            </span>
+                            {listStatus === "cheque" && bill.pending_cheque_date && (
+                              <p className="mt-1 text-[10px] font-semibold text-[#735a00]">
+                                {formatDate(bill.pending_cheque_date)}
+                              </p>
+                            )}
+                            {bill.status === "owe_in" && bill.owe_in_due_date && listStatus !== "cheque" && (
+                              <p className={`mt-1 text-[10px] font-semibold ${urgent ? "text-[#b84837]" : "text-[#6f746e]"}`}>
+                                Due {formatDate(bill.owe_in_due_date)}
+                              </p>
+                            )}
+                            {bill.status === "closed" && bill.refund_status && bill.refund_status !== "none" && (
+                              <p className="mt-1 text-[10px] font-semibold uppercase text-[#b84837]">
+                                {billStatusLabel(bill.refund_status)}
+                              </p>
+                            )}
+                          </>
+                        );
+                      })()}
                     </td>
                     <td className={`pr-5 text-right font-semibold ${urgent ? "text-[#b84837]" : ""}`}>{money(bill.balance_due)}</td>
                     <td className="pr-4">
