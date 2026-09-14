@@ -74,7 +74,17 @@ type Bill = {
     warranty_starts_on?: string | null;
     warranty_until?: string | null;
   }>;
-  payments: Array<{ id: number; amount: string; method: string; paid_at: string }>;
+  payments: Array<{
+    id: number;
+    amount: string;
+    method: string;
+    paid_at: string;
+    reference?: string | null;
+    cheque_number?: string | null;
+    cheque_date?: string | null;
+    cheque_status?: string | null;
+    cleared_on?: string | null;
+  }>;
   refunds?: Array<{
     id: number;
     refunded_at: string;
@@ -90,6 +100,9 @@ type Bill = {
       bill_item?: { description?: string | null; type?: string } | null;
     }>;
   }>;
+  has_pending_cheque?: boolean;
+  pending_cheque_date?: string | null;
+  refund_status?: string;
   branch?: { id: number; name: string; address?: string | null; phone?: string | null } | null;
 };
 
@@ -144,6 +157,8 @@ export default function BillDetailPage() {
   const [refundReason, setRefundReason] = useState("");
   const [refundMethod, setRefundMethod] = useState("cash");
   const [refundLines, setRefundLines] = useState<RefundDraftLine[]>([]);
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [clearingPaymentId, setClearingPaymentId] = useState<number | null>(null);
   const [mileageDraft, setMileageDraft] = useState("");
   const [nextServiceMileageDraft, setNextServiceMileageDraft] = useState("");
   const [savingMileage, setSavingMileage] = useState(false);
@@ -256,6 +271,8 @@ export default function BillDetailPage() {
   const isPaid = Boolean(bill && Number(bill.amount_paid) > 0 && Number(bill.balance_due) <= 0);
   const amountRefunded = Number(bill?.amount_refunded ?? 0);
   const canRefund = Boolean(isClosed && Number(bill?.amount_paid ?? 0) - amountRefunded > 0.00001);
+  const hasPendingCheque = Boolean(bill?.has_pending_cheque);
+  const canCloseBill = Boolean(isPaid && !hasPendingCheque);
   const stamp = bill ? billStamp(bill) : "quote";
   const hidePrintMoney = Boolean(isGarage && bill?.hide_amounts && Number(bill.amount_paid) <= 0);
   const paymentDate = bill ? billStampDateLabel(latestPaymentAt(bill.payments)) : null;
@@ -739,9 +756,38 @@ export default function BillDetailPage() {
     try {
       await api(`/bills/${id}/payments`, { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(form))) });
       form.reset();
+      setPaymentMethod("cash");
       load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not record payment.");
+    }
+  }
+
+  async function clearCheque(paymentId: number) {
+    if (isClosed) return;
+    setClearingPaymentId(paymentId);
+    setError("");
+    try {
+      await api(`/bills/${id}/payments/${paymentId}/clear`, { method: "POST" });
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not clear cheque.");
+    } finally {
+      setClearingPaymentId(null);
+    }
+  }
+
+  async function bounceCheque(paymentId: number) {
+    if (isClosed) return;
+    setClearingPaymentId(paymentId);
+    setError("");
+    try {
+      await api(`/bills/${id}/payments/${paymentId}/bounce`, { method: "POST" });
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not bounce cheque.");
+    } finally {
+      setClearingPaymentId(null);
     }
   }
 
@@ -1050,11 +1096,13 @@ export default function BillDetailPage() {
               <div className="inline-flex h-8 overflow-hidden border border-[#c9c5b9] bg-white">
                 <button
                   type="button"
-                  disabled={!isPaid}
+                  disabled={!canCloseBill}
                   onClick={() => setPendingClose(true)}
                   className="inline-flex h-8 items-center gap-2 px-2.5 text-[11px] font-semibold hover:bg-[#f7f5ef] disabled:cursor-not-allowed disabled:opacity-40"
                   title={
-                    isPaid
+                    hasPendingCheque
+                      ? "Clear or bounce pending cheques before closing"
+                      : isPaid
                       ? `Close this ${profile.billingSingular.toLowerCase()}`
                       : `Pay this ${profile.billingSingular.toLowerCase()} in full before closing`
                   }
@@ -1092,7 +1140,7 @@ export default function BillDetailPage() {
               )}
             </div>
           )}
-          {isOweIn && isPaid && (
+          {isOweIn && canCloseBill && (
             <button
               type="button"
               onClick={() => setPendingClose(true)}
@@ -1101,6 +1149,9 @@ export default function BillDetailPage() {
               <Lock size={16} />
               <span className="hidden sm:inline">Close</span>
             </button>
+          )}
+          {isOweIn && hasPendingCheque && (
+            <span className="text-[10px] font-semibold uppercase text-[#b8860b]">Cheque pending</span>
           )}
         </div>
       }
@@ -1724,9 +1775,39 @@ export default function BillDetailPage() {
               </div>
               <div className="divide-y divide-[#e2ded4]">
                 {bill.payments.map((payment) => (
-                  <div key={payment.id} className="flex items-center gap-3 px-5 py-3 text-sm">
-                    <span className="uppercase text-[#6f746e]">{payment.method.replace("_", " ")}</span>
-                    <strong className="ml-auto tabular-nums">{money(payment.amount)}</strong>
+                  <div key={payment.id} className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
+                    <div className="min-w-0 flex-1">
+                      <span className="uppercase text-[#6f746e]">{payment.method.replace("_", " ")}</span>
+                      {payment.method === "cheque" && (
+                        <p className="mt-0.5 text-[11px] text-[#6f746e]">
+                          {payment.cheque_number ? `#${payment.cheque_number}` : "Cheque"}
+                          {payment.cheque_date ? ` · ${formatDate(payment.cheque_date)}` : ""}
+                          {payment.cheque_status ? ` · ${payment.cheque_status}` : ""}
+                          {payment.reference ? ` · ${payment.reference}` : ""}
+                        </p>
+                      )}
+                    </div>
+                    <strong className="tabular-nums">{money(payment.amount)}</strong>
+                    {!isLocked && payment.method === "cheque" && payment.cheque_status === "pending" && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={clearingPaymentId === payment.id}
+                          onClick={() => void clearCheque(payment.id)}
+                          className="no-print text-[11px] font-bold uppercase text-[#167c73]"
+                        >
+                          Clear
+                        </button>
+                        <button
+                          type="button"
+                          disabled={clearingPaymentId === payment.id}
+                          onClick={() => void bounceCheque(payment.id)}
+                          className="no-print text-[11px] font-bold uppercase text-[#b84837]"
+                        >
+                          Bounce
+                        </button>
+                      </>
+                    )}
                     {!isLocked && (
                       <button
                         type="button"
@@ -2322,17 +2403,49 @@ export default function BillDetailPage() {
                 </label>
                 <label className="block text-xs font-bold uppercase">
                   Method
-                  <select name="method" className={`${inputClass} mt-2`}>
+                  <select
+                    name="method"
+                    value={paymentMethod}
+                    onChange={(event) => setPaymentMethod(event.target.value)}
+                    className={`${inputClass} mt-2`}
+                  >
                     <option value="cash">Cash</option>
                     <option value="card">Card</option>
                     <option value="bank_transfer">Bank transfer</option>
+                    <option value="cheque">Cheque</option>
                     <option value="other">Other</option>
                   </select>
                 </label>
-                <label className="block text-xs font-bold uppercase">
-                  Reference
-                  <input name="reference" className={`${inputClass} mt-2`} />
-                </label>
+                {paymentMethod === "cheque" ? (
+                  <>
+                    <label className="block text-xs font-bold uppercase">
+                      Cheque date
+                      <input
+                        name="cheque_date"
+                        type="date"
+                        required
+                        defaultValue={new Date().toISOString().slice(0, 10)}
+                        className={`${inputClass} mt-2`}
+                      />
+                    </label>
+                    <label className="block text-xs font-bold uppercase">
+                      Cheque number
+                      <input name="cheque_number" required className={`${inputClass} mt-2`} placeholder="Cheque no." />
+                    </label>
+                    <label className="block text-xs font-bold uppercase">
+                      Details / bank
+                      <input name="reference" className={`${inputClass} mt-2`} placeholder="Bank or note" />
+                    </label>
+                    <p className="text-[11px] text-[#6f746e]">
+                      Cheque stays pending until you clear it. You cannot close the bill while a cheque is pending.
+                    </p>
+                  </>
+                ) : (
+                  <label className="block text-xs font-bold uppercase">
+                    Reference
+                    <input name="reference" className={`${inputClass} mt-2`} />
+                  </label>
+                )}
                 <button className={`${buttonClass} w-full bg-[#167c73]`}>
                   <CreditCard size={17} />Record payment
                 </button>
