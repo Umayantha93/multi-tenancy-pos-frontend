@@ -3,6 +3,7 @@
 import { MapPin } from "lucide-react";
 import { useState } from "react";
 import { inputClass } from "@/components/ui";
+import { useT } from "@/lib/locale";
 
 type AddressFieldProps = {
   name: string;
@@ -35,14 +36,17 @@ async function resolveAddressFromCoords(lat: number, lng: number): Promise<strin
 
 export function AddressField({
   name,
-  label = "Address",
+  label,
   value,
   defaultValue,
   onChange,
   required,
   className,
-  placeholder = "Street, city, or area",
+  placeholder,
 }: AddressFieldProps) {
+  const t = useT();
+  const fieldLabel = label ?? t("address.label");
+  const fieldPlaceholder = placeholder ?? t("address.placeholder");
   const [internal, setInternal] = useState(defaultValue ?? "");
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState("");
@@ -56,7 +60,7 @@ export function AddressField({
   function useLocation() {
     setLocationError("");
     if (!navigator.geolocation) {
-      setLocationError("Location is not supported in this browser.");
+      setLocationError(t("address.unsupported"));
       return;
     }
     setLocating(true);
@@ -69,7 +73,7 @@ export function AddressField({
           );
           setAddress(address);
         } catch {
-          setLocationError("Could not resolve your location.");
+          setLocationError(t("address.resolve_failed"));
         } finally {
           setLocating(false);
         }
@@ -78,8 +82,8 @@ export function AddressField({
         setLocating(false);
         setLocationError(
           error.code === error.PERMISSION_DENIED
-            ? "Location permission denied."
-            : "Could not read your location.",
+            ? t("address.denied")
+            : t("address.read_failed"),
         );
       },
       { enableHighAccuracy: true, timeout: 15000 },
@@ -90,7 +94,7 @@ export function AddressField({
     <div className={className}>
       <div className="mb-2 flex items-center justify-between gap-3">
         <p className="text-xs font-semibold">
-          {label}
+          {fieldLabel}
           {required && <span className="text-[#b84837]"> *</span>}
         </p>
         <button
@@ -100,7 +104,7 @@ export function AddressField({
           className="flex items-center gap-1 text-[11px] font-bold uppercase text-[#167c73] disabled:opacity-60"
         >
           <MapPin size={14} />
-          {locating ? "Locating..." : "Use location"}
+          {locating ? t("common.locating") : t("common.use_location")}
         </button>
       </div>
       <input
@@ -108,7 +112,7 @@ export function AddressField({
         value={current}
         required={required}
         onChange={(event) => setAddress(event.target.value)}
-        placeholder={placeholder}
+        placeholder={fieldPlaceholder}
         className={inputClass}
         maxLength={255}
       />

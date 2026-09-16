@@ -9,19 +9,20 @@ import { api, currentFeatures, money } from "@/lib/api";
 import { usesStoreCounter } from "@/lib/business-profiles";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 import { BillingBranchBanner } from "@/components/branch-chip";
+import { useT } from "@/lib/locale";
 
 type Part = { id: number; name: string; sku?: string | null; barcode?: string | null; brand?: string; price: string; stock_qty: number };
 type Product = { id: number; name: string; sku: string | null; size: string | null; color: string | null; price: string; stock_qty: number };
 type WarrantyCover = "" | "months" | "years" | "custom";
 type CartLine = { id: number; name: string; detail: string; price: number; stock: number; quantity: number; warrantyCover?: WarrantyCover; warrantyAmount?: number; warrantyUntil?: string };
 
-function toCartLine(row: Part | Product, store: boolean): CartLine {
+function toCartLine(row: Part | Product, store: boolean, stockLabel = "Stock"): CartLine {
   if (store) {
     const part = row as Part;
     return {
       id: part.id,
       name: part.name,
-      detail: [part.barcode, part.sku, part.brand].filter(Boolean).join(" · ") || "Stock",
+      detail: [part.barcode, part.sku, part.brand].filter(Boolean).join(" · ") || stockLabel,
       price: Number(part.price),
       stock: part.stock_qty,
       quantity: 1,
@@ -42,6 +43,7 @@ function toCartLine(row: Part | Product, store: boolean): CartLine {
 export default function PosPage() {
   const router = useRouter();
   const profile = useBusinessProfile();
+  const t = useT();
   const isStore = usesStoreCounter(profile.type);
   const [sessionReady, setSessionReady] = useState(false);
   const [items, setItems] = useState<CartLine[]>([]);
@@ -73,8 +75,8 @@ export default function PosPage() {
       : api<{ data: Product[] }>(`/products?active_only=1&search=${query}&per_page=50`);
 
     request
-      .then((result) => setItems(result.data.map((row) => toCartLine(row, isStore))))
-      .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load catalog."))
+      .then((result) => setItems(result.data.map((row) => toCartLine(row, isStore, t("common.stock")))))
+      .catch((caught) => setError(caught instanceof Error ? caught.message : t("pos.catalog_failed")))
       .finally(() => setLoading(false));
   }, [search, isStore, profile.type, sessionReady]);
 
@@ -110,14 +112,14 @@ export default function PosPage() {
     if (!isStore || !needle) return null;
     try {
       const exact = await api<{ data: Part[] }>(`/parts?barcode=${encodeURIComponent(needle)}&per_page=1`);
-      if (exact.data[0]) return toCartLine(exact.data[0], true);
+      if (exact.data[0]) return toCartLine(exact.data[0], true, t("common.stock"));
       const sku = await api<{ data: Part[] }>(`/parts?search=${encodeURIComponent(needle)}&per_page=5`);
       const match = sku.data.find((part) =>
         part.barcode?.toLowerCase() === needle.toLowerCase()
         || part.sku?.toLowerCase() === needle.toLowerCase()
         || part.name.toLowerCase() === needle.toLowerCase()
       );
-      return match ? toCartLine(match, true) : null;
+      return match ? toCartLine(match, true, t("common.stock")) : null;
     } catch {
       return null;
     }
@@ -141,11 +143,11 @@ export default function PosPage() {
     event.preventDefault();
     if (cart.length === 0) return;
     if (canWarranty && cart.some((line) => line.warrantyCover === "custom" && !line.warrantyUntil)) {
-      setError("Choose the warranty end date.");
+      setError(t("warranty.choose_end"));
       return;
     }
     if (canWarranty && cart.some((line) => (line.warrantyCover === "months" || line.warrantyCover === "years") && !Number(line.warrantyAmount))) {
-      setError("Enter the warranty length in months or years.");
+      setError(t("warranty.enter_length"));
       return;
     }
     setSaving(true);
@@ -187,14 +189,14 @@ export default function PosPage() {
       });
       router.push(`/bills/${sale.bill.id}`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Sale failed.");
+      setError(caught instanceof Error ? caught.message : t("pos.sale_failed"));
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <AppShell title="New sale" eyebrow={isStore ? "Counter" : "Point of sale"}>
+    <AppShell title={t("pos.title")} eyebrow={isStore ? t("pos.eyebrow_store") : t("pos.eyebrow")}>
       <BillingBranchBanner />
       <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
         <Panel className="p-4">
@@ -207,11 +209,11 @@ export default function PosPage() {
               onKeyDown={onScanKey}
               autoFocus
               className={`${inputClass} pl-10`}
-              placeholder={isStore ? "Scan barcode or type name / SKU" : "Search catalog"}
+              placeholder={isStore ? t("pos.scan_placeholder") : t("pos.search_placeholder")}
             />
           </label>
           {error && !saving && <div className="mt-3"><ErrorMessage message={error} /></div>}
-          {loading ? <PageState message="Loading catalog..." /> : (
+          {loading ? <PageState message={t("pos.loading")} /> : (
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
               {items.map((item) => (
                 <button
@@ -225,17 +227,17 @@ export default function PosPage() {
                   <p className="text-xs text-[#6f746e]">{item.detail}</p>
                   <div className="mt-2 flex justify-between text-sm">
                     <strong className="tabular-nums">{money(item.price)}</strong>
-                    <span className="text-[#6f746e]">{item.stock} left</span>
+                    <span className="text-[#6f746e]">{t("common.left", { count: item.stock })}</span>
                   </div>
                 </button>
               ))}
-              {items.length === 0 && <p className="col-span-2 p-6 text-center text-sm text-[#6f746e]">No matching stock.</p>}
+              {items.length === 0 && <p className="col-span-2 p-6 text-center text-sm text-[#6f746e]">{t("pos.no_stock")}</p>}
             </div>
           )}
         </Panel>
 
         <Panel className="p-5 xl:sticky xl:top-4">
-          <h2 className="font-display text-2xl font-semibold uppercase">Bill</h2>
+          <h2 className="font-display text-2xl font-semibold uppercase">{t("common.bill")}</h2>
           <div className="mt-4 max-h-[40vh] space-y-3 overflow-y-auto">
             {cart.map((line) => (
               <div key={line.id} className="border-b border-[#e2ded4] pb-2 text-sm">
@@ -266,10 +268,10 @@ export default function PosPage() {
                       onChange={(event) => setWarranty(line.id, { warrantyCover: event.target.value as WarrantyCover, warrantyAmount: line.warrantyAmount || 1 })}
                       className="h-8 border border-[#c9c5b9] bg-white px-2 text-[11px] font-semibold uppercase"
                     >
-                      <option value="">No warranty</option>
-                      <option value="months">Months</option>
-                      <option value="years">Years</option>
-                      <option value="custom">Custom until</option>
+                      <option value="">{t("warranty.no_warranty")}</option>
+                      <option value="months">{t("common.months")}</option>
+                      <option value="years">{t("common.years")}</option>
+                      <option value="custom">{t("warranty.custom_until")}</option>
                     </select>
                     {(line.warrantyCover === "months" || line.warrantyCover === "years") && (
                       <input
@@ -279,7 +281,7 @@ export default function PosPage() {
                         value={line.warrantyAmount || 1}
                         onChange={(event) => setWarranty(line.id, { warrantyAmount: Number(event.target.value) })}
                         className="h-8 w-16 border border-[#c9c5b9] bg-white px-2 text-[11px] tabular-nums"
-                        aria-label="Warranty length"
+                        aria-label={t("warranty.length_aria")}
                       />
                     )}
                     {line.warrantyCover === "custom" && (
@@ -294,12 +296,12 @@ export default function PosPage() {
                 )}
               </div>
             ))}
-            {cart.length === 0 && <p className="text-sm text-[#6f746e]">{isStore ? "Scan or tap items to start the bill." : "Tap products to add them."}</p>}
+            {cart.length === 0 && <p className="text-sm text-[#6f746e]">{isStore ? t("pos.empty_store") : t("pos.empty")}</p>}
           </div>
 
           {isStore && (
             <label className="mt-4 block text-[10px] font-bold uppercase text-[#6f746e]">
-              Discount
+              {t("common.discount")}
               <input
                 type="number"
                 min="0"
@@ -315,33 +317,33 @@ export default function PosPage() {
           <div className="mt-4 space-y-1 text-sm">
             {isStore && (
               <div className="flex justify-between text-[#6f746e]">
-                <span>Subtotal</span>
+                <span>{t("common.subtotal")}</span>
                 <span className="tabular-nums">{money(subtotal)}</span>
               </div>
             )}
             {isStore && discountAmount > 0 && (
               <div className="flex justify-between text-[#167c73]">
-                <span>Discount</span>
+                <span>{t("common.discount")}</span>
                 <span className="tabular-nums">-{money(discountAmount)}</span>
               </div>
             )}
             <div className="flex items-baseline justify-between gap-3 pt-1">
-              <span className="text-[10px] font-bold uppercase text-[#6f746e]">Total</span>
+              <span className="text-[10px] font-bold uppercase text-[#6f746e]">{t("common.total")}</span>
               <p className="font-display text-3xl font-semibold tabular-nums">{money(total)}</p>
             </div>
           </div>
 
           <form onSubmit={checkout} className="mt-4 space-y-3">
-            <input name="customer_name" placeholder="Customer name (optional)" className={inputClass} />
-            <input name="customer_phone" placeholder="Phone (optional)" className={inputClass} />
+            <input name="customer_name" placeholder={t("pos.customer_name")} className={inputClass} />
+            <input name="customer_phone" placeholder={t("pos.phone")} className={inputClass} />
             <select name="payment_method" className={inputClass} disabled={payLater}>
-              <option value="cash">Cash</option>
-              <option value="card">Card</option>
-              <option value="bank_transfer">Bank transfer</option>
+              <option value="cash">{t("method.cash")}</option>
+              <option value="card">{t("method.card")}</option>
+              <option value="bank_transfer">{t("method.bank_transfer")}</option>
             </select>
             {isStore && !payLater && (
               <label className="block text-[10px] font-bold uppercase text-[#6f746e]">
-                Cash received
+                {t("pos.cash_received")}
                 <input
                   type="number"
                   min="0"
@@ -355,19 +357,19 @@ export default function PosPage() {
             )}
             {isStore && changeDue > 0 && (
               <div className="flex justify-between bg-[#167c73]/8 px-3 py-2 text-sm font-semibold text-[#167c73]">
-                <span>Change</span>
+                <span>{t("pos.change")}</span>
                 <span className="tabular-nums">{money(changeDue)}</span>
               </div>
             )}
             {isStore && (
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={payLater} onChange={(event) => setPayLater(event.target.checked)} className="size-4 accent-[#167c73]" />
-                Open bill — pay later
+                {t("pos.pay_later")}
               </label>
             )}
             {error && <ErrorMessage message={error} />}
             <button disabled={saving || cart.length === 0} className={`${buttonClass} w-full`}>
-              {saving ? "Processing..." : payLater ? "Open bill" : "Complete sale"}
+              {saving ? t("pos.processing") : payLater ? t("pos.open_bill") : t("pos.complete_sale")}
             </button>
           </form>
         </Panel>

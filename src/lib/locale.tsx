@@ -4,6 +4,7 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, 
 import { api, currentUser, storeSession, type SessionPayload } from "@/lib/api";
 
 export type AppLocale = "en" | "si";
+export type TranslateFn = (key: string, replacements?: Record<string, string | number>) => string;
 
 type Messages = Record<string, unknown>;
 
@@ -98,7 +99,7 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
       const value = messages[bare] ?? messages[key];
       if (!value) {
         const parts = bare.split(".");
-        if (parts.length > 1 && (parts[0] === "nav" || parts[0] === "ops" || parts[0] === "roles")) {
+        if (parts.length > 1 && (parts[0] === "nav" || parts[0] === "ops" || parts[0] === "roles" || parts[0] === "terms" || parts[0] === "panels")) {
           return applyReplacements(parts.slice(1).join("."), replacements);
         }
         return applyReplacements(parts[parts.length - 1] ?? bare, replacements);

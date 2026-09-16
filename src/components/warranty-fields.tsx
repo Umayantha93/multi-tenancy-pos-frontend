@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { inputClass } from "@/components/ui";
+import { useT } from "@/lib/locale";
 
 type Mode = "" | "duration" | "custom";
 type Unit = "months" | "years";
@@ -54,7 +55,7 @@ export function WarrantyFields({
   months,
   startsOn,
   until,
-  hint = "Cover starts on the job or purchase date. Set months or years, or a custom end date.",
+  hint,
 }: {
   purchaseDate?: string | null;
   months?: number | null;
@@ -62,6 +63,8 @@ export function WarrantyFields({
   until?: string | null;
   hint?: string;
 }) {
+  const t = useT();
+  const coverHint = hint ?? t("warranty.hint");
   const bought = (startsOn || purchaseDate || "").slice(0, 10);
   const [cover, setCover] = useState<Mode>(() => modeFrom(months, until));
   const [unit, setUnit] = useState<Unit>(() => unitFrom(months));
@@ -76,20 +79,20 @@ export function WarrantyFields({
 
   return (
     <div className="space-y-3 border border-[#d7d3c8] bg-[#fbfaf6] p-3">
-      <p className="text-xs font-bold uppercase">Warranty</p>
-      <p className="text-[11px] text-[#6f746e]">{hint}</p>
+      <p className="text-xs font-bold uppercase">{t("warranty.title")}</p>
+      <p className="text-[11px] text-[#6f746e]">{coverHint}</p>
       <label className="block text-xs font-bold uppercase">
-        Cover
+        {t("common.cover")}
         <select name="warranty_cover" value={cover} onChange={(event) => setCover(event.target.value as Mode)} className={`${inputClass} mt-2`}>
-          <option value="">No warranty</option>
-          <option value="duration">Months or years</option>
-          <option value="custom">Custom end date</option>
+          <option value="">{t("warranty.no_warranty")}</option>
+          <option value="duration">{t("warranty.months_or_years")}</option>
+          <option value="custom">{t("warranty.custom_end")}</option>
         </select>
       </label>
       {cover === "duration" && (
         <div className="grid grid-cols-2 gap-2">
           <label className="block text-xs font-bold uppercase">
-            Length
+            {t("common.length")}
             <input
               name="warranty_amount"
               type="number"
@@ -103,7 +106,7 @@ export function WarrantyFields({
             />
           </label>
           <label className="block text-xs font-bold uppercase">
-            Unit
+            {t("common.unit")}
             <select
               name="warranty_unit"
               value={unit}
@@ -118,21 +121,21 @@ export function WarrantyFields({
               }}
               className={`${inputClass} mt-2`}
             >
-              <option value="months">Months</option>
-              <option value="years">Years</option>
+              <option value="months">{t("common.months")}</option>
+              <option value="years">{t("common.years")}</option>
             </select>
           </label>
         </div>
       )}
       {cover !== "" && (
         <label className="block text-xs font-bold uppercase">
-          Starts
+          {t("common.starts")}
           <input name="warranty_starts_on" type="date" defaultValue={bought} className={`${inputClass} mt-2`} />
         </label>
       )}
       {cover === "custom" && (
         <label className="block text-xs font-bold uppercase">
-          Covered until
+          {t("warranty.covered_until")}
           <input name="warranty_until" type="date" defaultValue={(until || "").slice(0, 10)} required className={`${inputClass} mt-2`} />
         </label>
       )}

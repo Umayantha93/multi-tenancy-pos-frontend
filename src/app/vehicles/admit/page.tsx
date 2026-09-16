@@ -9,6 +9,7 @@ import { EmployeePicker } from "@/components/employee-picker";
 import { buttonClass, ErrorMessage, inputClass, Panel } from "@/components/ui";
 import { api, currentFeatures } from "@/lib/api";
 import { useBusinessProfile } from "@/lib/use-business-profile";
+import { useT } from "@/lib/locale";
 
 type VehicleMatch = {
   id: number;
@@ -45,25 +46,26 @@ type EmployeeOption = { id: number; name: string; position?: string | null };
 
 export default function AdmitVehiclePage() {
   const router = useRouter();
+  const t = useT();
   const profile = useBusinessProfile();
   const isDevice = profile.type === "device_repair";
   const isTyre = profile.type === "tyre";
   const isPaint = profile.type === "paint";
   const isGarage = profile.type === "garage";
   const fields: Array<[string, string, string, boolean]> = [
-    ["customer_name", "Customer name", "text", false],
-    ["customer_phone", "Phone number", "tel", false],
-    ["number_plate", isDevice ? "Device ID / serial" : "Number plate", "text", true],
-    [isDevice ? "imei" : "chassis_number", isDevice ? "IMEI" : "Chassis number", "text", false],
-    ["make", isDevice ? "Brand" : "Make", "text", false],
-    ["model", "Model", "text", false],
-    ["year", isDevice ? "Year" : "Vehicle year", "number", false],
+    ["customer_name", t("admit.customer_name"), "text", false],
+    ["customer_phone", t("admit.customer_phone"), "tel", false],
+    ["number_plate", isDevice ? t("admit.device_id") : t("admit.number_plate"), "text", true],
+    [isDevice ? "imei" : "chassis_number", isDevice ? t("admit.imei") : t("admit.chassis"), "text", false],
+    ["make", isDevice ? t("admit.brand") : t("admit.make"), "text", false],
+    ["model", t("admit.model"), "text", false],
+    ["year", isDevice ? t("admit.year_device") : t("admit.year"), "number", false],
   ];
-  if (!isDevice) fields.push(["odometer", "Odometer (km)", "number", false]);
+  if (!isDevice) fields.push(["odometer", t("admit.odometer"), "number", false]);
   if (isTyre) {
-    fields.push(["tyre_size", "Tyre size", "text", false], ["axle", "Axle", "text", false]);
+    fields.push(["tyre_size", t("admit.tyre_size"), "text", false], ["axle", t("admit.axle"), "text", false]);
   }
-  if (isDevice) fields.push(["fault_description", "Fault", "text", false]);
+  if (isDevice) fields.push(["fault_description", t("admit.fault"), "text", false]);
 
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -175,7 +177,7 @@ export default function AdmitVehiclePage() {
       });
       router.push(`/bills/${bill.id}`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not open job card.");
+      setError(caught instanceof Error ? caught.message : t("admit.open_failed"));
       setCreatingId(null);
     }
   }
@@ -197,38 +199,36 @@ export default function AdmitVehiclePage() {
       const bill = await api<{ id: number }>("/bills", { method: "POST", body: JSON.stringify(payload) });
       router.push(`/bills/${bill.id}`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Admission failed.");
+      setError(caught instanceof Error ? caught.message : t("admit.admit_failed"));
       setSaving(false);
     }
   }
 
   return (
-    <AppShell title={isDevice ? "Admit a device" : "Admit a vehicle"} eyebrow={isPaint ? "New paint job" : "New job card"}>
+    <AppShell title={isDevice ? t("admit.title_device") : t("admit.title_vehicle")} eyebrow={isPaint ? t("admit.eyebrow_paint") : t("admit.eyebrow")}>
       <div className="mx-auto max-w-5xl space-y-5">
         <div className="flex items-start gap-4 border-l-4 border-[#f5c842] bg-[#fbfaf6] p-4">
           <ClipboardCheck className="shrink-0 text-[#167c73]" />
           <div>
-            <p className="font-semibold">{isDevice ? "Search an existing device first" : "Search an existing plate first"}</p>
+            <p className="font-semibold">{isDevice ? t("admit.search_first_device") : t("admit.search_first_plate")}</p>
             <p className="text-sm text-[#6f746e]">
-              {isPaint
-                ? "If it already exists, open another paint job. Or type the customer phone below to reuse their details and pick another vehicle."
-                : "If it already exists, open another job card. Or type the customer phone below to reuse their details and pick another vehicle."}
+              {isPaint ? t("admit.search_hint_paint") : t("admit.search_hint")}
             </p>
           </div>
         </div>
 
         <Panel className="p-5">
-          <h2 className="font-display text-2xl font-semibold uppercase">{isDevice ? "Search by device ID" : "Search by number plate"}</h2>
+          <h2 className="font-display text-2xl font-semibold uppercase">{isDevice ? t("admit.search_by_device") : t("admit.search_by_plate")}</h2>
           <label className="relative mt-4 block max-w-xl">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6f746e]" size={14} />
             <input
               value={plateQuery}
               onChange={(event) => setPlateQuery(event.target.value.toUpperCase())}
               className={`${inputClass} pl-8`}
-              placeholder={isDevice ? "e.g. IMEI or serial" : "e.g. CAB-1234"}
+              placeholder={isDevice ? t("admit.device_placeholder") : t("admit.plate_placeholder")}
             />
           </label>
-          {lookingUp && <p className="mt-3 text-sm text-[#6f746e]">Searching...</p>}
+          {lookingUp && <p className="mt-3 text-sm text-[#6f746e]">{t("admit.searching")}</p>}
           {vehicles.length > 0 && (
             <div className="mt-4 divide-y divide-[#e2ded4] border border-[#d7d3c8] bg-white">
               {vehicles.map((vehicle) => (
@@ -240,7 +240,9 @@ export default function AdmitVehiclePage() {
                       {(vehicle.make || vehicle.model) ? ` · ${vehicle.make ?? ""} ${vehicle.model ?? ""}` : ""}
                     </p>
                     <p className="text-xs text-[#167c73]">
-                      {vehicle.bills_count} previous {isPaint ? "paint job" : "job card"}{vehicle.bills_count === 1 ? "" : "s"}
+                      {isPaint
+                        ? t(vehicle.bills_count === 1 ? "admit.previous_paint" : "admit.previous_paints", { count: vehicle.bills_count })
+                        : t(vehicle.bills_count === 1 ? "admit.previous_job" : "admit.previous_jobs", { count: vehicle.bills_count })}
                     </p>
                   </div>
                   <button
@@ -249,28 +251,26 @@ export default function AdmitVehiclePage() {
                     onClick={() => openNewCard(vehicle.id)}
                     className={buttonClass}
                   >
-                    <Plus size={16} />{creatingId === vehicle.id ? "Opening..." : (isPaint ? "New paint job" : "New job card")}
+                    <Plus size={16} />{creatingId === vehicle.id ? t("common.opening") : (isPaint ? t("admit.new_paint") : t("admit.new_job"))}
                   </button>
                 </div>
               ))}
             </div>
           )}
           {!lookingUp && plateQuery.trim().length >= 2 && vehicles.length === 0 && (
-            <p className="mt-4 text-sm text-[#6f746e]">No match — use the new admission form below.</p>
+            <p className="mt-4 text-sm text-[#6f746e]">{t("admit.no_match")}</p>
           )}
         </Panel>
 
         <Panel className="p-5">
-          <h2 className="font-display text-2xl font-semibold uppercase">Job type</h2>
+          <h2 className="font-display text-2xl font-semibold uppercase">{t("admit.job_type")}</h2>
           <p className="mt-1 text-sm text-[#6f746e]">
-            {isPaint
-              ? "Panel work is labor hours plus color stock. Paint package uses the priced buttons."
-              : "Repair uses parts and labor. Service uses the priced addon buttons."}
+            {isPaint ? t("admit.job_type_hint_paint") : t("admit.job_type_hint")}
           </p>
           <div className="mt-4 grid max-w-md grid-cols-2 gap-2">
             {([
-              ["repair", isPaint ? "Panel work" : "Repair"],
-              ["service", isPaint ? "Paint package" : "Service"],
+              ["repair", isPaint ? t("admit.panel_work") : t("admit.repair")],
+              ["service", isPaint ? t("admit.paint_package") : t("admit.service")],
             ] as const).map(([value, label]) => {
               const selected = jobKind === value;
               return (
@@ -291,7 +291,7 @@ export default function AdmitVehiclePage() {
           </div>
           {canAssignEmployees && (
             <div className="mt-5">
-              <p className="mb-2 text-xs font-semibold">Assign employees <span className="font-normal text-[#6f746e]">(optional — applies to new and existing vehicles)</span></p>
+              <p className="mb-2 text-xs font-semibold">{t("admit.assign_employees")} <span className="font-normal text-[#6f746e]">{t("admit.assign_employees_hint")}</span></p>
               <EmployeePicker employees={employees} selectedIds={employeeIds} onChange={setEmployeeIds} />
             </div>
           )}
@@ -302,9 +302,9 @@ export default function AdmitVehiclePage() {
         <form onSubmit={submit}>
           <Panel>
             <div className="border-b border-[#d7d3c8] px-5 py-4">
-              <h2 className="font-display text-2xl font-semibold uppercase">{isDevice ? "New customer & device" : "New customer & vehicle"}</h2>
+              <h2 className="font-display text-2xl font-semibold uppercase">{isDevice ? t("admit.new_customer_device") : t("admit.new_customer_vehicle")}</h2>
               <p className="mt-1 text-sm text-[#6f746e]">
-                Type a phone number to find an existing customer and fill their details. Then open a job on one of their vehicles, or enter a new plate below.
+                {t("admit.form_hint")}
               </p>
             </div>
             <div className="grid gap-5 p-5 sm:grid-cols-2">
@@ -323,10 +323,10 @@ export default function AdmitVehiclePage() {
                         }}
                         autoComplete="off"
                         className={`${inputClass} mt-2`}
-                        placeholder="e.g. 0771234567"
+                        placeholder={t("admit.phone_placeholder")}
                       />
                       {lookingUpCustomer && (
-                        <p className="mt-1 text-xs font-normal text-[#6f746e]">Looking up customers…</p>
+                        <p className="mt-1 text-xs font-normal text-[#6f746e]">{t("admit.looking_up")}</p>
                       )}
                       {showCustomerSuggestions && customerMatches.length > 0 && (
                         <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto border border-[#d7d3c8] bg-white shadow-lg">
@@ -340,7 +340,7 @@ export default function AdmitVehiclePage() {
                               <p className="font-semibold">{match.name}</p>
                               <p className="text-xs font-normal text-[#6f746e]">
                                 {match.phone}
-                                {match.vehicles_count != null ? ` · ${match.vehicles_count} vehicle${match.vehicles_count === 1 ? "" : "s"}` : ""}
+                                {match.vehicles_count != null ? ` · ${t(match.vehicles_count === 1 ? "admit.vehicles_one" : "admit.vehicles_many", { count: match.vehicles_count })}` : ""}
                               </p>
                             </button>
                           ))}
@@ -387,22 +387,22 @@ export default function AdmitVehiclePage() {
               })}
               <AddressField
                 name="customer_address"
-                label="Customer address"
+                label={t("admit.customer_address")}
                 value={customerAddress}
                 onChange={setCustomerAddress}
                 className="sm:col-span-2"
-                placeholder="Home or business address"
+                placeholder={t("admit.address_placeholder")}
               />
               {selectedCustomerId && (
                 <div className="sm:col-span-2 border border-[#d7d3c8] bg-white">
                   <div className="border-b border-[#e2ded4] px-4 py-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-[#167c73]">Existing vehicles for this customer</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-[#167c73]">{t("admit.existing_vehicles")}</p>
                     <p className="mt-1 text-sm text-[#6f746e]">
-                      Open a job on one of these, or fill a new {isDevice ? "device ID" : "number plate"} above.
+                      {isDevice ? t("admit.existing_hint_device") : t("admit.existing_hint")}
                     </p>
                   </div>
                   {customerVehicles.length === 0 ? (
-                    <p className="px-4 py-4 text-sm text-[#6f746e]">No vehicles on file yet — enter a new one in the form.</p>
+                    <p className="px-4 py-4 text-sm text-[#6f746e]">{t("admit.no_vehicles")}</p>
                   ) : (
                     <div className="divide-y divide-[#e2ded4]">
                       {customerVehicles.map((vehicle) => (
@@ -410,7 +410,7 @@ export default function AdmitVehiclePage() {
                           <div>
                             <p className="font-semibold">{vehicle.number_plate}</p>
                             <p className="text-sm text-[#6f746e]">
-                              {[vehicle.make, vehicle.model, vehicle.year].filter(Boolean).join(" · ") || (isDevice ? "Device" : "Vehicle")}
+                              {[vehicle.make, vehicle.model, vehicle.year].filter(Boolean).join(" · ") || (isDevice ? t("admit.device") : t("common.vehicle"))}
                             </p>
                           </div>
                           <button
@@ -420,7 +420,7 @@ export default function AdmitVehiclePage() {
                             className={buttonClass}
                           >
                             <Plus size={16} />
-                            {creatingId === vehicle.id ? "Opening..." : (isPaint ? "New paint job" : "New job card")}
+                            {creatingId === vehicle.id ? t("common.opening") : (isPaint ? t("admit.new_paint") : t("admit.new_job"))}
                           </button>
                         </div>
                       ))}
@@ -429,34 +429,34 @@ export default function AdmitVehiclePage() {
                 </div>
               )}
               <label className="text-xs font-semibold sm:col-span-2">
-                {isGarage ? "Additional note" : "Internal note"}
+                {isGarage ? t("admit.additional_note") : t("admit.internal_note")}
                 <span className="ml-2 text-[11px] font-normal uppercase text-[#6f746e]">
-                  {isGarage ? "Prints at the end of the bill" : "Staff only — not printed or sent to the customer"}
+                  {isGarage ? t("admit.note_prints") : t("admit.note_staff")}
                 </span>
                 <textarea
                   name="internal_notes"
                   rows={3}
                   className={`${inputClass} mt-2`}
                   placeholder={isPaint
-                    ? "Paint code, finish (solid / metallic / pearl), existing colour, requested work..."
+                    ? t("admit.note_placeholder_paint")
                     : isGarage
-                      ? "Note for the customer at the end of this bill..."
-                      : "Workshop notes, customer concerns, damage, requested work..."}
+                      ? t("admit.note_placeholder_garage")
+                      : t("admit.note_placeholder")}
                 />
               </label>
               {isGarage && (
                 <div className="sm:col-span-2">
-                  <p className="text-[11px] font-bold uppercase">Note background</p>
+                  <p className="text-[11px] font-bold uppercase">{t("admit.note_background")}</p>
                   <div className="mt-2 flex items-center gap-1.5">
                     <label className="cursor-pointer">
                       <input type="radio" name="additional_note_color" value="blue" defaultChecked className="peer sr-only" />
                       <span className="block size-7 border border-transparent bg-[#1b365d] peer-checked:border-[#20221f] peer-checked:ring-2 peer-checked:ring-[#20221f] peer-checked:ring-offset-1" aria-hidden />
-                      <span className="sr-only">Navy</span>
+                      <span className="sr-only">{t("common.navy")}</span>
                     </label>
                     <label className="cursor-pointer">
                       <input type="radio" name="additional_note_color" value="red" className="peer sr-only" />
                       <span className="block size-7 border border-transparent bg-[#7a1c2e] peer-checked:border-[#20221f] peer-checked:ring-2 peer-checked:ring-[#20221f] peer-checked:ring-offset-1" aria-hidden />
-                      <span className="sr-only">Maroon</span>
+                      <span className="sr-only">{t("common.maroon")}</span>
                     </label>
                   </div>
                 </div>
@@ -465,7 +465,7 @@ export default function AdmitVehiclePage() {
             </div>
             <div className="flex justify-end border-t border-[#d7d3c8] p-5">
               <button disabled={saving} className={buttonClass}>
-                <Save size={16} />{saving ? "Opening job card..." : (isPaint ? "Open paint job" : "Open job card")}
+                <Save size={16} />{saving ? t("admit.opening_job") : (isPaint ? t("admit.open_paint") : t("admit.open_job"))}
               </button>
             </div>
           </Panel>
