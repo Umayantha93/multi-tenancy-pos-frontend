@@ -2,6 +2,7 @@
 
 import { InputHTMLAttributes, ReactNode, useEffect, useState } from "react";
 import { Eye, EyeOff, X } from "lucide-react";
+import { useT } from "@/lib/locale";
 
 export function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
   // Avoid stacking two Tailwind bg-* utilities — stylesheet order, not class order, wins,
@@ -21,6 +22,7 @@ type PasswordInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & 
 
 export function PasswordInput({ leftIcon, className = "", ...props }: PasswordInputProps) {
   const [show, setShow] = useState(false);
+  const t = useT();
   return (
     <div className="relative">
       {leftIcon}
@@ -32,7 +34,7 @@ export function PasswordInput({ leftIcon, className = "", ...props }: PasswordIn
       <button
         type="button"
         onClick={() => setShow((value) => !value)}
-        aria-label={show ? "Hide password" : "Show password"}
+        aria-label={show ? t("common.hide_password") : t("common.show_password")}
         className="absolute right-3 top-1/2 -translate-y-1/2 text-[#858a83] transition hover:text-[#20221f]"
       >
         {show ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -58,14 +60,17 @@ export function ConfirmModal({
   open,
   title,
   message,
-  confirmLabel = "Confirm",
-  cancelLabel = "Cancel",
+  confirmLabel,
+  cancelLabel,
   tone = "default",
   busy = false,
   children,
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
+  const t = useT();
+  const resolvedConfirm = confirmLabel ?? t("common.confirm");
+  const resolvedCancel = cancelLabel ?? t("common.cancel");
   useEffect(() => {
     if (!open) return;
     function onKey(event: KeyboardEvent) {
@@ -88,7 +93,7 @@ export function ConfirmModal({
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
       <button
         type="button"
-        aria-label="Close dialog"
+        aria-label={t("common.close_dialog")}
         className="absolute inset-0 bg-[#181b19]/55 backdrop-blur-[2px]"
         disabled={busy}
         onClick={onCancel}
@@ -101,14 +106,14 @@ export function ConfirmModal({
       >
         <div className="flex items-start justify-between border-b border-[#e2ded4] px-5 py-4">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-[#167c73]">Please confirm</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-[#167c73]">{t("common.please_confirm")}</p>
             <h2 id="confirm-modal-title" className="mt-1 font-display text-2xl font-semibold uppercase leading-none">
               {title}
             </h2>
           </div>
           <button
             type="button"
-            aria-label="Close"
+            aria-label={t("common.close")}
             disabled={busy}
             onClick={onCancel}
             className="grid size-8 place-items-center border border-[#d7d3c8] text-[#6f746e] hover:border-[#167c73] hover:text-[#167c73] disabled:opacity-50"
@@ -127,7 +132,7 @@ export function ConfirmModal({
             onClick={onCancel}
             className="inline-flex h-8 items-center justify-center border border-[#c9c5b9] bg-white px-2.5 text-[11px] font-semibold text-[#20221f] hover:border-[#167c73] disabled:opacity-50"
           >
-            {cancelLabel}
+            {resolvedCancel}
           </button>
           <button
             type="button"
@@ -135,7 +140,7 @@ export function ConfirmModal({
             onClick={onConfirm}
             className={`inline-flex h-8 items-center justify-center px-2.5 text-[11px] font-semibold text-white transition disabled:opacity-50 ${confirmTone}`}
           >
-            {busy ? "Working..." : confirmLabel}
+            {busy ? t("common.working") : resolvedConfirm}
           </button>
         </div>
       </div>

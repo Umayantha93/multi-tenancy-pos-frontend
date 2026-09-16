@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { inputClass } from "@/components/ui";
 import { money } from "@/lib/api";
+import { useT } from "@/lib/locale";
 
 export type LaborCatalogItem = {
   id: number;
@@ -25,7 +26,7 @@ export function LaborCatalogPicker({
   selectedId,
   onSelect,
   disabled = false,
-  placeholder = "Search brakes, clutch, oil change…",
+  placeholder,
 }: {
   categories: LaborCategory[];
   selectedId: string;
@@ -33,6 +34,8 @@ export function LaborCatalogPicker({
   disabled?: boolean;
   placeholder?: string;
 }) {
+  const t = useT();
+  const searchPlaceholder = placeholder ?? t("bill.search_labor");
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState<{ top: number; left: number; width: number } | null>(null);
@@ -99,7 +102,7 @@ export function LaborCatalogPicker({
       className="fixed z-[200] max-h-64 overflow-y-auto border border-[#d7d3c8] bg-white shadow-[0_12px_28px_rgba(24,27,25,0.16)]"
     >
       {items.length === 0 ? (
-        <p className="p-3 text-sm text-[#6f746e]">No matching labor items.</p>
+        <p className="p-3 text-sm text-[#6f746e]">{t("labor_picker.empty")}</p>
       ) : (
         items.map((item) => (
           <button
@@ -132,7 +135,7 @@ export function LaborCatalogPicker({
   return (
     <div className="relative z-30" ref={rootRef}>
       <label className="block text-xs font-bold uppercase">
-        Labor catalog
+        {t("labor_picker.catalog")}
         <input
           ref={inputRef}
           value={open ? query : (selected ? selected.name : query)}
@@ -147,14 +150,18 @@ export function LaborCatalogPicker({
             setQuery("");
           }}
           className={`${inputClass} mt-2`}
-          placeholder={placeholder}
+          placeholder={searchPlaceholder}
           autoComplete="off"
         />
       </label>
       {list}
       {selected && !open && (
         <p className="mt-1 text-xs text-[#167c73]">
-          {`${selected.category} · ${money(selected.hourly_rate)}/h · standard ${money(selected.standard_price ?? Number(selected.hourly_rate) * Number(selected.standard_hours))}`}
+          {t("labor_picker.standard", {
+            category: selected.category,
+            rate: money(selected.hourly_rate),
+            amount: money(selected.standard_price ?? Number(selected.hourly_rate) * Number(selected.standard_hours)),
+          })}
         </p>
       )}
     </div>

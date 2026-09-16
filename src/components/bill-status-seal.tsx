@@ -1,4 +1,7 @@
+"use client";
+
 import { billStampLabel, type BillStamp } from "@/lib/bill-stamp";
+import { useT } from "@/lib/locale";
 
 export function BillStatusSeal({
   stamp,
@@ -9,6 +12,7 @@ export function BillStatusSeal({
   paymentDate?: string | null;
   alwaysVisible?: boolean;
 }) {
+  const t = useT();
   const tone =
     stamp === "paid"
       ? "border-[#167c73] text-[#167c73]"
@@ -26,7 +30,7 @@ export function BillStatusSeal({
       } ${tone}`}
     >
       <p className={`leading-none ${stamp === "partial" || stamp === "repair_note" ? "text-xl sm:text-2xl" : "text-3xl sm:text-4xl"}`}>
-        {billStampLabel(stamp)}
+        {billStampLabel(stamp, t)}
       </p>
       {paymentDate && stamp !== "quote" && stamp !== "repair_note" && (
         <p className="mt-1 text-[10px] font-semibold normal-case tracking-normal sm:text-xs">{paymentDate}</p>

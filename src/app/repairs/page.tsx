@@ -7,6 +7,7 @@ import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, inputClass } from "@/components/ui";
 import { api, formatDate, money } from "@/lib/api";
 import { billStatusClass, billStatusLabel, isOweInUrgent } from "@/lib/bill-stamp";
+import { useT } from "@/lib/locale";
 
 type Bill = {
   id: number;
@@ -21,6 +22,7 @@ type Bill = {
 };
 
 export default function RepairBillsPage() {
+  const t = useT();
   const [bills, setBills] = useState<Bill[]>([]);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
@@ -40,32 +42,32 @@ export default function RepairBillsPage() {
 
   return (
     <AppShell
-      title="Repair bills"
-      eyebrow="Jobs opened from the counter"
+      title={t("repairs.title")}
+      eyebrow={t("repairs.eyebrow")}
       action={
         <Link href="/repairs/new" className="flex h-8 items-center gap-2 bg-[#f5c842] px-2.5 text-[11px] font-semibold">
-          <ClipboardPlus size={18} /><span className="hidden sm:inline">New repair</span>
+          <ClipboardPlus size={18} /><span className="hidden sm:inline">{t("repairs.new")}</span>
         </Link>
       }
     >
       <label className="relative mb-5 block max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f746e]" size={16} />
-        <input value={search} onChange={(event) => setSearch(event.target.value)} className={`${inputClass} pl-10`} placeholder="Search repair bill or customer" />
+        <input value={search} onChange={(event) => setSearch(event.target.value)} className={`${inputClass} pl-10`} placeholder={t("repairs.search")} />
       </label>
       {error ? <ErrorMessage message={error} /> : loading ? (
-        <PageState message="Loading repair bills..." />
+        <PageState message={t("repairs.loading")} />
       ) : (
         <Panel>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-left text-sm">
               <thead className="bg-[#eeece5] text-[10px] uppercase text-[#6f746e]">
                 <tr>
-                  <th className="px-5 py-3">Ref</th>
-                  <th>Date</th>
-                  <th>Customer</th>
-                  <th>Note</th>
-                  <th>Status</th>
-                  <th className="pr-5 text-right">Due</th>
+                  <th className="px-5 py-3">{t("common.ref")}</th>
+                  <th>{t("common.date")}</th>
+                  <th>{t("common.customer")}</th>
+                  <th>{t("common.note")}</th>
+                  <th>{t("common.status")}</th>
+                  <th className="pr-5 text-right">{t("common.due")}</th>
                   <th />
                 </tr>
               </thead>
@@ -76,11 +78,11 @@ export default function RepairBillsPage() {
                     <tr key={bill.id} className={`border-t border-[#e2ded4] ${urgent ? "bg-[#b84837]/8" : ""}`}>
                       <td className="px-5 py-4 font-semibold">{bill.bill_number}</td>
                       <td>{formatDate(bill.admission_date)}</td>
-                      <td>{bill.customer?.name ?? "Walk-in"}</td>
+                      <td>{bill.customer?.name ?? t("common.walk_in")}</td>
                       <td className="max-w-xs truncate text-[#6f746e]">{bill.notes || "—"}</td>
                       <td>
                         <span className={`px-2 py-1 text-[10px] font-bold uppercase ${billStatusClass(bill.status, bill.owe_in_due_date)}`}>
-                          {billStatusLabel(bill.status)}
+                          {billStatusLabel(bill.status, t)}
                         </span>
                       </td>
                       <td className={`pr-5 text-right font-semibold ${urgent ? "text-[#b84837]" : ""}`}>{money(bill.balance_due)}</td>
@@ -93,7 +95,7 @@ export default function RepairBillsPage() {
               </tbody>
             </table>
             {bills.length === 0 && (
-              <p className="p-8 text-center text-sm text-[#6f746e]">No repair bills yet.</p>
+              <p className="p-8 text-center text-sm text-[#6f746e]">{t("repairs.empty")}</p>
             )}
           </div>
         </Panel>

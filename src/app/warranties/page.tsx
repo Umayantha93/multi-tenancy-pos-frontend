@@ -7,6 +7,7 @@ import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { api, formatDate } from "@/lib/api";
 import { warrantyLabel } from "@/lib/warranty";
+import { useT } from "@/lib/locale";
 
 type WarrantyRow = {
   id: number | string;
@@ -19,6 +20,7 @@ type WarrantyRow = {
 };
 
 export default function WarrantiesPage() {
+  const t = useT();
   const [search, setSearch] = useState("");
   const [includeExpired, setIncludeExpired] = useState(false);
   const [rows, setRows] = useState<WarrantyRow[]>([]);
@@ -32,9 +34,9 @@ export default function WarrantiesPage() {
     if (expired) params.set("include_expired", "1");
     api<{ data: WarrantyRow[] }>(`/warranties?${params}`)
       .then((result) => setRows(result.data))
-      .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load warranties."))
+      .catch((caught) => setError(caught instanceof Error ? caught.message : t("warranties.load_failed")))
       .finally(() => setLoading(false));
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     const timer = setTimeout(() => load(search, includeExpired), 200);
@@ -42,9 +44,9 @@ export default function WarrantiesPage() {
   }, [search, includeExpired, load]);
 
   return (
-    <AppShell title="Warranties" eyebrow="Sold items still under cover">
+    <AppShell title={t("warranties.title")} eyebrow={t("warranties.eyebrow")}>
       <p className="mb-5 max-w-2xl text-sm text-[#6f746e]">
-        Warranties are added on the job or sale, in months or years. Search by customer, phone, vehicle number, barcode, SKU, or bill number.
+        {t("warranties.intro")}
       </p>
       <div className="mb-5 flex flex-wrap items-end gap-2">
         <label className="relative min-w-56 flex-1">
@@ -53,26 +55,26 @@ export default function WarrantiesPage() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className={`${inputClass} pl-10`}
-            placeholder="Customer, phone, vehicle, barcode, SKU or bill number"
+            placeholder={t("warranties.search_placeholder")}
           />
         </label>
-        <button type="button" onClick={() => load(search, includeExpired)} className={buttonClass}>Look up</button>
+        <button type="button" onClick={() => load(search, includeExpired)} className={buttonClass}>{t("warranties.look_up")}</button>
         <label className="flex h-8 items-center gap-2 text-sm">
           <input type="checkbox" checked={includeExpired} onChange={(event) => setIncludeExpired(event.target.checked)} className="size-4 accent-[#167c73]" />
-          Include expired
+          {t("warranties.include_expired")}
         </label>
       </div>
       {error && <ErrorMessage message={error} />}
-      {loading ? <PageState message="Loading warranties..." /> : (
+      {loading ? <PageState message={t("warranties.loading")} /> : (
         <Panel>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-left text-sm">
               <thead className="bg-[#eeece5] text-[10px] uppercase text-[#6f746e]">
                 <tr>
-                  <th className="px-5 py-3">Item</th>
-                  <th>Customer</th>
-                  <th>Bill</th>
-                  <th>Cover</th>
+                  <th className="px-5 py-3">{t("common.item")}</th>
+                  <th>{t("common.customer")}</th>
+                  <th>{t("warranties.bill")}</th>
+                  <th>{t("warranties.cover")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -85,7 +87,7 @@ export default function WarrantiesPage() {
                       )}
                     </td>
                     <td>
-                      {row.bill?.customer?.name ?? "Walk-in"}
+                      {row.bill?.customer?.name ?? t("common.walk_in")}
                       {row.bill?.customer?.phone ? <span className="block text-xs text-[#6f746e]">{row.bill.customer.phone}</span> : null}
                     </td>
                     <td>
@@ -93,7 +95,7 @@ export default function WarrantiesPage() {
                       <span className="block text-xs text-[#6f746e]">{formatDate(row.bill?.admission_date)}</span>
                     </td>
                     <td>
-                      <p className="font-semibold">{warrantyLabel(row.warranty_months, row.warranty_until, row.warranty_starts_on)}</p>
+                      <p className="font-semibold">{warrantyLabel(row.warranty_months, row.warranty_until, row.warranty_starts_on, t)}</p>
                     </td>
                   </tr>
                 ))}
@@ -101,7 +103,7 @@ export default function WarrantiesPage() {
             </table>
           </div>
           {rows.length === 0 && (
-            <p className="p-8 text-center text-sm text-[#6f746e]">No warranties match that search. Add cover on the job card after the vehicle is admitted.</p>
+            <p className="p-8 text-center text-sm text-[#6f746e]">{t("warranties.empty")}</p>
           )}
         </Panel>
       )}

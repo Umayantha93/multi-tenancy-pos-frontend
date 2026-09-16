@@ -11,6 +11,7 @@ import { useBusinessProfile } from "@/lib/use-business-profile";
 import { billListStatus, billStatusClass, billStatusLabel, isOweInUrgent } from "@/lib/bill-stamp";
 import { BillingBranchBanner } from "@/components/branch-chip";
 import { useRouter } from "next/navigation";
+import { useT } from "@/lib/locale";
 
 type Bill = {
   id: number;
@@ -42,6 +43,7 @@ export default function BillsPage() {
   const [quickSaving, setQuickSaving] = useState(false);
   const [payNow, setPayNow] = useState(true);
   const profile = useBusinessProfile();
+  const t = useT();
   const router = useRouter();
   const isStore = usesStoreCounter(profile.type);
   const rangeInvalid = Boolean(dateFrom && dateTo && dateFrom > dateTo);
@@ -52,7 +54,7 @@ export default function BillsPage() {
 
   useEffect(() => {
     if (rangeInvalid) {
-      setError("From date must be on or before To date.");
+      setError(t("bills.range_invalid"));
       setLoading(false);
       return;
     }
@@ -103,7 +105,7 @@ export default function BillsPage() {
       setQuickOpen(false);
       router.push(`/bills/${bill.id}`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not create quick bill.");
+      setError(caught instanceof Error ? caught.message : t("bills.quick_failed"));
     } finally {
       setQuickSaving(false);
     }
@@ -111,8 +113,8 @@ export default function BillsPage() {
 
   return (
     <AppShell
-      title={profile.billingLabel}
-      eyebrow="Open bills & queue"
+      title={t(`terms.${profile.billingLabel}`)}
+      eyebrow={t("bills.eyebrow")}
       action={
         <div className="flex items-center gap-2">
           {(usesLaborCatalog(profile.type) || usesServiceAddonWorkspace(profile.type)) && isOwner && (
@@ -122,7 +124,7 @@ export default function BillsPage() {
                 href="/labor-catalog"
                 className="flex h-8 items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-[11px] font-semibold hover:border-[#167c73]"
               >
-                <Hammer size={14} /><span className="hidden sm:inline">{profile.type === "paint" ? "Paint labor" : "Repair addons"}</span>
+                <Hammer size={14} /><span className="hidden sm:inline">{profile.type === "paint" ? t("bills.paint_labor") : t("bills.repair_addons")}</span>
               </Link>
               )}
               {usesServiceAddonWorkspace(profile.type) && (
@@ -130,7 +132,7 @@ export default function BillsPage() {
                 href="/service-addons"
                 className="flex h-8 items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-[11px] font-semibold hover:border-[#167c73]"
               >
-                <Wrench size={14} /><span className="hidden sm:inline">{profile.type === "paint" ? "Paint packages" : "Service addons"}</span>
+                <Wrench size={14} /><span className="hidden sm:inline">{profile.type === "paint" ? t("bills.paint_packages") : t("bills.service_addons")}</span>
               </Link>
               )}
             </>
@@ -141,11 +143,11 @@ export default function BillsPage() {
               onClick={() => { setQuickOpen(true); setError(""); }}
               className="flex h-8 items-center gap-2 border border-[#20221f] bg-white px-2.5 text-[11px] font-semibold"
             >
-              <Zap size={14} /><span className="hidden sm:inline">Quick bill</span>
+              <Zap size={14} /><span className="hidden sm:inline">{t("bills.quick_bill")}</span>
             </button>
           )}
           <Link href={profile.primaryCta.href} className="flex h-8 items-center gap-2 bg-[#f5c842] px-2.5 text-[11px] font-semibold">
-            <ClipboardPlus size={14} /><span className="hidden sm:inline">{profile.primaryCta.label}</span>
+            <ClipboardPlus size={14} /><span className="hidden sm:inline">{t(`nav.${profile.primaryCta.label}`)}</span>
           </Link>
         </div>
       }
@@ -153,19 +155,19 @@ export default function BillsPage() {
       <BillingBranchBanner />
       <div className="mb-5 flex flex-wrap items-end gap-3">
         <label className="relative block min-w-56 max-w-md flex-1">
-          <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">Search</span>
+          <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">{t("common.search")}</span>
           <span className="relative block">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6f746e]" size={14} />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               className={`${inputClass} pl-8`}
-              placeholder={isStore ? "Search sale, customer, phone or job" : `Search ${profile.billingSingular.toLowerCase()} or customer`}
+              placeholder={isStore ? t("bills.search_store") : t("bills.search_other", { kind: t(`terms.${profile.billingSingular}`).toLowerCase() })}
             />
           </span>
         </label>
         <label className="block">
-          <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">From</span>
+          <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">{t("common.from")}</span>
           <input
             type="date"
             value={dateFrom}
@@ -175,7 +177,7 @@ export default function BillsPage() {
           />
         </label>
         <label className="block">
-          <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">To</span>
+          <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">{t("common.to")}</span>
           <input
             type="date"
             value={dateTo}
@@ -191,25 +193,25 @@ export default function BillsPage() {
             className="inline-flex h-8 items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-[11px] font-semibold text-[#6f746e] hover:border-[#167c73] hover:text-[#167c73]"
           >
             <X size={16} />
-            Clear dates
+            {t("bills.clear_dates")}
           </button>
         )}
       </div>
       {error ? <ErrorMessage message={error} /> : loading ? (
-        <PageState message={`Loading ${profile.billingLabel.toLowerCase()}...`} />
+        <PageState message={t("bills.loading", { kind: t(`terms.${profile.billingLabel}`).toLowerCase() })} />
       ) : (
         <Panel>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-left text-sm">
               <thead className="bg-[#eeece5] text-[10px] uppercase text-[#6f746e]">
                 <tr>
-                  <th className="px-5 py-3">Ref</th>
-                  <th>Date</th>
-                  <th>Type</th>
-                  <th>Customer</th>
-                  <th>Detail</th>
-                  <th>Status</th>
-                  <th className="pr-5 text-right">Due</th>
+                  <th className="px-5 py-3">{t("common.ref")}</th>
+                  <th>{t("common.date")}</th>
+                  <th>{t("common.type")}</th>
+                  <th>{t("common.customer")}</th>
+                  <th>{t("common.detail")}</th>
+                  <th>{t("common.status")}</th>
+                  <th className="pr-5 text-right">{t("common.due")}</th>
                   <th />
                 </tr>
               </thead>
@@ -224,18 +226,18 @@ export default function BillsPage() {
                       {profile.type === "garage" || profile.type === "paint" || usesStoreCounter(profile.type) ? (
                         <span className="px-2 py-1 text-[10px] font-bold uppercase bg-[#eeece5] text-[#6f746e]">
                           {usesStoreCounter(profile.type)
-                            ? (bill.bill_number.startsWith("QCK-") ? "Quick" : "Sale")
+                            ? (bill.bill_number.startsWith("QCK-") ? t("bills.quick") : t("bills.sale"))
                             : bill.job_kind === "service"
-                              ? (profile.type === "paint" ? "Package" : "Service")
+                              ? (profile.type === "paint" ? t("bills.package") : t("bills.service"))
                               : bill.job_kind === "parts_sale"
-                                ? (profile.type === "paint" ? "Counter" : "Instant")
+                                ? (profile.type === "paint" ? t("bills.counter") : t("bills.instant"))
                                 : bill.job_kind === "repair" || !bill.job_kind
-                                  ? (profile.type === "paint" ? "Panel" : "Repair")
+                                  ? (profile.type === "paint" ? t("bills.panel") : t("bills.repair"))
                                   : bill.job_kind}
                         </span>
                       ) : "—"}
                     </td>
-                    <td>{bill.customer?.name ?? "Walk-in"}</td>
+                    <td>{bill.customer?.name ?? t("common.walk_in")}</td>
                     <td>{usesStoreCounter(profile.type) ? (bill.notes || "—") : (bill.vehicle?.number_plate ?? "—")}</td>
                     <td>
                       {(() => {
@@ -243,7 +245,7 @@ export default function BillsPage() {
                         return (
                           <>
                             <span className={`px-2 py-1 text-[10px] font-bold uppercase ${billStatusClass(listStatus, bill.owe_in_due_date)}`}>
-                              {billStatusLabel(listStatus)}
+                              {billStatusLabel(listStatus, t)}
                             </span>
                             {listStatus === "cheque" && bill.pending_cheque_date && (
                               <p className="mt-1 text-[10px] font-semibold text-[#735a00]">
@@ -252,12 +254,12 @@ export default function BillsPage() {
                             )}
                             {bill.status === "owe_in" && bill.owe_in_due_date && listStatus !== "cheque" && (
                               <p className={`mt-1 text-[10px] font-semibold ${urgent ? "text-[#b84837]" : "text-[#6f746e]"}`}>
-                                Due {formatDate(bill.owe_in_due_date)}
+                                {t("common.due_on", { date: formatDate(bill.owe_in_due_date) })}
                               </p>
                             )}
                             {bill.status === "closed" && bill.refund_status && bill.refund_status !== "none" && (
                               <p className="mt-1 text-[10px] font-semibold uppercase text-[#b84837]">
-                                {billStatusLabel(bill.refund_status)}
+                                {billStatusLabel(bill.refund_status, t)}
                               </p>
                             )}
                           </>
@@ -276,8 +278,8 @@ export default function BillsPage() {
             {bills.length === 0 && (
               <p className="p-8 text-center text-sm text-[#6f746e]">
                 {dateFrom || dateTo
-                  ? `No ${profile.billingLabel.toLowerCase()} in this date range.`
-                  : `No ${profile.billingLabel.toLowerCase()} yet.`}
+                  ? t("bills.empty_range", { kind: t(`terms.${profile.billingLabel}`).toLowerCase() })
+                  : t("bills.empty", { kind: t(`terms.${profile.billingLabel}`).toLowerCase() })}
               </p>
             )}
           </div>
@@ -287,48 +289,48 @@ export default function BillsPage() {
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4" onClick={() => !quickSaving && setQuickOpen(false)}>
           <form onSubmit={createQuickBill} onClick={(event) => event.stopPropagation()} className="w-full max-w-md bg-[#f3f0e8]">
             <div className="border-b border-[#d7d3c8] px-5 py-4">
-              <h2 className="font-display text-2xl font-semibold uppercase">Quick bill</h2>
-              <p className="mt-1 text-xs text-[#6f746e]">CD write, photocopy, or any small job. Customer details are optional.</p>
+              <h2 className="font-display text-2xl font-semibold uppercase">{t("bills.quick_bill")}</h2>
+              <p className="mt-1 text-xs text-[#6f746e]">{t("bills.quick_hint")}</p>
             </div>
             <div className="space-y-3 p-5">
               {error && <ErrorMessage message={error} />}
               <label className="block text-xs font-bold uppercase">
-                Job
-                <input required name="description" placeholder="DVD write, CD copy, screen guard…" className={`${inputClass} mt-2`} />
+                {t("bills.job")}
+                <input required name="description" placeholder={t("bills.job_placeholder")} className={`${inputClass} mt-2`} />
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block text-xs font-bold uppercase">
-                  Amount
+                  {t("common.amount")}
                   <input required name="amount" type="number" min="0" step="0.01" className={`${inputClass} mt-2`} />
                 </label>
                 <label className="block text-xs font-bold uppercase">
-                  Qty
+                  {t("common.qty")}
                   <input name="quantity" type="number" min="1" step="1" defaultValue="1" className={`${inputClass} mt-2`} />
                 </label>
               </div>
               <label className="block text-xs font-bold uppercase">
-                Customer name <span className="font-normal text-[#6f746e]">optional</span>
+                {t("bills.customer_optional")} <span className="font-normal text-[#6f746e]">{t("common.optional")}</span>
                 <input name="customer_name" className={`${inputClass} mt-2`} />
               </label>
               <label className="block text-xs font-bold uppercase">
-                Phone <span className="font-normal text-[#6f746e]">optional</span>
+                {t("bills.phone_optional")} <span className="font-normal text-[#6f746e]">{t("common.optional")}</span>
                 <input name="customer_phone" className={`${inputClass} mt-2`} />
               </label>
               <label className="block text-xs font-bold uppercase">
-                Payment
+                {t("bills.payment")}
                 <select name="payment_method" className={`${inputClass} mt-2`}>
-                  <option value="cash">Cash</option>
-                  <option value="card">Card</option>
-                  <option value="bank_transfer">Bank transfer</option>
+                  <option value="cash">{t("method.cash")}</option>
+                  <option value="card">{t("method.card")}</option>
+                  <option value="bank_transfer">{t("method.bank_transfer")}</option>
                 </select>
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={payNow} onChange={(event) => setPayNow(event.target.checked)} className="size-4 accent-[#167c73]" />
-                Take payment now
+                {t("bills.take_payment_now")}
               </label>
               <div className="flex gap-2">
-                <button disabled={quickSaving} className={`${buttonClass} flex-1`}>{quickSaving ? "Saving..." : "Create bill"}</button>
-                <button type="button" onClick={() => setQuickOpen(false)} className="h-8 border border-[#cbc7bc] px-3 text-xs">Cancel</button>
+                <button disabled={quickSaving} className={`${buttonClass} flex-1`}>{quickSaving ? t("common.saving") : t("bills.create_bill")}</button>
+                <button type="button" onClick={() => setQuickOpen(false)} className="h-8 border border-[#cbc7bc] px-3 text-xs">{t("common.cancel")}</button>
               </div>
             </div>
           </form>

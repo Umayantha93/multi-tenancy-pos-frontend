@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { buttonClass, inputClass } from "@/components/ui";
+import { useT } from "@/lib/locale";
 
 type EmployeeOption = { id: number; name: string; position?: string | null };
 
@@ -18,6 +19,7 @@ export function EmployeePicker({
   disabled?: boolean;
   compact?: boolean;
 }) {
+  const t = useT();
   const [pendingId, setPendingId] = useState("");
 
   const byId = useMemo(
@@ -43,7 +45,7 @@ export function EmployeePicker({
   }
 
   if (employees.length === 0) {
-    return <p className="text-sm text-[#6f746e]">No employees yet. Add them under Team if you want to assign jobs.</p>;
+    return <p className="text-sm text-[#6f746e]">{t("picker.no_employees")}</p>;
   }
 
   return (
@@ -55,7 +57,7 @@ export function EmployeePicker({
           onChange={(event) => setPendingId(event.target.value)}
           className={inputClass}
         >
-          <option value="">{available.length === 0 ? "All employees assigned" : "Select employee"}</option>
+          <option value="">{available.length === 0 ? t("picker.all_assigned") : t("picker.select_employee")}</option>
           {available.map((employee) => (
             <option key={employee.id} value={employee.id}>
               {employee.name}{employee.position ? ` · ${employee.position}` : ""}
@@ -69,7 +71,7 @@ export function EmployeePicker({
           className={`${buttonClass} shrink-0 px-3`}
         >
           <Plus size={14} />
-          Assign
+          {t("picker.assign")}
         </button>
       </div>
 
@@ -88,8 +90,8 @@ export function EmployeePicker({
                   type="button"
                   onClick={() => remove(employee.id)}
                   className="grid size-7 shrink-0 place-items-center text-[#6f746e] hover:text-[#b84837]"
-                  aria-label={`Remove ${employee.name}`}
-                  title="Remove"
+                  aria-label={t("picker.remove_name", { name: employee.name })}
+                  title={t("picker.remove")}
                 >
                   <X size={14} />
                 </button>
@@ -98,7 +100,7 @@ export function EmployeePicker({
           ))}
         </ul>
       ) : (
-        <p className="text-xs text-[#6f746e]">No one assigned yet. Optional — jobs can stay unassigned.</p>
+        <p className="text-xs text-[#6f746e]">{t("picker.none_assigned")}</p>
       )}
     </div>
   );

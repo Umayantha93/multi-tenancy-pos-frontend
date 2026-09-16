@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { API_URL, api, currentBranchId } from "@/lib/api";
+import { useT } from "@/lib/locale";
 
 type JobVideo = {
   id: number;
@@ -22,6 +23,7 @@ function authHeaders(): HeadersInit {
 }
 
 export function JobVideos({ billId, readOnly = false }: { billId: number; readOnly?: boolean }) {
+  const t = useT();
   const [videos, setVideos] = useState<JobVideo[]>([]);
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -49,7 +51,7 @@ export function JobVideos({ billId, readOnly = false }: { billId: number; readOn
       await api(`/bills/${billId}/videos`, { method: "POST", body });
       load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not upload video.");
+      setError(caught instanceof Error ? caught.message : t("videos.upload_failed"));
     } finally {
       setUploading(false);
     }
@@ -59,7 +61,7 @@ export function JobVideos({ billId, readOnly = false }: { billId: number; readOn
     if (playing?.url) URL.revokeObjectURL(playing.url);
     const response = await fetch(`${API_URL}/bills/${billId}/videos/${video.id}/file`, { headers: authHeaders() });
     if (!response.ok) {
-      setError("Could not play this video.");
+      setError(t("videos.play_failed"));
       return;
     }
     const url = URL.createObjectURL(await response.blob());
@@ -74,7 +76,7 @@ export function JobVideos({ billId, readOnly = false }: { billId: number; readOn
       if (playing?.id === id) setPlaying(null);
       load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not delete video.");
+      setError(caught instanceof Error ? caught.message : t("videos.delete_failed"));
     }
   }
 
@@ -84,12 +86,12 @@ export function JobVideos({ billId, readOnly = false }: { billId: number; readOn
     <div className="no-print border border-[#d7d3c8] bg-white p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="font-display text-xl font-semibold uppercase">Job videos</p>
-          <p className="text-xs text-[#6f746e]">Staff only · not printed · not on SMS · removed after 6 months · {videos.length} / 5</p>
+          <p className="font-display text-xl font-semibold uppercase">{t("videos.title")}</p>
+          <p className="text-xs text-[#6f746e]">{t("videos.hint", { count: videos.length })}</p>
         </div>
         {!readOnly && (
           <label className="inline-flex h-8 cursor-pointer items-center bg-[#20221f] px-3 text-xs font-bold uppercase text-white">
-            {uploading ? "Converting..." : `Add video (${left} left)`}
+            {uploading ? t("videos.converting") : t("videos.add", { left })}
             <input
               type="file"
               accept="video/mp4,video/quicktime,video/webm,video/3gpp"
@@ -108,18 +110,18 @@ export function JobVideos({ billId, readOnly = false }: { billId: number; readOn
       <div className="mt-4 space-y-2">
         {videos.map((video, index) => (
           <div key={video.id} className="flex flex-wrap items-center gap-3 border border-[#e2ded4] px-3 py-2 text-sm">
-            <span className="font-semibold">Clip {index + 1}</span>
+            <span className="font-semibold">{t("videos.clip", { n: index + 1 })}</span>
             <span className="text-[#6f746e]">
               {video.duration_seconds}s · {(video.size_bytes / (1024 * 1024)).toFixed(1)} MB
-              {video.expires_at ? ` · until ${video.expires_at}` : ""}
+              {video.expires_at ? ` · ${t("videos.until", { date: video.expires_at })}` : ""}
             </span>
-            <button type="button" className="ml-auto text-[#167c73]" onClick={() => void play(video)}>Play</button>
+            <button type="button" className="ml-auto text-[#167c73]" onClick={() => void play(video)}>{t("videos.play")}</button>
             {!readOnly && (
-              <button type="button" className="text-[#b84837]" onClick={() => void remove(video.id)}>Delete</button>
+              <button type="button" className="text-[#b84837]" onClick={() => void remove(video.id)}>{t("videos.delete")}</button>
             )}
           </div>
         ))}
-        {videos.length === 0 && <p className="text-sm text-[#6f746e]">{readOnly ? "No clips on this job." : "No clips yet. Film on the phone, then upload."}</p>}
+        {videos.length === 0 && <p className="text-sm text-[#6f746e]">{readOnly ? t("videos.empty_readonly") : t("videos.empty")}</p>}
       </div>
       {playing && (
         <video className="mt-4 w-full max-w-lg bg-black" src={playing.url} controls autoPlay />

@@ -9,6 +9,7 @@ import { warrantyLabel } from "@/lib/warranty";
 import { billStamp, billStampDateLabel, latestPaymentAt } from "@/lib/bill-stamp";
 import { BillStatusSeal } from "@/components/bill-status-seal";
 import { BillWatermark } from "@/components/bill-watermark";
+import { useT } from "@/lib/locale";
 
 type SharedBill = {
   bill_number: string;
@@ -53,17 +54,17 @@ type SharedBill = {
   show_shop?: boolean;
 };
 
-function documentCopy(stamp: ReturnType<typeof billStamp>) {
+function documentCopy(stamp: ReturnType<typeof billStamp>, t: (key: string) => string) {
   if (stamp === "paid") {
-    return { title: "Receipt", label: "Paid receipt", download: "Download receipt" };
+    return { title: t("print.receipt"), label: t("print.paid_receipt"), download: t("print.download_receipt") };
   }
   if (stamp === "partial") {
-    return { title: "Bill", label: "Partially paid bill", download: "Download bill" };
+    return { title: t("print.bill"), label: t("print.partial_bill"), download: t("print.download_bill") };
   }
   if (stamp === "repair_note") {
-    return { title: "Repair note", label: "Repair note", download: "Download repair note" };
+    return { title: t("print.repair_note"), label: t("print.repair_note"), download: t("print.download_note") };
   }
-  return { title: "Quotation", label: "Quotation", download: "Download quotation" };
+  return { title: t("print.quotation"), label: t("print.quotation"), download: t("print.download_quote") };
 }
 
 function shareTokenFromParam(token: string | string[] | undefined): string {
@@ -72,6 +73,7 @@ function shareTokenFromParam(token: string | string[] | undefined): string {
 }
 
 export default function SharedBillPage() {
+  const t = useT();
   const params = useParams<{ token: string }>();
   const token = shareTokenFromParam(params.token);
   const [bill, setBill] = useState<SharedBill | null>(null);
@@ -91,7 +93,7 @@ export default function SharedBillPage() {
   useEffect(() => {
     if (!token) {
       setBill(null);
-      setError("This bill link is invalid or no longer available.");
+      setError(t("print.invalid"));
       return;
     }
 
@@ -100,7 +102,7 @@ export default function SharedBillPage() {
     fetch(`${API_URL}/bills/shared/${encodeURIComponent(token)}`)
       .then(async (response) => {
         if (!response.ok) {
-          throw new Error("This bill link is invalid or no longer available.");
+          throw new Error(t("print.invalid"));
         }
         return response.json() as Promise<SharedBill>;
       })
@@ -110,30 +112,30 @@ export default function SharedBillPage() {
       .catch((caught: Error) => {
         if (cancelled) return;
         if (caught.name === "TypeError") {
-          setError("Could not reach the server. Check your connection and try again.");
+          setError(t("print.offline"));
           return;
         }
-        setError(caught.message || "Could not load bill.");
+        setError(caught.message || t("print.load_failed"));
       });
 
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     if (!bill) return;
     const stamp = billStamp(bill);
-    const label = documentCopy(stamp).title;
-    const business = bill.tenant?.business_name ?? "Business";
+    const label = documentCopy(stamp, t).title;
+    const business = bill.tenant?.business_name ?? t("bill.business");
     document.title = `${label} ${bill.bill_number} · ${business}`;
-  }, [bill]);
+  }, [bill, t]);
 
   if (error) {
     return (
       <main className="mx-auto flex min-h-screen max-w-lg items-center px-4 py-10">
         <div className="w-full border border-[#e2ddd0] bg-white p-6 text-center">
-          <p className="font-display text-2xl uppercase">Document unavailable</p>
+          <p className="font-display text-2xl uppercase">{t("print.unavailable")}</p>
           <p className="mt-2 text-sm text-[#6f746e]">{error}</p>
         </div>
       </main>
@@ -143,7 +145,7 @@ export default function SharedBillPage() {
   if (!bill) {
     return (
       <main className="mx-auto flex min-h-screen max-w-lg items-center px-4 py-10">
-        <p className="w-full text-center text-sm text-[#6f746e]">Loading…</p>
+        <p className="w-full text-center text-sm text-[#6f746e]">{t("print.loading")}</p>
       </main>
     );
   }
@@ -154,7 +156,7 @@ export default function SharedBillPage() {
     ? bill.tenant.contact_phones.map((entry: PhoneEntry) => entry.number)
     : [bill.tenant?.contact_phone || bill.tenant?.owner_phone].filter(Boolean)) as string[];
   const stamp = billStamp(bill);
-  const copy = documentCopy(stamp);
+  const copy = documentCopy(stamp, t);
   const documentLabel = copy.label;
   const downloadLabel = copy.download;
   const paymentDate = billStampDateLabel(latestPaymentAt(bill.payments));
@@ -186,7 +188,7 @@ export default function SharedBillPage() {
               }}
               className="size-3.5 accent-[#167c73]"
             />
-            Watermark
+            {t("common.watermark")}
           </label>
           <button
             type="button"
@@ -208,22 +210,22 @@ export default function SharedBillPage() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={logoUrl}
-                  alt={bill.tenant?.business_name ?? "Business logo"}
+                  alt={bill.tenant?.business_name ?? t("bill.business_logo")}
                   className="h-16 w-16 shrink-0 object-contain border border-[#d7d3c8] bg-white p-1"
                 />
               ) : null}
               <div className="min-w-0">
                 <p className="font-display text-3xl font-semibold uppercase leading-none">
-                  {bill.tenant?.business_name ?? "Business"}
+                  {bill.tenant?.business_name ?? t("bill.business")}
                 </p>
                 {bill.show_shop && bill.branch?.name && (
                   <p className="mt-1 text-sm font-semibold uppercase tracking-wide text-[#167c73]">{bill.branch.name}</p>
                 )}
                 <p className="mt-1 text-sm text-[#6f746e]">{bill.bill_number}</p>
-                <p className="mt-1 text-sm text-[#6f746e]">Date: {formatDate(bill.admission_date)}</p>
+                <p className="mt-1 text-sm text-[#6f746e]">{t("print.date", { date: formatDate(bill.admission_date) })}</p>
                 <div className="mt-1.5 space-y-0.5 text-sm print:text-xs">
                   {(bill.branch?.address || bill.tenant?.address) && <p>{bill.branch?.address || bill.tenant?.address}</p>}
-                  {bill.tenant?.tin && <p>TIN: {bill.tenant.tin}</p>}
+                  {bill.tenant?.tin && <p>{t("common.tin")}: {bill.tenant.tin}</p>}
                   {contactPhones.map((phone) => (
                     <p key={phone}>{phone}</p>
                   ))}
@@ -240,35 +242,35 @@ export default function SharedBillPage() {
 
         <div className="bill-meta grid gap-4 border-b border-[#e2ddd0] p-5 sm:grid-cols-2">
           <div>
-            <p className="text-[10px] font-bold uppercase text-[#6f746e]">Customer</p>
-            <p className="mt-1 font-semibold">{bill.customer?.name ?? "Customer"}</p>
+            <p className="text-[10px] font-bold uppercase text-[#6f746e]">{t("common.customer")}</p>
+            <p className="mt-1 font-semibold">{bill.customer?.name ?? t("print.customer")}</p>
             {bill.customer?.phone && <p className="text-sm text-[#6f746e]">{bill.customer.phone}</p>}
             {bill.customer?.address && <p className="mt-1 text-sm text-[#6f746e]">{bill.customer.address}</p>}
           </div>
           {bill.vehicle && (
             <div>
-              <p className="text-[10px] font-bold uppercase text-[#6f746e]">Vehicle</p>
+              <p className="text-[10px] font-bold uppercase text-[#6f746e]">{t("common.vehicle")}</p>
               <p className="mt-1 font-semibold">{bill.vehicle.number_plate}</p>
               <p className="text-sm text-[#6f746e]">
                 {[bill.vehicle.make, bill.vehicle.model].filter(Boolean).join(" ") || "—"}
               </p>
               <p className="mt-2 text-sm">
-                <span className="text-[10px] font-bold uppercase text-[#6f746e]">Mileage </span>
-                {bill.mileage != null && bill.mileage !== "" ? `${Number(bill.mileage).toLocaleString()} km` : "—"}
+                <span className="text-[10px] font-bold uppercase text-[#6f746e]">{t("bill.mileage")} </span>
+                {bill.mileage != null && bill.mileage !== "" ? t("common.km", { count: Number(bill.mileage).toLocaleString() }) : "—"}
               </p>
               {bill.next_service_mileage != null && bill.next_service_mileage !== "" && (
                 <p className="mt-1 text-sm">
-                  <span className="text-[10px] font-bold uppercase text-[#6f746e]">Next service </span>
-                  {`${Number(bill.next_service_mileage).toLocaleString()} km`}
+                  <span className="text-[10px] font-bold uppercase text-[#6f746e]">{t("bill.next_service")} </span>
+                  {t("common.km", { count: Number(bill.next_service_mileage).toLocaleString() })}
                 </p>
               )}
             </div>
           )}
           {(bill.warranty_until || Number(bill.warranty_months) > 0) && (
             <div>
-              <p className="text-[10px] font-bold uppercase text-[#6f746e]">Warranty</p>
+              <p className="text-[10px] font-bold uppercase text-[#6f746e]">{t("common.warranty")}</p>
               <p className="mt-1 font-semibold">
-                {warrantyLabel(bill.warranty_months, bill.warranty_until, bill.warranty_starts_on)}
+                {warrantyLabel(bill.warranty_months, bill.warranty_until, bill.warranty_starts_on, t)}
               </p>
             </div>
           )}
@@ -278,17 +280,17 @@ export default function SharedBillPage() {
           <table className="bill-items-table w-full text-left text-sm">
             <thead className="border-b border-[#e2ddd0] bg-[#fbfaf6] text-[10px] uppercase text-[#6f746e]">
               <tr>
-                <th className="px-5 py-3 font-bold">Item</th>
-                <th className="px-3 py-3 font-bold">Qty</th>
-                <th className="px-3 py-3 font-bold">Price</th>
-                <th className="px-5 py-3 text-right font-bold">Total</th>
+                <th className="px-5 py-3 font-bold">{t("common.item")}</th>
+                <th className="px-3 py-3 font-bold">{t("common.qty")}</th>
+                <th className="px-3 py-3 font-bold">{t("common.price")}</th>
+                <th className="px-5 py-3 text-right font-bold">{t("common.total")}</th>
               </tr>
             </thead>
             <tbody>
               {chargeItems.map((item) => {
                 const { title, inclusions } = billLinePresentation(item);
                 const hideHours = Boolean(item.hide_hours);
-                const warranty = warrantyLabel(item.warranty_months, item.warranty_until, item.warranty_starts_on);
+                const warranty = warrantyLabel(item.warranty_months, item.warranty_until, item.warranty_starts_on, t);
                 return (
                 <tr key={item.id} className="border-b border-[#f0ece3] align-top">
                   <td className="px-5 py-3">
@@ -312,7 +314,7 @@ export default function SharedBillPage() {
                 <>
                   <tr className="bill-discount-row border-t-2 border-[#167c73]/35 bg-[#e7f4f2]">
                     <td colSpan={4} className="px-5 py-2 text-[10px] font-bold uppercase tracking-wide text-[#167c73]">
-                      Discount
+                      {t("common.discount")}
                     </td>
                   </tr>
                   {discountItems.map((item) => (
@@ -328,7 +330,7 @@ export default function SharedBillPage() {
               {!billItems.length && (
                 <tr>
                   <td colSpan={4} className="px-5 py-8 text-center text-[#6f746e]">
-                    No line items yet.
+                    {t("print.no_lines")}
                   </td>
                 </tr>
               )}
@@ -338,39 +340,39 @@ export default function SharedBillPage() {
 
         <div className="bill-summary space-y-2 border-t border-[#e2ddd0] p-5 text-sm">
           {stamp === "repair_note" ? (
-            <p className="text-[#6f746e]">Work list — amounts hidden on this repair note.</p>
+            <p className="text-[#6f746e]">{t("bill.work_list")}</p>
           ) : (
             <>
           <div className="flex justify-between">
-            <span className="text-[#6f746e]">Subtotal</span>
+            <span className="text-[#6f746e]">{t("common.subtotal")}</span>
             <strong className="tabular-nums">{money(bill.subtotal ?? 0)}</strong>
           </div>
           {Number(bill.total_deductions) > 0 && (
             <div className="bill-discount-row -mx-2 flex justify-between rounded-sm bg-[#e7f4f2] px-2 py-1.5 text-[#167c73]">
-              <span>Deductions</span>
+              <span>{t("bill.deductions")}</span>
               <strong className="tabular-nums">-{money(bill.total_deductions ?? 0)}</strong>
             </div>
           )}
           {Number(bill.vat_amount) > 0 && (
             <div className="flex justify-between">
-              <span className="text-[#6f746e]">VAT {bill.vat_rate ? `(${bill.vat_rate}%)` : ""}</span>
+              <span className="text-[#6f746e]">{t("bill.vat")} {bill.vat_rate ? `(${bill.vat_rate}%)` : ""}</span>
               <strong className="tabular-nums">{money(bill.vat_amount ?? 0)}</strong>
             </div>
           )}
           {Number(bill.sscl_amount) > 0 && (
             <div className="flex justify-between">
-              <span className="text-[#6f746e]">SSCL {bill.sscl_rate ? `(${bill.sscl_rate}%)` : ""}</span>
+              <span className="text-[#6f746e]">{t("bill.sscl")} {bill.sscl_rate ? `(${bill.sscl_rate}%)` : ""}</span>
               <strong className="tabular-nums">{money(bill.sscl_amount ?? 0)}</strong>
             </div>
           )}
           {paid ? (
             <>
               <div className="flex justify-between">
-                <span className="text-[#6f746e]">Amount paid</span>
+                <span className="text-[#6f746e]">{t("print.amount_paid")}</span>
                 <strong className="tabular-nums">{money(bill.amount_paid ?? 0)}</strong>
               </div>
               <div className="flex justify-between border-t border-[#e2ddd0] pt-2 text-base">
-                <span className="font-semibold text-[#167c73]">Paid in full</span>
+                <span className="font-semibold text-[#167c73]">{t("print.paid_in_full")}</span>
                 <strong className="tabular-nums text-[#167c73]">{money(0)}</strong>
               </div>
             </>
@@ -378,17 +380,17 @@ export default function SharedBillPage() {
             <>
               {Number(bill.amount_paid) > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-[#6f746e]">Amount paid</span>
+                  <span className="text-[#6f746e]">{t("print.amount_paid")}</span>
                   <strong className="tabular-nums">{money(bill.amount_paid ?? 0)}</strong>
                 </div>
               )}
               <div className="flex justify-between border-t border-[#e2ddd0] pt-2 text-base">
-                <span className="font-semibold">Balance due</span>
+                <span className="font-semibold">{t("print.balance_due")}</span>
                 <strong className="tabular-nums">{money(bill.balance_due ?? 0)}</strong>
               </div>
               {stamp === "quote" && (
                 <p className="pt-2 text-xs text-[#6f746e]">
-                  This is a quotation. Final receipt will be available after payment is completed.
+                  {t("print.quote_note")}
                 </p>
               )}
             </>
@@ -398,7 +400,7 @@ export default function SharedBillPage() {
         </div>
         {bill.additional_note?.trim() && (
           <div className={`bill-additional-note px-5 py-4 text-sm ${bill.additional_note_color === "red" ? "bg-[#7a1c2e]/20 text-[#7a1c2e]" : "bg-[#1b365d]/20 text-[#1b365d]"}`}>
-            <p className="text-[10px] font-bold uppercase tracking-wide opacity-80">Additional note</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide opacity-80">{t("print.additional_note")}</p>
             <p className="mt-2 whitespace-pre-wrap">{bill.additional_note}</p>
           </div>
         )}

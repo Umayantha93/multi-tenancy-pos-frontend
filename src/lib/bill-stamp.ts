@@ -1,4 +1,5 @@
 import { formatDate } from "@/lib/api";
+import type { TranslateFn } from "@/lib/locale";
 
 export type BillStamp = "paid" | "partial" | "quote" | "repair_note";
 
@@ -20,7 +21,8 @@ export function latestPaymentAt(payments: Array<{ paid_at: string }>): string | 
   return [...payments].sort((a, b) => a.paid_at.localeCompare(b.paid_at)).at(-1)?.paid_at ?? null;
 }
 
-export function billStampLabel(stamp: BillStamp): string {
+export function billStampLabel(stamp: BillStamp, t?: TranslateFn): string {
+  if (t) return t(`stamp.${stamp}`);
   if (stamp === "paid") return "Paid";
   if (stamp === "partial") return "Partially paid";
   if (stamp === "repair_note") return "Repair note";
@@ -50,7 +52,8 @@ export function billStatusClass(status: string, dueDate?: string | null): string
   return "bg-[#f5c842]/25 text-[#735a00]";
 }
 
-export function billStatusLabel(status: string): string {
+export function billStatusLabel(status: string, t?: TranslateFn): string {
+  if (t) return t(`status.${status}`);
   if (status === "partially_refunded") return "partially refunded";
   return status.replaceAll("_", " ");
 }

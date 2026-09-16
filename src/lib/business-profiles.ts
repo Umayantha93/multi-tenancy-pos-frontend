@@ -607,13 +607,22 @@ export function billLinePresentation(item: {
   return { title: item.description, inclusions: [] };
 }
 
-export function billItemLabel(type: string, profile?: BusinessProfile | null): string {
+export function billItemLabel(
+  type: string,
+  profile?: BusinessProfile | null,
+  t?: (key: string, replacements?: Record<string, string | number>) => string,
+): string {
   const match = profile?.billItemTypes.find((item) => item.value === type);
-  if (match) return match.label;
-  if (type === "customer_part") return "Customer part";
-  if (type === "service" || type === "service_addon") return "Service";
-  if (type === "charge") return "Service / charge";
-  return type.replaceAll("_", " ");
+  const english = match
+    ? match.label
+    : type === "customer_part"
+      ? "Customer part"
+      : type === "service" || type === "service_addon"
+        ? "Service"
+        : type === "charge"
+          ? "Service / charge"
+          : type.replaceAll("_", " ");
+  return t ? t(`terms.${english}`) : english;
 }
 
 export const PAINT_PANEL_NAMES = [

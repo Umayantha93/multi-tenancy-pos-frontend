@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, Panel } from "@/components/ui";
 import { api } from "@/lib/api";
+import { useT } from "@/lib/locale";
 
 export default function NewRepairBillPage() {
   const router = useRouter();
+  const t = useT();
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -29,37 +31,37 @@ export default function NewRepairBillPage() {
       });
       router.push(`/bills/${bill.id}`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not open repair bill.");
+      setError(caught instanceof Error ? caught.message : t("repairs.failed"));
       setSaving(false);
     }
   }
 
   return (
-    <AppShell title="New repair" eyebrow="Repair bills">
+    <AppShell title={t("repairs.new_title")} eyebrow={t("repairs.title")}>
       <Panel className="mx-auto max-w-2xl p-5">
         <p className="text-sm text-[#6f746e]">
-          Open a repair job, then add the labour charge and any stock used. Super-admin turns Repair on for this shop.
+          {t("repairs.new_hint")}
         </p>
         <form onSubmit={submit} className="mt-5 grid gap-4 sm:grid-cols-2">
           <label className="text-sm font-semibold">
-            Customer name
-            <input name="customer_name" className={`${inputClass} mt-2`} placeholder="Optional" />
+            {t("common.customer")}
+            <input name="customer_name" className={`${inputClass} mt-2`} placeholder={t("instant.optional")} />
           </label>
           <label className="text-sm font-semibold">
-            Phone
-            <input name="customer_phone" type="tel" className={`${inputClass} mt-2`} placeholder="Optional" />
+            {t("common.phone")}
+            <input name="customer_phone" type="tel" className={`${inputClass} mt-2`} placeholder={t("instant.optional")} />
           </label>
           <label className="text-sm font-semibold sm:col-span-2">
-            Phone / vehicle / serial
-            <input name="device" className={`${inputClass} mt-2`} placeholder="e.g. Samsung A15 · IMEI or CAB-1234" />
+            {t("repairs.device")}
+            <input name="device" className={`${inputClass} mt-2`} placeholder={t("repairs.device_placeholder")} />
           </label>
           <label className="text-sm font-semibold sm:col-span-2">
-            Fault / requested work
-            <input name="fault" className={`${inputClass} mt-2`} placeholder="e.g. Screen crack · won’t charge" />
+            {t("repairs.fault")}
+            <input name="fault" className={`${inputClass} mt-2`} placeholder={t("repairs.fault_placeholder")} />
           </label>
           {error && <div className="sm:col-span-2"><ErrorMessage message={error} /></div>}
           <div className="sm:col-span-2 flex justify-end">
-            <button disabled={saving} className={buttonClass}>{saving ? "Opening..." : "Open repair bill"}</button>
+            <button disabled={saving} className={buttonClass}>{saving ? t("common.opening") : t("repairs.open")}</button>
           </div>
         </form>
       </Panel>

@@ -9,12 +9,14 @@ import { EmployeePicker } from "@/components/employee-picker";
 import { buttonClass, ErrorMessage, inputClass, Panel } from "@/components/ui";
 import { api, currentFeatures } from "@/lib/api";
 import { useBusinessProfile } from "@/lib/use-business-profile";
+import { useT } from "@/lib/locale";
 
 type EmployeeOption = { id: number; name: string; position?: string | null };
 
 export default function InstantBillPage() {
   const router = useRouter();
   const profile = useBusinessProfile();
+  const t = useT();
   const isPaint = profile.type === "paint";
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -46,39 +48,37 @@ export default function InstantBillPage() {
       });
       router.push(`/bills/${bill.id}`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not open instant bill.");
+      setError(caught instanceof Error ? caught.message : t("instant.failed"));
       setSaving(false);
     }
   }
 
   return (
-    <AppShell title={isPaint ? "Counter sale" : "Instant bill"} eyebrow="Quick billing">
+    <AppShell title={isPaint ? t("instant.title_paint") : t("instant.title")} eyebrow={t("instant.eyebrow")}>
       <div className="mx-auto max-w-3xl space-y-5">
         <div className="flex items-start gap-4 border-l-4 border-[#f5c842] bg-[#fbfaf6] p-4">
           <ClipboardCheck className="shrink-0 text-[#167c73]" />
           <div>
-            <p className="font-semibold">{isPaint ? "Sell without a vehicle" : "Bill without a vehicle"}</p>
+            <p className="font-semibold">{isPaint ? t("instant.heading_paint") : t("instant.heading")}</p>
             <p className="text-sm text-[#6f746e]">
-              {isPaint
-                ? "For walk-in cans, touch-up, or materials. Opens the same billing screen as a paint job."
-                : "For walk-in customers who need parts or services quickly. Opens the same billing screen as a job card — add labor, services, inventory, discounts, and payments."}
+              {isPaint ? t("instant.hint_paint") : t("instant.hint")}
             </p>
           </div>
         </div>
 
         <Panel className="p-5">
-          <h2 className="font-display text-2xl font-semibold uppercase">Customer</h2>
+          <h2 className="font-display text-2xl font-semibold uppercase">{t("instant.customer")}</h2>
           <form onSubmit={submit} className="mt-4 grid gap-4 sm:grid-cols-2">
             <label className="block sm:col-span-2">
-              <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">Customer name</span>
-              <input name="customer_name" className={inputClass} placeholder="Optional" />
+              <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">{t("instant.customer_name")}</span>
+              <input name="customer_name" className={inputClass} placeholder={t("instant.optional")} />
             </label>
             <label className="block">
-              <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">Phone number</span>
-              <input name="customer_phone" type="tel" className={inputClass} placeholder="Optional" />
+              <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">{t("instant.phone")}</span>
+              <input name="customer_phone" type="tel" className={inputClass} placeholder={t("instant.optional")} />
             </label>
             <label className="block">
-              <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">Date</span>
+              <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">{t("common.date")}</span>
               <input
                 name="admission_date"
                 type="date"
@@ -87,17 +87,17 @@ export default function InstantBillPage() {
               />
             </label>
             <div className="sm:col-span-2">
-              <AddressField name="customer_address" label="Address (optional)" />
+              <AddressField name="customer_address" label={t("instant.address")} />
             </div>
             {canAssignEmployees && (
               <div className="sm:col-span-2">
-                <p className="mb-2 text-[10px] font-bold uppercase text-[#6f746e]">Assign employees (optional)</p>
+                <p className="mb-2 text-[10px] font-bold uppercase text-[#6f746e]">{t("instant.assign_employees")}</p>
                 <EmployeePicker employees={employees} selectedIds={employeeIds} onChange={setEmployeeIds} />
               </div>
             )}
             <label className="block sm:col-span-2">
-              <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">Internal note (staff only)</span>
-              <textarea name="internal_notes" rows={3} className={inputClass} placeholder="Workshop notes the customer should not see" />
+              <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">{t("instant.internal_note")}</span>
+              <textarea name="internal_notes" rows={3} className={inputClass} placeholder={t("instant.note_placeholder")} />
             </label>
             {error && (
               <div className="sm:col-span-2">
@@ -107,7 +107,7 @@ export default function InstantBillPage() {
             <div className="sm:col-span-2">
               <button type="submit" disabled={saving} className={buttonClass}>
                 <Save size={16} />
-                {saving ? "Opening…" : "Open billing"}
+                {saving ? t("instant.opening") : t("instant.open_billing")}
               </button>
             </div>
           </form>

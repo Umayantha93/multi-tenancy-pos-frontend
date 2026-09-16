@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { api, Branch, currentBranch, currentBranches, currentUser, isMultiBranch, setCurrentBranchId, storeSession } from "@/lib/api";
 import { ConfirmModal } from "@/components/ui";
+import { useT } from "@/lib/locale";
 
 export function BranchChip() {
+  const t = useT();
   const [branch, setBranch] = useState<Branch | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [open, setOpen] = useState(false);
@@ -81,7 +83,7 @@ export function BranchChip() {
       ) : (
         <span className="inline-flex h-8 items-center gap-2 border border-[#6b1e2a] bg-[#f8ecee] px-2.5 text-[11px] font-bold uppercase tracking-wide text-[#6b1e2a]">
           <span className="size-2 shrink-0 rounded-full bg-[#6b1e2a]" />
-          {branch.name} · locked
+          {branch.name} · {t("common.locked")}
         </span>
       )}
       {open && canSwitch && (
@@ -102,16 +104,16 @@ export function BranchChip() {
               className={`mb-1 flex w-full items-center justify-between px-3 py-2 text-left text-sm last:mb-0 ${item.id === branch.id ? "bg-[#167c73]/10 font-semibold" : "hover:bg-[#f3f0e8]"}`}
             >
               <span>{item.name}</span>
-              {item.is_default ? <span className="text-[10px] uppercase text-[#6f746e]">Main</span> : null}
+              {item.is_default ? <span className="text-[10px] uppercase text-[#6f746e]">{t("common.main")}</span> : null}
             </button>
           ))}
         </div>
       )}
       <ConfirmModal
         open={Boolean(pending)}
-        title="Switch active shop?"
-        message={`You are leaving ${branch.name}. New admits, instant bills, and payments will go to ${pending?.name ?? ""}.`}
-        confirmLabel={busy ? "Switching..." : `Confirm ${pending?.name ?? ""}`}
+        title={t("branch.switch_title")}
+        message={t("branch.switch_msg", { from: branch.name, to: pending?.name ?? "" })}
+        confirmLabel={busy ? t("branch.switching") : t("branch.confirm", { name: pending?.name ?? "" })}
         tone="teal"
         busy={busy}
         onCancel={() => setPending(null)}
@@ -130,20 +132,21 @@ export function ShopFilter({
   onChange: (value: string) => void;
   className?: string;
 }) {
+  const t = useT();
   // localStorage is client-only — first paint must match SSR (null).
   const [ready, setReady] = useState(false);
   useEffect(() => setReady(true), []);
   if (!ready || !isMultiBranch() || currentUser()?.role !== "business_owner") return null;
   return (
     <label className={`relative z-0 flex min-w-0 flex-col ${className}`}>
-      <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">Shop</span>
+      <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">{t("common.shop")}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="h-8 w-full min-w-0 border border-[#c9c5b9] bg-white px-2 text-[11px] outline-none focus:border-[#167c73]"
       >
-        <option value="">This shop</option>
-        <option value="all">All shops</option>
+        <option value="">{t("common.this_shop")}</option>
+        <option value="all">{t("common.all_shops")}</option>
         {currentBranches().filter((branch) => branch.status !== "inactive").map((branch) => (
           <option key={branch.id} value={String(branch.id)}>{branch.name}</option>
         ))}
@@ -153,6 +156,7 @@ export function ShopFilter({
 }
 
 export function BillingBranchBanner() {
+  const t = useT();
   const [name, setName] = useState<string | null>(null);
   useEffect(() => {
     const apply = () => {
@@ -169,7 +173,7 @@ export function BillingBranchBanner() {
   if (!name) return null;
   return (
     <div className="no-print mb-4 bg-[#6b1e2a] px-4 py-2 text-center font-display text-sm font-semibold uppercase tracking-wide text-[#f8ebea]">
-      Billing as · {name} — new lines and payments go here
+      {t("branch.billing_as", { name })}
     </div>
   );
 }

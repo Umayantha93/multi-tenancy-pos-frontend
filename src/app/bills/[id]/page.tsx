@@ -10,12 +10,13 @@ import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel }
 import { api, formatDate, isMultiBranch, mediaUrl, money, SessionPayload, storeSession, Tenant } from "@/lib/api";
 import { billItemLabel, billLinePresentation, PAINT_PANEL_NAMES, profileFor, sortBillItems, usesLaborCatalog, usesServiceAddonWorkspace, usesStoreCounter, usesVehicleJobs } from "@/lib/business-profiles";
 import { warrantyLabel } from "@/lib/warranty";
-import { billStamp, billStampDateLabel, latestPaymentAt } from "@/lib/bill-stamp";
+import { billStamp, billStampDateLabel, billStatusLabel, latestPaymentAt } from "@/lib/bill-stamp";
 import { BillStatusSeal } from "@/components/bill-status-seal";
 import { BillWatermark } from "@/components/bill-watermark";
 import { BillingBranchBanner } from "@/components/branch-chip";
 import { WarrantyFields, warrantyFromForm } from "@/components/warranty-fields";
 import { JobVideos } from "@/components/job-videos";
+import { useLocale, useT } from "@/lib/locale";
 
 type Part = { id: number; name: string; price: string; stock_qty: number; sku?: string | null; barcode?: string | null; brand?: string };
 type ComposerLabor = { key: string; laborItemId: string; name: string; hours: string; rate: number };
@@ -124,6 +125,8 @@ type PendingDelete =
 
 export default function BillDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const t = useT();
+  const { locale } = useLocale();
   const [bill, setBill] = useState<Bill | null>(null);
   const [parts, setParts] = useState<Part[]>([]);
   const [addons, setAddons] = useState<ServiceAddon[]>([]);
@@ -226,10 +229,10 @@ export default function BillDetailPage() {
   const panelTotal = composerLaborAmount + composerMaterialAmount;
   const jobKindLabel =
     bill?.job_kind === "service"
-      ? (isPaint ? "Package" : "Service")
+      ? (isPaint ? t("bills.package") : t("bills.service"))
       : bill?.job_kind === "parts_sale"
-        ? (isPaint ? "Counter sale" : isStore ? "Sale" : "Instant")
-        : (isPaint ? "Panel work" : "Repair");
+        ? (isPaint ? t("bill.counter_sale") : isStore ? t("bill.sale") : t("terms.Instant"))
+        : (isPaint ? t("admit.panel_work") : t("bills.repair"));
   const showJobKind = usesVehicleJobs(profile.type) || isStore;
   const billItems = useMemo(() => sortBillItems(bill?.items ?? []), [bill?.items]);
   const chargeItems = useMemo(() => billItems.filter((item) => item.type !== "discount"), [billItems]);
@@ -386,7 +389,7 @@ export default function BillDetailPage() {
 
   async function sendBillSms() {
     if (!bill?.customer?.phone) {
-      setError("Add a customer phone number before sending the bill.");
+      setError(t("bill.err_phone_sms"));
       return;
     }
 
@@ -400,9 +403,9 @@ export default function BillDetailPage() {
       if (result.share_token && result.share_token !== bill.share_token) {
         setBill({ ...bill, share_token: result.share_token });
       }
-      setSmsNotice(result.message || "Bill link sent by SMS.");
+      setSmsNotice(result.message || t("bill.sms_sent"));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not send SMS.");
+      setError(caught instanceof Error ? caught.message : t("bill.err_sms"));
     } finally {
       setSendingSms(false);
     }
@@ -418,7 +421,7 @@ export default function BillDetailPage() {
       });
       setBill({ ...bill, hide_amounts: updated.hide_amounts });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not update the repair note.");
+      setError(caught instanceof Error ? caught.message : t("bill.err_repair_note"));
     }
   }
 
@@ -550,7 +553,7 @@ export default function BillDetailPage() {
     }
 
     if (!/\s/.test(trimmed)) {
-      setError(`No in-stock part found for barcode "${trimmed}".`);
+      setError(t("bill.err_barcode", { code: trimmed }));
       setSelectedPartId("");
     }
     return false;
@@ -570,7 +573,7 @@ export default function BillDetailPage() {
     if (isLaborType && !isPaint) {
       const qty = Number(laborHours);
       if (!Number.isFinite(qty) || qty <= 0) {
-        setError("Enter hours greater than 0.");
+        setError(t("bill.err_hours"));
         return;
       }
     }
@@ -578,14 +581,14 @@ export default function BillDetailPage() {
     if (isPanelComposer) {
       const name = (panelCustom ? String(formData.get("panel_name") || "") : panelName).trim();
       if (!name) {
-        setError("Select a panel.");
+        setError(t("bill.err_panel"));
         return;
       }
       const labor: Array<Record<string, string>> = [];
       for (const row of composerLabor) {
         const hours = Number(row.hours);
         if (!Number.isFinite(hours) || hours <= 0) {
-          setError(`Enter hours for ${row.name}.`);
+          setError(t("bill.err_hours_for", { name: row.name }));
           return;
         }
         labor.push({ labor_item_id: row.laborItemId, quantity: row.hours });
@@ -594,17 +597,17 @@ export default function BillDetailPage() {
       for (const row of composerMaterials) {
         const ml = Number(row.qty);
         if (!Number.isFinite(ml) || ml <= 0 || ml !== Math.floor(ml)) {
-          setError(`Enter millilitres for ${row.name}.`);
+          setError(t("bill.err_ml_for", { name: row.name }));
           return;
         }
         if (ml > row.stock) {
-          setError(`Not enough ${row.name} in stock (${row.stock} ml).`);
+          setError(t("bill.err_stock_ml", { name: row.name, qty: row.stock }));
           return;
         }
         materials.push({ part_id: String(row.partId), quantity: String(ml) });
       }
       if (labor.length === 0 && materials.length === 0) {
-        setError("Add labor or materials for this panel.");
+        setError(t("bill.err_panel_lines"));
         return;
       }
 
@@ -618,7 +621,7 @@ export default function BillDetailPage() {
         load();
         api<{ data: Part[] }>("/parts?per_page=100").then((result) => setParts(result.data)).catch(() => undefined);
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "Could not add panel.");
+        setError(caught instanceof Error ? caught.message : t("bill.err_panel_add"));
         load();
         api<{ data: Part[] }>("/parts?per_page=100").then((result) => setParts(result.data)).catch(() => undefined);
       } finally {
@@ -640,7 +643,7 @@ export default function BillDetailPage() {
         payload.quantity = String(formData.get("quantity") || "1");
       } else {
         if (!selectedPartId) {
-          setError("Select a part from stock, or choose Bought outside / Customer supplied.");
+          setError(t("bill.err_part"));
           return;
         }
         payload.part_id = selectedPartId;
@@ -667,7 +670,7 @@ export default function BillDetailPage() {
       load();
       api<{ data: Part[] }>("/parts?per_page=100").then((result) => setParts(result.data)).catch(() => undefined);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not add item.");
+      setError(caught instanceof Error ? caught.message : t("bill.err_item"));
     }
   }
 
@@ -684,7 +687,7 @@ export default function BillDetailPage() {
       setWarrantyItem(null);
       load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save warranty.");
+      setError(caught instanceof Error ? caught.message : t("bill.err_warranty"));
     } finally {
       setSavingWarranty(false);
     }
@@ -702,7 +705,7 @@ export default function BillDetailPage() {
       });
       setBill(updated);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save warranty.");
+      setError(caught instanceof Error ? caught.message : t("bill.err_warranty"));
     } finally {
       setSavingJobWarranty(false);
     }
@@ -724,7 +727,7 @@ export default function BillDetailPage() {
       load();
       setAddonQty("1");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not add service.");
+      setError(caught instanceof Error ? caught.message : t("bill.err_service"));
     } finally {
       setAddingAddonId(null);
     }
@@ -734,7 +737,7 @@ export default function BillDetailPage() {
     if (isLocked) return;
     const quantity = Number(hours);
     if (!Number.isFinite(quantity) || quantity <= 0) {
-      setError("Hours must be greater than 0.");
+      setError(t("bill.err_hours_gt"));
       return;
     }
     setSavingLaborHours(itemId);
@@ -743,7 +746,7 @@ export default function BillDetailPage() {
       await api(`/bills/${id}/items/${itemId}`, { method: "PUT", body: JSON.stringify({ quantity: hours }) });
       load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not update hours.");
+      setError(caught instanceof Error ? caught.message : t("bill.err_hours_update"));
     } finally {
       setSavingLaborHours(null);
     }
@@ -759,7 +762,7 @@ export default function BillDetailPage() {
       setPaymentMethod("cash");
       load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not record payment.");
+      setError(caught instanceof Error ? caught.message : t("bill.err_payment"));
     }
   }
 
@@ -771,7 +774,7 @@ export default function BillDetailPage() {
       await api(`/bills/${id}/payments/${paymentId}/clear`, { method: "POST" });
       load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not clear cheque.");
+      setError(caught instanceof Error ? caught.message : t("bill.err_clear"));
     } finally {
       setClearingPaymentId(null);
     }
@@ -785,7 +788,7 @@ export default function BillDetailPage() {
       await api(`/bills/${id}/payments/${paymentId}/bounce`, { method: "POST" });
       load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not bounce cheque.");
+      setError(caught instanceof Error ? caught.message : t("bill.err_bounce"));
     } finally {
       setClearingPaymentId(null);
     }
@@ -836,8 +839,8 @@ export default function BillDetailPage() {
         caught instanceof Error
           ? caught.message
           : pendingDelete.kind === "item"
-            ? "Could not remove item."
-            : "Could not remove payment.",
+            ? t("bill.err_remove_item")
+            : t("bill.err_remove_payment"),
       );
     } finally {
       setDeleting(false);
@@ -868,7 +871,7 @@ export default function BillDetailPage() {
           : "",
       );
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save mileage.");
+      setError(caught instanceof Error ? caught.message : t("bill.err_mileage"));
     } finally {
       setSavingMileage(false);
     }
@@ -891,7 +894,7 @@ export default function BillDetailPage() {
       setInternalNotes(updated.internal_notes || updated.notes || "");
       setNoteColor(updated.additional_note_color === "red" ? "red" : "blue");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save note.");
+      setError(caught instanceof Error ? caught.message : t("bill.err_note"));
     } finally {
       setSavingNotes(false);
     }
@@ -910,7 +913,7 @@ export default function BillDetailPage() {
       setBill(updated);
       setEmployeeIds((updated.employees ?? []).map((employee) => employee.id));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not assign employees.");
+      setError(caught instanceof Error ? caught.message : t("bill.err_employees"));
     } finally {
       setSavingEmployees(false);
     }
@@ -956,7 +959,7 @@ export default function BillDetailPage() {
     if (!bill || !canRefund) return;
     const selected = refundLines.filter((line) => line.selected && Number(line.quantity) > 0);
     if (!selected.length) {
-      setError("Select at least one line to refund.");
+      setError(t("bill.err_refund_select"));
       return;
     }
     setRefunding(true);
@@ -978,7 +981,7 @@ export default function BillDetailPage() {
       setRefundOpen(false);
       load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not refund this bill.");
+      setError(caught instanceof Error ? caught.message : t("bill.err_refund"));
     } finally {
       setRefunding(false);
     }
@@ -993,7 +996,7 @@ export default function BillDetailPage() {
       setPendingClose(false);
       load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : `Could not close this ${profile.billingSingular.toLowerCase()}.`);
+      setError(caught instanceof Error ? caught.message : t("bill.err_close", { kind: t(`terms.${profile.billingSingular}`).toLowerCase() }));
     } finally {
       setClosing(false);
     }
@@ -1009,7 +1012,7 @@ export default function BillDetailPage() {
       setOweInMenu(false);
       load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not mark this bill as owe in.");
+      setError(caught instanceof Error ? caught.message : t("bill.err_owe"));
     } finally {
       setMarkingOweIn(false);
     }
@@ -1017,8 +1020,8 @@ export default function BillDetailPage() {
 
   if (!bill) {
     return (
-      <AppShell title={profile.billingSingular} eyebrow="Billing">
-        {error ? <ErrorMessage message={error} /> : <PageState message={`Opening ${profile.billingSingular.toLowerCase()}...`} />}
+      <AppShell title={t(`terms.${profile.billingSingular}`)} eyebrow={t("bill.eyebrow")}>
+        {error ? <ErrorMessage message={error} /> : <PageState message={t("bill.opening", { kind: t(`terms.${profile.billingSingular}`).toLowerCase() })} />}
       </AppShell>
     );
   }
@@ -1026,7 +1029,7 @@ export default function BillDetailPage() {
   return (
     <AppShell
       title={bill.bill_number}
-      eyebrow={`${bill.vehicle?.number_plate ?? bill.customer?.name ?? profile.billingSingular}${showJobKind ? ` · ${jobKindLabel}` : ""} · ${bill.status.replace("_", " ")}`}
+      eyebrow={`${bill.vehicle?.number_plate ?? bill.customer?.name ?? t(`terms.${profile.billingSingular}`)}${showJobKind ? ` · ${jobKindLabel}` : ""} · ${billStatusLabel(bill.status, t)}`}
       action={
         <div className="no-print flex w-full min-w-0 flex-wrap items-center gap-2">
           {isGarage && Number(bill.amount_paid) <= 0 && (
@@ -1034,9 +1037,9 @@ export default function BillDetailPage() {
               type="button"
               onClick={() => void toggleHideAmounts()}
               className={`h-8 shrink-0 whitespace-nowrap border px-2.5 text-[11px] font-bold uppercase ${bill.hide_amounts ? "border-[#167c73] bg-[#167c73] text-white" : "border-[#c9c5b9] bg-white"}`}
-              title="Hide amounts on the customer print and SMS copy"
+              title={t("bill.hide_amounts_title")}
             >
-              {bill.hide_amounts ? "Repair note" : "Hide amounts"}
+              {bill.hide_amounts ? t("bill.repair_note") : t("bill.hide_amounts")}
             </button>
           )}
           {canSendSms && (
@@ -1047,14 +1050,14 @@ export default function BillDetailPage() {
               className="grid size-8 shrink-0 place-items-center border border-[#c9c5b9] disabled:cursor-not-allowed disabled:opacity-40"
               title={
                 !bill.customer?.phone
-                  ? "Customer phone required"
+                  ? t("bill.sms_need_phone")
                   : canOwnerSms
-                    ? "Sends to customer and owner"
+                    ? t("bill.sms_owner")
                     : stamp === "paid"
-                      ? "Send paid bill link by SMS"
+                      ? t("bill.sms_paid")
                       : bill.hide_amounts
-                        ? "Send repair note by SMS"
-                        : "Send quotation link by SMS"
+                        ? t("bill.sms_note")
+                        : t("bill.sms_quote")
               }
             >
               <MessageSquare size={15} />
@@ -1075,9 +1078,9 @@ export default function BillDetailPage() {
               }}
               className="size-3.5 accent-[#167c73]"
             />
-            Watermark
+            {t("common.watermark")}
           </label>
-          <button onClick={() => window.print()} className="grid size-8 shrink-0 place-items-center border border-[#c9c5b9]" title="Print bill">
+          <button onClick={() => window.print()} className="grid size-8 shrink-0 place-items-center border border-[#c9c5b9]" title={t("bill.print_bill")}>
             <Printer size={15} />
           </button>
           {canRefund && (
@@ -1085,10 +1088,10 @@ export default function BillDetailPage() {
               type="button"
               onClick={openRefundModal}
               className="inline-flex h-8 shrink-0 items-center gap-2 border border-[#b84837]/40 bg-white px-2.5 text-[11px] font-semibold text-[#b84837] hover:bg-[#b84837]/5"
-              title="Refund this closed bill"
+              title={t("bill.refund_title")}
             >
               <RotateCcw size={14} />
-              <span className="hidden sm:inline">Refund</span>
+              <span className="hidden sm:inline">{t("bill.refund")}</span>
             </button>
           )}
           {!isClosed && !isOweIn && (
@@ -1101,22 +1104,22 @@ export default function BillDetailPage() {
                   className="inline-flex h-8 items-center gap-2 px-2.5 text-[11px] font-semibold hover:bg-[#f7f5ef] disabled:cursor-not-allowed disabled:opacity-40"
                   title={
                     hasPendingCheque
-                      ? "Clear or bounce pending cheques before closing"
+                      ? t("bill.close_cheques")
                       : isPaid
-                      ? `Close this ${profile.billingSingular.toLowerCase()}`
-                      : `Pay this ${profile.billingSingular.toLowerCase()} in full before closing`
+                      ? t("bill.close_title", { kind: t(`terms.${profile.billingSingular}`).toLowerCase() })
+                      : t("bill.close_pay_first", { kind: t(`terms.${profile.billingSingular}`).toLowerCase() })
                   }
                 >
                   <Lock size={14} />
-                  <span className="hidden sm:inline">Close</span>
+                  <span className="hidden sm:inline">{t("bill.close")}</span>
                 </button>
                 <span className="w-px self-stretch bg-[#c9c5b9]" />
                 <button
                   type="button"
                   onClick={() => setOweInMenu((open) => !open)}
                   className="grid h-8 w-8 place-items-center hover:bg-[#f7f5ef]"
-                  title="More close options"
-                  aria-label="More close options"
+                  title={t("bill.more_close")}
+                  aria-label={t("bill.more_close")}
                   aria-expanded={oweInMenu}
                 >
                   <ChevronDown size={16} />
@@ -1134,7 +1137,7 @@ export default function BillDetailPage() {
                     }}
                     className="block w-full px-4 py-2.5 text-left text-sm font-semibold hover:bg-[#f7f5ef] disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    Owe In
+                    {t("bill.owe_in")}
                   </button>
                 </div>
               )}
@@ -1147,24 +1150,24 @@ export default function BillDetailPage() {
               className="inline-flex h-8 items-center gap-2 border border-[#20221f] bg-white px-2.5 text-[11px] font-semibold hover:bg-[#20221f] hover:text-white"
             >
               <Lock size={16} />
-              <span className="hidden sm:inline">Close</span>
+              <span className="hidden sm:inline">{t("bill.close")}</span>
             </button>
           )}
           {isOweIn && hasPendingCheque && (
-            <span className="text-[10px] font-semibold uppercase text-[#b8860b]">Cheque pending</span>
+            <span className="text-[10px] font-semibold uppercase text-[#b8860b]">{t("bill.cheque_pending")}</span>
           )}
         </div>
       }
     >
       <ConfirmModal
         open={Boolean(pendingDelete)}
-        title={pendingDelete?.kind === "payment" ? "Remove payment" : "Remove line item"}
+        title={pendingDelete?.kind === "payment" ? t("bill.remove_payment") : t("bill.remove_line")}
         message={
           pendingDelete?.kind === "payment"
-            ? `Remove the ${pendingDelete.method.toUpperCase()} payment of ${money(pendingDelete.amount)} from this bill? The bill balance will be recalculated.`
-            : `Remove “${pendingDelete?.label ?? "this line item"}” from the bill? Inventory stock will be restored if this line used stock.`
+            ? t("bill.remove_payment_msg", { method: pendingDelete.method.toUpperCase(), amount: money(pendingDelete.amount) })
+            : t("bill.remove_item_msg", { label: pendingDelete?.label ?? t("bill.this_line") })
         }
-        confirmLabel={pendingDelete?.kind === "payment" ? "Remove payment" : "Remove item"}
+        confirmLabel={pendingDelete?.kind === "payment" ? t("bill.remove_payment") : t("bill.remove_item")}
         tone="danger"
         busy={deleting}
         onCancel={() => {
@@ -1174,9 +1177,9 @@ export default function BillDetailPage() {
       />
       <ConfirmModal
         open={pendingClose}
-        title={`Close ${profile.billingSingular.toLowerCase()}`}
-        message={`Close this ${profile.billingSingular.toLowerCase()}? Items, payments, and all other details will be locked and cannot be changed.`}
-        confirmLabel={`Close ${profile.billingSingular.toLowerCase()}`}
+        title={t("bill.close_kind", { kind: t(`terms.${profile.billingSingular}`).toLowerCase() })}
+        message={t("bill.close_msg", { kind: t(`terms.${profile.billingSingular}`).toLowerCase() })}
+        confirmLabel={t("bill.close_kind", { kind: t(`terms.${profile.billingSingular}`).toLowerCase() })}
         tone="default"
         busy={closing}
         onCancel={() => {
@@ -1186,9 +1189,9 @@ export default function BillDetailPage() {
       />
       <ConfirmModal
         open={pendingOweIn}
-        title="Mark as Owe In"
-        message={`The ${profile.billingSingular.toLowerCase()} will be locked except for payments. Choose the date the customer should settle the balance.`}
-        confirmLabel="Mark owe in"
+        title={t("bill.owe_title")}
+        message={t("bill.owe_msg", { kind: t(`terms.${profile.billingSingular}`).toLowerCase() })}
+        confirmLabel={t("bill.owe_confirm")}
         tone="teal"
         busy={markingOweIn}
         onCancel={() => {
@@ -1197,7 +1200,7 @@ export default function BillDetailPage() {
         onConfirm={confirmOweIn}
       >
         <label className="mt-4 block text-xs font-bold uppercase">
-          Due date
+          {t("bill.due_date")}
           <input
             type="date"
             min={new Date().toISOString().slice(0, 10)}
@@ -1214,13 +1217,13 @@ export default function BillDetailPage() {
             onClick={(event) => event.stopPropagation()}
             className="max-h-[90vh] w-full max-w-2xl overflow-y-auto bg-[#f3f0e8] p-5"
           >
-            <h2 className="font-display text-2xl font-semibold uppercase">Refund bill</h2>
+            <h2 className="font-display text-2xl font-semibold uppercase">{t("bill.refund_bill")}</h2>
             <p className="mt-1 text-sm text-[#6f746e]">
-              Choose lines to refund. For stock items, return to inventory or write off as a loss.
+              {t("bill.refund_hint")}
             </p>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <label className="block text-xs font-bold uppercase">
-                Refund date
+                {t("bill.refund_date")}
                 <input
                   type="date"
                   required
@@ -1230,28 +1233,28 @@ export default function BillDetailPage() {
                 />
               </label>
               <label className="block text-xs font-bold uppercase">
-                Method
+                {t("common.method")}
                 <select
                   value={refundMethod}
                   onChange={(event) => setRefundMethod(event.target.value)}
                   className={`${inputClass} mt-2`}
                 >
-                  <option value="cash">Cash</option>
-                  <option value="card">Card</option>
-                  <option value="bank_transfer">Bank transfer</option>
-                  <option value="other">Other</option>
+                  <option value="cash">{t("method.cash")}</option>
+                  <option value="card">{t("method.card")}</option>
+                  <option value="bank_transfer">{t("method.bank_transfer")}</option>
+                  <option value="other">{t("method.other")}</option>
                 </select>
               </label>
             </div>
             <label className="mt-3 block text-xs font-bold uppercase">
-              Reason
+              {t("common.reason")}
               <textarea
                 required
                 rows={3}
                 value={refundReason}
                 onChange={(event) => setRefundReason(event.target.value)}
                 className={`${inputClass} mt-2`}
-                placeholder="Why is this being refunded?"
+                placeholder={t("bill.refund_reason_placeholder")}
               />
             </label>
             <div className="mt-4 space-y-3">
@@ -1272,14 +1275,14 @@ export default function BillDetailPage() {
                     <span className="min-w-0 flex-1">
                       <span className="font-semibold">{line.description}</span>
                       <span className="mt-0.5 block text-[11px] uppercase text-[#6f746e]">
-                        {line.type.replace("_", " ")} · up to {line.maxQty} · {money(line.unitPrice)} each
+                        {t("bill.up_to", { type: billItemLabel(line.type, profile, t), qty: line.maxQty, price: money(line.unitPrice) })}
                       </span>
                     </span>
                   </label>
                   {line.selected && (
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       <label className="block text-[11px] font-bold uppercase">
-                        Quantity
+                        {t("common.quantity")}
                         <input
                           type="number"
                           min={line.canRestock ? 1 : 0.01}
@@ -1297,11 +1300,11 @@ export default function BillDetailPage() {
                       </label>
                       {line.canRestock ? (
                         <div>
-                          <p className="text-[11px] font-bold uppercase">Stock</p>
+                          <p className="text-[11px] font-bold uppercase">{t("common.stock")}</p>
                           <div className="mt-1 flex flex-wrap gap-2">
                             {([
-                              ["restock", "Return to stock"],
-                              ["write_off", "Write off (loss)"],
+                              ["restock", t("bill.return_stock")],
+                              ["write_off", t("bill.write_off")],
                             ] as const).map(([value, label]) => (
                               <button
                                 key={value}
@@ -1321,24 +1324,24 @@ export default function BillDetailPage() {
                           </div>
                         </div>
                       ) : (
-                        <p className="self-end text-[11px] text-[#6f746e]">Money refund only (no stock change).</p>
+                        <p className="self-end text-[11px] text-[#6f746e]">{t("bill.money_only")}</p>
                       )}
                     </div>
                   )}
                 </div>
               ))}
               {refundLines.length === 0 && (
-                <p className="text-sm text-[#6f746e]">Nothing left to refund on this bill.</p>
+                <p className="text-sm text-[#6f746e]">{t("bill.nothing_refund")}</p>
               )}
             </div>
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#d7d3c8] pt-4">
-              <p className="text-sm font-semibold">Refund total {money(refundTotal)}</p>
+              <p className="text-sm font-semibold">{t("bill.refund_total", { amount: money(refundTotal) })}</p>
               <div className="flex gap-2">
                 <button type="button" disabled={refunding} onClick={() => setRefundOpen(false)} className={`${buttonClass} bg-white`}>
-                  Cancel
+                  {t("common.cancel")}
                 </button>
                 <button type="submit" disabled={refunding || refundTotal <= 0} className={buttonClass}>
-                  {refunding ? "Refunding..." : "Confirm refund"}
+                  {refunding ? t("bill.refunding") : t("bill.confirm_refund")}
                 </button>
               </div>
             </div>
@@ -1352,7 +1355,7 @@ export default function BillDetailPage() {
             onClick={(event) => event.stopPropagation()}
             className="w-full max-w-md bg-[#f3f0e8] p-5"
           >
-            <h2 className="font-display text-2xl font-semibold uppercase">Warranty</h2>
+            <h2 className="font-display text-2xl font-semibold uppercase">{t("warranty.title")}</h2>
             <p className="mt-1 text-sm text-[#6f746e]">{warrantyItem.description}</p>
             <div className="mt-4">
               <WarrantyFields
@@ -1364,8 +1367,8 @@ export default function BillDetailPage() {
               />
             </div>
             <div className="mt-4 flex gap-2">
-              <button type="button" onClick={() => setWarrantyItem(null)} className={`${buttonClass} flex-1 bg-white`}>Cancel</button>
-              <button disabled={savingWarranty} className={`${buttonClass} flex-1`}>{savingWarranty ? "Saving..." : "Save warranty"}</button>
+              <button type="button" onClick={() => setWarrantyItem(null)} className={`${buttonClass} flex-1 bg-white`}>{t("common.cancel")}</button>
+              <button disabled={savingWarranty} className={`${buttonClass} flex-1`}>{savingWarranty ? t("common.saving") : t("warranty.save")}</button>
             </div>
           </form>
         </div>
@@ -1380,38 +1383,38 @@ export default function BillDetailPage() {
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={logoUrl}
-                alt={tenant?.business_name ?? "Business logo"}
+                alt={tenant?.business_name ?? t("bill.business_logo")}
                 className="h-20 w-20 shrink-0 object-contain border border-[#d7d3c8] bg-white p-1"
               />
             ) : (
               <div className="grid h-20 w-20 shrink-0 place-items-center border border-dashed border-[#c9c5b9] bg-[#fbfaf6] text-center text-[10px] font-bold uppercase text-[#6f746e]">
-                No logo
+                {t("bill.no_logo")}
               </div>
             )}
             <div className="min-w-0">
               <p className="break-words font-display text-2xl font-semibold uppercase leading-tight sm:text-3xl sm:leading-none">
-                {tenant?.business_name ?? "Business"}
+                {tenant?.business_name ?? t("bill.business")}
               </p>
               {isMultiBranch() && bill.branch?.name && (
                 <p className="mt-1 text-sm font-semibold uppercase tracking-wide text-[#167c73]">{bill.branch.name}</p>
               )}
               <p className="mt-1 text-sm text-[#6f746e]">{bill.bill_number}</p>
               <div className="mt-1.5 space-y-0.5 text-sm print:text-xs">
-                {(bill.branch?.address || tenant?.address) && <p><span className="text-[#6f746e]">Address:</span> {bill.branch?.address || tenant?.address}</p>}
-                {tenant?.tin && <p><span className="text-[#6f746e]">TIN:</span> {tenant.tin}</p>}
+                {(bill.branch?.address || tenant?.address) && <p><span className="text-[#6f746e]">{t("common.address")}:</span> {bill.branch?.address || tenant?.address}</p>}
+                {tenant?.tin && <p><span className="text-[#6f746e]">{t("common.tin")}:</span> {tenant.tin}</p>}
                 {contactPhones.map((phone) => (
-                  <p key={phone}><span className="text-[#6f746e]">Mobile:</span> {phone}</p>
+                  <p key={phone}><span className="text-[#6f746e]">{t("common.mobile")}:</span> {phone}</p>
                 ))}
-                {contactEmail && <p><span className="text-[#6f746e]">Email:</span> {contactEmail}</p>}
+                {contactEmail && <p><span className="text-[#6f746e]">{t("common.email")}:</span> {contactEmail}</p>}
               </div>
             </div>
           </div>
           <div className="flex w-full flex-col items-start text-left text-xs uppercase text-[#6f746e] sm:w-auto sm:shrink-0 sm:items-end sm:text-right">
             <p className="font-bold text-[#167c73]">
-              {hidePrintMoney ? "Repair note" : `Tax invoice / ${profile.billingSingular.toLowerCase()}`}
+              {hidePrintMoney ? t("bill.repair_note") : t("bill.tax_invoice", { kind: t(`terms.${profile.billingSingular}`).toLowerCase() })}
               {showJobKind && !hidePrintMoney ? ` · ${jobKindLabel}` : ""}
             </p>
-            <p className="mt-1 normal-case">{new Date().toLocaleString("en-LK")}</p>
+            <p className="mt-1 normal-case">{new Date().toLocaleString(locale === "si" ? "si-LK" : "en-LK")}</p>
             <BillStatusSeal stamp={stamp} paymentDate={paymentDate} />
           </div>
         </div>
@@ -1422,8 +1425,8 @@ export default function BillDetailPage() {
           <Panel>
             <div className="bill-meta grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
               <div>
-                <p className="text-[10px] font-bold uppercase text-[#6f746e]">Customer</p>
-                <p className="mt-1 font-semibold">{bill.customer?.name ?? "Walk-in"}</p>
+                <p className="text-[10px] font-bold uppercase text-[#6f746e]">{t("common.customer")}</p>
+                <p className="mt-1 font-semibold">{bill.customer?.name ?? t("common.walk_in")}</p>
                 {bill.customer?.phone && (
                   <p className="text-sm text-[#6f746e]">{bill.customer.phone}</p>
                 )}
@@ -1434,25 +1437,25 @@ export default function BillDetailPage() {
               {bill.vehicle ? (
                 <>
                   <div>
-                    <p className="text-[10px] font-bold uppercase text-[#6f746e]">Vehicle</p>
+                    <p className="text-[10px] font-bold uppercase text-[#6f746e]">{t("common.vehicle")}</p>
                     <p className="mt-1 font-semibold">{bill.vehicle.number_plate}</p>
                     <p className="text-sm text-[#6f746e]">{bill.vehicle.make} {bill.vehicle.model}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold uppercase text-[#6f746e]">Chassis</p>
+                    <p className="text-[10px] font-bold uppercase text-[#6f746e]">{t("bill.chassis")}</p>
                     <p className="mt-1 break-all text-sm">{bill.vehicle.chassis_number || "—"}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold uppercase text-[#6f746e]">Mileage</p>
+                    <p className="text-[10px] font-bold uppercase text-[#6f746e]">{t("bill.mileage")}</p>
                     <p className="mt-1 font-semibold">
-                      {bill.mileage != null && bill.mileage !== "" ? `${Number(bill.mileage).toLocaleString()} km` : "—"}
+                      {bill.mileage != null && bill.mileage !== "" ? t("common.km", { count: Number(bill.mileage).toLocaleString() }) : "—"}
                     </p>
                     {isServiceJob && (
                       <>
-                        <p className="mt-3 text-[10px] font-bold uppercase text-[#6f746e]">Next service</p>
+                        <p className="mt-3 text-[10px] font-bold uppercase text-[#6f746e]">{t("bill.next_service")}</p>
                         <p className="mt-1 font-semibold">
                           {bill.next_service_mileage != null && bill.next_service_mileage !== ""
-                            ? `${Number(bill.next_service_mileage).toLocaleString()} km`
+                            ? t("common.km", { count: Number(bill.next_service_mileage).toLocaleString() })
                             : "—"}
                         </p>
                       </>
@@ -1467,11 +1470,11 @@ export default function BillDetailPage() {
                             value={mileageDraft}
                             onChange={(event) => setMileageDraft(event.target.value)}
                             className={`${inputClass} min-w-0`}
-                            placeholder="Current km"
+                            placeholder={t("bill.current_km")}
                           />
                           {!isServiceJob && (
                             <button type="submit" disabled={savingMileage} className="inline-flex h-8 shrink-0 items-center justify-center border border-[#20221f] px-2.5 text-[10px] font-bold uppercase">
-                              {savingMileage ? "..." : "Save"}
+                              {savingMileage ? "..." : t("common.save")}
                             </button>
                           )}
                         </div>
@@ -1484,10 +1487,10 @@ export default function BillDetailPage() {
                               value={nextServiceMileageDraft}
                               onChange={(event) => setNextServiceMileageDraft(event.target.value)}
                               className={inputClass}
-                              placeholder="Next service km"
+                              placeholder={t("bill.next_km")}
                             />
                             <button type="submit" disabled={savingMileage} className="inline-flex h-8 items-center justify-center border border-[#20221f] px-3 text-[10px] font-bold uppercase">
-                              {savingMileage ? "..." : "Save"}
+                              {savingMileage ? "..." : t("common.save")}
                             </button>
                           </>
                         )}
@@ -1498,20 +1501,20 @@ export default function BillDetailPage() {
               ) : (
                 <div className="sm:col-span-2">
                   <p className="text-[10px] font-bold uppercase text-[#6f746e]">
-                    {isStore ? (bill.job_kind === "repair" ? "Repair" : "Sale") : bill.job_kind === "parts_sale" ? "Instant bill" : "Type"}
+                    {isStore ? (bill.job_kind === "repair" ? t("bill.repair") : t("bill.sale")) : bill.job_kind === "parts_sale" ? t("bill.instant_bill") : t("common.type")}
                   </p>
                   <p className="mt-1 font-semibold">
                     {isStore
-                      ? (bill.notes || (bill.job_kind === "repair" ? "Repair job" : "Counter sale"))
-                      : (bill.job_kind === "parts_sale" ? "No vehicle · walk-in" : profile.label)}
+                      ? (bill.notes || (bill.job_kind === "repair" ? t("bill.repair_job") : t("bill.counter_sale")))
+                      : (bill.job_kind === "parts_sale" ? t("bill.no_vehicle") : t(`terms.${profile.label}`))}
                   </p>
                 </div>
               )}
               {(bill.warranty_until || Number(bill.warranty_months) > 0) && (
                 <div>
-                  <p className="text-[10px] font-bold uppercase text-[#6f746e]">Warranty</p>
+                  <p className="text-[10px] font-bold uppercase text-[#6f746e]">{t("common.warranty")}</p>
                   <p className="mt-1 font-semibold">
-                    {warrantyLabel(bill.warranty_months, bill.warranty_until, bill.warranty_starts_on)}
+                    {warrantyLabel(bill.warranty_months, bill.warranty_until, bill.warranty_starts_on, t)}
                   </p>
                 </div>
               )}
@@ -1521,8 +1524,8 @@ export default function BillDetailPage() {
           {canWarranty && usesVehicleJobs(profile.type) && (
             <Panel className="no-print">
               <div className="border-b border-[#d7d3c8] px-5 py-3">
-                <h2 className="font-display text-xl font-semibold uppercase">Job warranty</h2>
-                <p className="text-[11px] text-[#6f746e]">Printed on the customer bill. Choose months or years from the job date.</p>
+                <h2 className="font-display text-xl font-semibold uppercase">{t("warranty.job_title")}</h2>
+                <p className="text-[11px] text-[#6f746e]">{t("warranty.job_hint")}</p>
               </div>
               <form onSubmit={saveJobWarranty} className="space-y-3 p-5">
                 <WarrantyFields
@@ -1531,11 +1534,11 @@ export default function BillDetailPage() {
                   months={bill.warranty_months}
                   startsOn={bill.warranty_starts_on}
                   until={bill.warranty_until}
-                  hint="Covers the work on this job. 3 months, 1 year, or a custom end date."
+                  hint={t("warranty.job_fields_hint")}
                 />
                 {!isLocked && (
                   <button type="submit" disabled={savingJobWarranty} className={buttonClass}>
-                    {savingJobWarranty ? "Saving..." : "Save warranty"}
+                    {savingJobWarranty ? t("common.saving") : t("warranty.save")}
                   </button>
                 )}
               </form>
@@ -1544,19 +1547,19 @@ export default function BillDetailPage() {
 
           <Panel className="staff-only no-print">
             <div className="border-b border-[#d7d3c8] px-5 py-3">
-              <h2 className="font-display text-xl font-semibold uppercase">Staff only</h2>
+              <h2 className="font-display text-xl font-semibold uppercase">{t("bill.staff_only")}</h2>
               <p className="text-[11px] text-[#6f746e]">
                 {isClosed
-                  ? "Closed bills are locked. Notes and staff assignment cannot be changed."
+                  ? t("bill.locked_notes")
                   : isGarage
-                    ? "Assigned staff stay off the customer bill. The additional note prints at the end."
-                    : "Hidden from the customer bill, print, and SMS link."}
+                    ? t("bill.staff_garage")
+                    : t("bill.staff_hidden")}
               </p>
             </div>
             <div className="grid gap-5 p-5 lg:grid-cols-2">
               <form onSubmit={saveInternalNotes} className="space-y-2">
                 <label className="block text-[11px] font-bold uppercase">
-                  {isGarage ? "Additional note" : "Internal note"}
+                  {isGarage ? t("bill.additional_note") : t("bill.internal_note")}
                   <textarea
                     value={internalNotes}
                     onChange={(event) => setInternalNotes(event.target.value)}
@@ -1564,13 +1567,13 @@ export default function BillDetailPage() {
                     disabled={isClosed}
                     className={`${inputClass} mt-2 disabled:opacity-60`}
                     placeholder={isGarage
-                      ? "Printed at the end of the bill for the customer"
-                      : "Workshop notes the customer should not see"}
+                      ? t("bill.note_print_placeholder")
+                      : t("bill.note_staff_placeholder")}
                   />
                 </label>
                 {isGarage && (
                   <div>
-                    <p className="text-[10px] font-bold uppercase text-[#6f746e]">Note background</p>
+                    <p className="text-[10px] font-bold uppercase text-[#6f746e]">{t("bill.note_background")}</p>
                     <div className="mt-2 flex items-center gap-1.5">
                       {(["blue", "red"] as const).map((color) => (
                         <button
@@ -1578,7 +1581,7 @@ export default function BillDetailPage() {
                           type="button"
                           disabled={isClosed}
                           onClick={() => setNoteColor(color)}
-                          aria-label={color === "red" ? "Maroon" : "Navy"}
+                          aria-label={color === "red" ? t("common.maroon") : t("common.navy")}
                           aria-pressed={noteColor === color}
                           className={`size-7 border disabled:opacity-50 ${
                             color === "red" ? "bg-[#7a1c2e]" : "bg-[#1b365d]"
@@ -1590,20 +1593,20 @@ export default function BillDetailPage() {
                 )}
                 {!isClosed && (
                   <button type="submit" disabled={savingNotes} className={buttonClass}>
-                    {savingNotes ? "Saving..." : "Save note"}
+                    {savingNotes ? t("common.saving") : t("bill.save_note")}
                   </button>
                 )}
               </form>
               {canAssignEmployees && (
                 <div className="space-y-2">
-                  <p className="text-[11px] font-bold uppercase">Assigned employees <span className="font-normal text-[#6f746e]">optional</span></p>
+                  <p className="text-[11px] font-bold uppercase">{t("bill.assigned_employees")} <span className="font-normal text-[#6f746e]">{t("common.optional")}</span></p>
                   <EmployeePicker
                     employees={employeeOptions}
                     selectedIds={employeeIds}
                     onChange={(ids) => { void saveEmployees(ids); }}
                     disabled={savingEmployees || isClosed}
                   />
-                  {savingEmployees && <p className="text-[11px] text-[#6f746e]">Saving…</p>}
+                  {savingEmployees && <p className="text-[11px] text-[#6f746e]">{t("common.saving")}</p>}
                 </div>
               )}
             </div>
@@ -1621,21 +1624,23 @@ export default function BillDetailPage() {
           {isClosed && (
             <div className="no-print flex flex-wrap items-center gap-2 border border-[#20221f]/15 bg-[#20221f]/5 px-4 py-3 text-sm text-[#20221f]">
               <Lock size={16} />
-              This {profile.billingSingular.toLowerCase()} is closed and locked.
-              {amountRefunded > 0 ? ` Refunded ${money(amountRefunded)}.` : ""}
-              {" "}Only refund, SMS, watermark, and print remain available.
+              {t("bill.closed_banner", { kind: t(`terms.${profile.billingSingular}`).toLowerCase() })}
+              {amountRefunded > 0 ? ` ${t("bill.refunded_amount", { amount: money(amountRefunded) })}` : ""}
+              {" "}{t("bill.closed_actions")}
             </div>
           )}
           {isOweIn && (
             <div className="no-print flex items-center gap-2 border border-[#2b6cb0]/20 bg-[#2b6cb0]/8 px-4 py-3 text-sm text-[#2b6cb0]">
               <Lock size={16} />
-              This {profile.billingSingular.toLowerCase()} is on owe in{bill.owe_in_due_date ? ` until ${formatDate(bill.owe_in_due_date)}` : ""}. Items are locked; payments can still be recorded.
+              {bill.owe_in_due_date
+                ? t("bill.owe_until", { kind: t(`terms.${profile.billingSingular}`).toLowerCase(), date: formatDate(bill.owe_in_due_date) })
+                : `${t("bill.owe_banner", { kind: t(`terms.${profile.billingSingular}`).toLowerCase() })} ${t("bill.owe_items_locked")}`}
             </div>
           )}
 
           <Panel>
             <div className="bill-section-head border-b border-[#d7d3c8] px-5 py-4">
-              <h2 className="font-display text-2xl font-semibold uppercase">Bill items</h2>
+              <h2 className="font-display text-2xl font-semibold uppercase">{t("bill.bill_items")}</h2>
             </div>
             <div className="bill-items-scroll print:overflow-visible">
               <table className="bill-items-table w-full min-w-[36rem] text-left text-sm print:min-w-0">
@@ -1649,11 +1654,11 @@ export default function BillDetailPage() {
                 </colgroup>
                 <thead className="bg-[#eeece5] text-[10px] uppercase text-[#6f746e]">
                   <tr>
-                    <th className="px-4 py-3">Description</th>
-                    <th className="px-3 py-3">Type</th>
-                    <th className="px-3 py-3 text-right">Qty</th>
-                    <th className="px-3 py-3 text-right">Rate</th>
-                    <th className="px-4 py-3 text-right">Total</th>
+                    <th className="px-4 py-3">{t("common.description")}</th>
+                    <th className="px-3 py-3">{t("common.type")}</th>
+                    <th className="px-3 py-3 text-right">{t("common.qty")}</th>
+                    <th className="px-3 py-3 text-right">{t("bill.rate")}</th>
+                    <th className="px-4 py-3 text-right">{t("common.total")}</th>
                     {!isLocked && <th className="no-print px-2 py-3" />}
                   </tr>
                 </thead>
@@ -1670,13 +1675,13 @@ export default function BillDetailPage() {
                                 onClick={() => setExpandedPanels((current) => ({ ...current, [row.groupId]: !open }))}
                                 className="no-print mr-1 inline-flex align-middle text-[#6f746e]"
                                 aria-expanded={open}
-                                aria-label={open ? `Hide ${row.name} details` : `Show ${row.name} details`}
+                                aria-label={open ? t("bill.hide_details", { name: row.name }) : t("bill.show_details", { name: row.name })}
                               >
                                 <ChevronDown size={16} className={`transition ${open ? "" : "-rotate-90"}`} />
                               </button>
                               <span className="font-semibold">{row.name}</span>
                             </td>
-                            <td className="px-3 py-3 whitespace-nowrap text-[#6f746e]">Panel</td>
+                            <td className="px-3 py-3 whitespace-nowrap text-[#6f746e]">{t("bill.panel")}</td>
                             <td className="px-3 py-3 whitespace-nowrap text-right tabular-nums">—</td>
                             <td className="px-3 py-3 whitespace-nowrap text-right tabular-nums">—</td>
                             <td className="px-4 py-3 whitespace-nowrap text-right tabular-nums">
@@ -1685,7 +1690,7 @@ export default function BillDetailPage() {
                             </td>
                             {!isLocked && (
                               <td className="no-print px-2 py-3">
-                                <button onClick={() => remove(row.items[0].id)} className="text-[#b84837]" title="Remove panel">
+                                <button onClick={() => remove(row.items[0].id)} className="text-[#b84837]" title={t("bill.remove_panel")}>
                                   <Trash2 size={16} />
                                 </button>
                               </td>
@@ -1731,7 +1736,7 @@ export default function BillDetailPage() {
                   <tbody>
                     <tr className="bill-discount-row border-t-2 border-[#167c73]/35 bg-[#e7f4f2]">
                       <td colSpan={5} className="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-[#167c73]">
-                        Discount
+                        {t("common.discount")}
                       </td>
                       {!isLocked && <td className="no-print" />}
                     </tr>
@@ -1739,7 +1744,7 @@ export default function BillDetailPage() {
                       <tr key={item.id} className="bill-discount-row border-t border-[#167c73]/20 bg-[#e7f4f2] align-top text-[#167c73]">
                         <td className="px-4 py-3 font-semibold break-words">{item.description}</td>
                         <td className="px-3 py-3 whitespace-nowrap">
-                          {billItemLabel(item.type, profile)}
+                          {billItemLabel(item.type, profile, t)}
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap text-right tabular-nums">
                           {Number(item.quantity) > 1 ? Number(item.quantity) : "—"}
@@ -1754,7 +1759,7 @@ export default function BillDetailPage() {
                         </td>
                         {!isLocked && (
                           <td className="no-print px-2 py-3">
-                            <button onClick={() => remove(item.id)} className="text-[#b84837]" title="Remove item">
+                            <button onClick={() => remove(item.id)} className="text-[#b84837]" title={t("bill.remove_item")}>
                               <Trash2 size={16} />
                             </button>
                           </td>
@@ -1764,25 +1769,25 @@ export default function BillDetailPage() {
                   </tbody>
                 )}
               </table>
-              {billItems.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No charges yet.</p>}
+              {billItems.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">{t("bill.no_charges")}</p>}
             </div>
           </Panel>
 
           {bill.payments.length > 0 && (
             <Panel>
               <div className="bill-section-head border-b border-[#d7d3c8] px-5 py-4">
-                <h2 className="font-display text-2xl font-semibold uppercase">Payments</h2>
+                <h2 className="font-display text-2xl font-semibold uppercase">{t("bill.payments")}</h2>
               </div>
               <div className="divide-y divide-[#e2ded4]">
                 {bill.payments.map((payment) => (
                   <div key={payment.id} className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
                     <div className="min-w-0 flex-1">
-                      <span className="uppercase text-[#6f746e]">{payment.method.replace("_", " ")}</span>
+                      <span className="uppercase text-[#6f746e]">{t(`method.${payment.method}`)}</span>
                       {payment.method === "cheque" && (
                         <p className="mt-0.5 text-[11px] text-[#6f746e]">
-                          {payment.cheque_number ? `#${payment.cheque_number}` : "Cheque"}
+                          {payment.cheque_number ? `#${payment.cheque_number}` : t("method.cheque")}
                           {payment.cheque_date ? ` · ${formatDate(payment.cheque_date)}` : ""}
-                          {payment.cheque_status ? ` · ${payment.cheque_status}` : ""}
+                          {payment.cheque_status ? ` · ${t(`status.${payment.cheque_status}`)}` : ""}
                           {payment.reference ? ` · ${payment.reference}` : ""}
                         </p>
                       )}
@@ -1796,7 +1801,7 @@ export default function BillDetailPage() {
                           onClick={() => void clearCheque(payment.id)}
                           className="no-print text-[11px] font-bold uppercase text-[#167c73]"
                         >
-                          Clear
+                          {t("common.clear")}
                         </button>
                         <button
                           type="button"
@@ -1804,7 +1809,7 @@ export default function BillDetailPage() {
                           onClick={() => void bounceCheque(payment.id)}
                           className="no-print text-[11px] font-bold uppercase text-[#b84837]"
                         >
-                          Bounce
+                          {t("bill.bounce")}
                         </button>
                       </>
                     )}
@@ -1813,7 +1818,7 @@ export default function BillDetailPage() {
                         type="button"
                         onClick={() => removePayment(payment.id)}
                         className="no-print text-[#b84837]"
-                        title="Remove payment"
+                        title={t("bill.remove_payment")}
                       >
                         <Trash2 size={16} />
                       </button>
@@ -1827,29 +1832,29 @@ export default function BillDetailPage() {
           {(bill.refunds?.length ?? 0) > 0 && (
             <Panel className="no-print">
               <div className="bill-section-head border-b border-[#d7d3c8] px-5 py-4">
-                <h2 className="font-display text-2xl font-semibold uppercase">Refunds</h2>
+                <h2 className="font-display text-2xl font-semibold uppercase">{t("bill.refunds")}</h2>
               </div>
               <div className="divide-y divide-[#e2ded4]">
                 {(bill.refunds ?? []).map((refund) => (
                   <div key={refund.id} className="space-y-2 px-5 py-3 text-sm">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-[#b84837]">{money(refund.amount)}</span>
-                      <span className="uppercase text-[#6f746e]">{refund.method.replace("_", " ")}</span>
+                      <span className="uppercase text-[#6f746e]">{t(`method.${refund.method}`)}</span>
                       <span className="text-[#6f746e]">{formatDate(refund.refunded_at)}</span>
                     </div>
                     <p className="text-[#4f544e]">{refund.reason}</p>
                     <ul className="space-y-1 text-[12px] text-[#6f746e]">
                       {(refund.items ?? []).map((item) => (
                         <li key={item.id}>
-                          {item.bill_item?.description ?? `Item #${item.bill_item_id}`}
+                          {item.bill_item?.description ?? t("bill.item_n", { id: item.bill_item_id })}
                           {" · "}
-                          qty {item.quantity}
+                          {t("bill.qty_short", { qty: item.quantity })}
                           {" · "}
                           {money(item.amount)}
                           {item.disposition === "restock"
-                            ? " · returned to stock"
+                            ? ` · ${t("bill.returned_stock")}`
                             : item.disposition === "write_off"
-                              ? " · written off"
+                              ? ` · ${t("bill.written_off")}`
                               : ""}
                         </li>
                       ))}
@@ -1867,16 +1872,16 @@ export default function BillDetailPage() {
             {!isOweIn && (
             <div className="grid grid-cols-2 border-b border-[#d7d3c8]">
               <button onClick={() => setMode("item")} className={`h-8 text-[11px] font-semibold ${mode === "item" ? "bg-[#20221f] text-white" : ""}`}>
-                <Plus className="inline" size={16} /> Add item
+                <Plus className="inline" size={16} /> {t("bill.add_item")}
               </button>
               <button onClick={() => setMode("payment")} className={`h-8 text-[11px] font-semibold ${mode === "payment" ? "bg-[#167c73] text-white" : ""}`}>
-                <CreditCard className="inline" size={16} /> Payment
+                <CreditCard className="inline" size={16} /> {t("bill.payment")}
               </button>
             </div>
             )}
             {isOweIn && (
               <div className="border-b border-[#d7d3c8] px-5 py-3">
-                <p className="text-xs font-bold uppercase text-[#2b6cb0]">Record payment</p>
+                <p className="text-xs font-bold uppercase text-[#2b6cb0]">{t("bill.record_payment")}</p>
               </div>
             )}
 
@@ -1890,7 +1895,7 @@ export default function BillDetailPage() {
                       paint={isPaint}
                     />
                     <label className="block text-xs font-bold uppercase">
-                      Quantity
+                      {t("common.quantity")}
                       <input
                         type="number"
                         min="1"
@@ -1900,7 +1905,7 @@ export default function BillDetailPage() {
                         className={`${inputClass} mt-2`}
                       />
                     </label>
-                    <p className="text-xs font-bold uppercase">{isPaint ? "Packages" : "Services"}</p>
+                    <p className="text-xs font-bold uppercase">{isPaint ? t("bill.packages") : t("bill.services")}</p>
                     <div className="grid grid-cols-2 gap-1.5">
                       {addons.map((addon) => {
                         const busy = addingAddonId === addon.id;
@@ -1918,7 +1923,7 @@ export default function BillDetailPage() {
                           >
                             <span className="block text-[10px] font-bold uppercase leading-tight">{addon.name}</span>
                             <span className={`mt-1 block text-xs tabular-nums ${addon.is_full_service ? "text-white/80" : "text-[#6f746e]"}`}>
-                              {busy ? "Adding..." : money(addon.price)}
+                              {busy ? t("bill.adding") : money(addon.price)}
                             </span>
                           </button>
                         );
@@ -1927,8 +1932,8 @@ export default function BillDetailPage() {
                     {addons.length === 0 && (
                       <p className="text-sm text-[#6f746e]">
                         {isPaint
-                          ? "No paint packages yet. Ask the owner to add them under Paint packages."
-                          : "No service buttons yet. Ask the owner to add them under Service addons."}
+                          ? t("bill.no_packages")
+                          : t("bill.no_services")}
                       </p>
                     )}
                   </div>
@@ -1945,7 +1950,7 @@ export default function BillDetailPage() {
                 )}
                 {!isServiceJob && (
                 <div>
-                  <p className="mb-2 text-xs font-bold uppercase">Type</p>
+                  <p className="mb-2 text-xs font-bold uppercase">{t("common.type")}</p>
                   <div className="flex gap-1">
                     {itemTypes.map((option) => {
                       const selected = activeType === option.value;
@@ -1966,7 +1971,7 @@ export default function BillDetailPage() {
                               : "border-[#d7d3c8] bg-[#fbfaf6] text-[#20221f] hover:border-[#20221f]"
                           }`}
                         >
-                          {option.label}
+                          {t(`terms.${option.label}`)}
                         </button>
                       );
                     })}
@@ -1995,7 +2000,7 @@ export default function BillDetailPage() {
                           }}
                           className="size-4 accent-[#167c73]"
                         />
-                        <span className="text-[10px] font-bold uppercase">Bought outside</span>
+                        <span className="text-[10px] font-bold uppercase">{t("bill.bought_outside")}</span>
                       </label>
                       <label className="flex cursor-pointer items-center gap-2 border border-[#d7d3c8] bg-[#fbfaf6] px-2.5 py-2">
                         <input
@@ -2012,7 +2017,7 @@ export default function BillDetailPage() {
                           }}
                           className="size-4 accent-[#167c73]"
                         />
-                        <span className="text-[10px] font-bold uppercase">Customer supplied</span>
+                        <span className="text-[10px] font-bold uppercase">{t("bill.customer_supplied")}</span>
                       </label>
                     </div>
                     ) : null}
@@ -2020,7 +2025,7 @@ export default function BillDetailPage() {
                     {useStockSearch ? (
                       <div key="stock-search" className="space-y-3">
                         <label className="block text-xs font-bold uppercase">
-                          Search / scan barcode
+                          {t("bill.search_scan")}
                           <input
                             value={partQuery}
                             onChange={(event) => {
@@ -2040,13 +2045,13 @@ export default function BillDetailPage() {
                               void selectPartByScan(partQuery);
                             }}
                             className={`${inputClass} mt-2`}
-                            placeholder="Scan barcode or type name / SKU"
+                            placeholder={t("bill.scan_placeholder")}
                             autoComplete="off"
                           />
                         </label>
                         <div className="max-h-44 overflow-y-auto border border-[#d7d3c8] bg-white">
                           {filteredParts.length === 0 ? (
-                            <p className="p-3 text-sm text-[#6f746e]">No matching stock.</p>
+                            <p className="p-3 text-sm text-[#6f746e]">{t("bill.no_matching_stock")}</p>
                           ) : (
                             filteredParts.map((part) => (
                               <button
@@ -2062,7 +2067,7 @@ export default function BillDetailPage() {
                                 <span>
                                   <span className="font-semibold">{part.name}</span>
                                   {part.barcode && (
-                                    <span className="mt-0.5 block text-[10px] text-[#6f746e]">Barcode: {part.barcode}</span>
+                                    <span className="mt-0.5 block text-[10px] text-[#6f746e]">{t("common.barcode", { code: part.barcode })}</span>
                                   )}
                                 </span>
                                 <span className="text-xs text-[#6f746e]">{part.stock_qty} · {money(part.price)}</span>
@@ -2072,7 +2077,7 @@ export default function BillDetailPage() {
                         </div>
                         {selectedPart && (
                           <p className="text-xs text-[#167c73]">
-                            Selected: {selectedPart.name}
+                            {t("common.selected", { name: selectedPart.name })}
                             {selectedPart.barcode ? ` · ${selectedPart.barcode}` : ""}
                           </p>
                         )}
@@ -2080,35 +2085,35 @@ export default function BillDetailPage() {
                     ) : outsidePart ? (
                       <div key="outside-part" className="space-y-3">
                         <label className="block text-xs font-bold uppercase">
-                          Part description
-                          <input name="description" required className={`${inputClass} mt-2`} placeholder="e.g. Oil filter bought outside" />
+                          {t("bill.part_description")}
+                          <input name="description" required className={`${inputClass} mt-2`} placeholder={t("bill.outside_placeholder")} />
                         </label>
                         <div className="grid grid-cols-2 gap-3">
                           <label className="block text-xs font-bold uppercase">
-                            Selling price
+                            {t("bill.selling_price")}
                             <input name="unit_price" type="number" min="0" step="0.01" required className={`${inputClass} mt-2`} />
                           </label>
                           <label className="block text-xs font-bold uppercase">
-                            Purchase cost
+                            {t("bill.purchase_cost")}
                             <input name="purchase_unit_cost" type="number" min="0" step="0.01" required className={`${inputClass} mt-2`} />
                           </label>
                         </div>
                         <p className="text-[11px] text-[#6f746e]">
-                          Purchase cost is added to inventory expenses for profit calculation.
+                          {t("bill.purchase_hint")}
                         </p>
                       </div>
                     ) : (
                       <div key="customer-part">
                         <label className="block text-xs font-bold uppercase">
-                          Part description
-                          <input name="description" required className={`${inputClass} mt-2`} placeholder="e.g. Customer brought brake pads" />
+                          {t("bill.part_description")}
+                          <input name="description" required className={`${inputClass} mt-2`} placeholder={t("bill.customer_part_placeholder")} />
                         </label>
                       </div>
                     )}
                   </>
                 ) : isPanelComposer ? (
                   <>
-                    <p className="text-[11px] text-[#6f746e]">Pick the panel, then add labor and materials. The customer only sees the panel total.</p>
+                    <p className="text-[11px] text-[#6f746e]">{t("bill.panel_hint")}</p>
                     <label className="block text-xs font-bold uppercase">
                       Panel
                       <select
@@ -2126,30 +2131,30 @@ export default function BillDetailPage() {
                         required={!panelCustom}
                         className={`${inputClass} mt-2`}
                       >
-                        <option value="">Select a panel</option>
+                        <option value="">{t("bill.select_panel")}</option>
                         {PAINT_PANEL_NAMES.map((name) => (
-                          <option key={name} value={name}>{name}</option>
+                          <option key={name} value={name}>{t(`panels.${name}`)}</option>
                         ))}
-                        <option value="__custom__">Other panel…</option>
+                        <option value="__custom__">{t("bill.other_panel")}</option>
                       </select>
                     </label>
                     {panelCustom && (
                       <label className="block text-xs font-bold uppercase">
-                        Panel name
+                        {t("bill.panel_name")}
                         <input
                           name="panel_name"
                           required
                           className={`${inputClass} mt-2`}
-                          placeholder="e.g. Left rear door"
+                          placeholder={t("bill.panel_placeholder")}
                         />
                       </label>
                     )}
                     <div className="space-y-2 border-t border-[#e2ded4] pt-3">
-                      <p className="text-xs font-bold uppercase">Labor</p>
+                      <p className="text-xs font-bold uppercase">{t("bill.labor")}</p>
                       <LaborCatalogPicker
                         categories={laborCategories}
                         selectedId=""
-                        placeholder="Search masking, tinkering, primer, polish…"
+                        placeholder={t("bill.search_labor_paint")}
                         onSelect={(item) => {
                           if (item) addComposerLabor(item);
                         }}
@@ -2162,14 +2167,14 @@ export default function BillDetailPage() {
                               type="button"
                               onClick={() => setComposerLabor((current) => current.filter((entry) => entry.key !== row.key))}
                               className="text-[#b84837]"
-                              aria-label={`Remove ${row.name}`}
+                              aria-label={t("picker.remove_name", { name: row.name })}
                             >
                               <Trash2 size={14} />
                             </button>
                           </div>
                           <div className="mt-2 grid grid-cols-[1fr_auto] items-end gap-2">
                             <label className="text-[10px] font-bold uppercase">
-                              Hours
+                              {t("common.hours")}
                               <input
                                 type="number"
                                 min="0.01"
@@ -2184,13 +2189,13 @@ export default function BillDetailPage() {
                               {money(Number(row.hours || 0) * row.rate)}
                             </p>
                           </div>
-                          <p className="mt-1 text-[10px] text-[#6f746e]">{money(row.rate)}/h</p>
+                          <p className="mt-1 text-[10px] text-[#6f746e]">{t("common.per_hour", { amount: money(row.rate) })}</p>
                         </div>
                       ))}
                     </div>
                     <div className="space-y-2 border-t border-[#e2ded4] pt-3">
-                      <p className="text-xs font-bold uppercase">Materials</p>
-                      <p className="text-[11px] text-[#6f746e]">Putty, primer, paint, clear — millilitres from color stock.</p>
+                      <p className="text-xs font-bold uppercase">{t("bill.materials")}</p>
+                      <p className="text-[11px] text-[#6f746e]">{t("bill.materials_hint")}</p>
                       {composerMaterials.map((row) => (
                         <div key={row.key} className="border border-[#d7d3c8] bg-[#fbfaf6] p-2.5">
                           <div className="flex items-start justify-between gap-2">
@@ -2199,14 +2204,14 @@ export default function BillDetailPage() {
                               type="button"
                               onClick={() => setComposerMaterials((current) => current.filter((entry) => entry.key !== row.key))}
                               className="text-[#b84837]"
-                              aria-label={`Remove ${row.name}`}
+                              aria-label={t("picker.remove_name", { name: row.name })}
                             >
                               <Trash2 size={14} />
                             </button>
                           </div>
                           <div className="mt-2 grid grid-cols-[1fr_auto] items-end gap-2">
                             <label className="text-[10px] font-bold uppercase">
-                              ml
+                              {t("common.ml")}
                               <input
                                 type="number"
                                 min="1"
@@ -2215,23 +2220,23 @@ export default function BillDetailPage() {
                                 value={row.qty}
                                 onChange={(event) => setComposerMaterials((current) => current.map((entry) => entry.key === row.key ? { ...entry, qty: event.target.value } : entry))}
                                 className={`${inputClass} mt-1`}
-                                placeholder="e.g. 180"
+                                placeholder={t("bill.ml_placeholder")}
                               />
                             </label>
                             <p className="pb-2 text-right text-sm font-semibold tabular-nums">
                               {money(Number(row.qty || 0) * row.unitPrice)}
                             </p>
                           </div>
-                          <p className="mt-1 text-[10px] text-[#6f746e]">{row.stock} ml in stock · {money(row.unitPrice)}/ml</p>
+                          <p className="mt-1 text-[10px] text-[#6f746e]">{t("bill.ml_in_stock", { qty: row.stock, price: money(row.unitPrice) })}</p>
                         </div>
                       ))}
                       <label className="block text-xs font-bold uppercase">
-                        Add material
+                        {t("bill.add_material")}
                         <input
                           value={mixQuery}
                           onChange={(event) => setMixQuery(event.target.value)}
                           className={`${inputClass} mt-2`}
-                          placeholder="Search putty, primer, base, clear…"
+                          placeholder={t("bill.search_materials")}
                           autoComplete="off"
                         />
                       </label>
@@ -2245,7 +2250,7 @@ export default function BillDetailPage() {
                               className="flex w-full items-center justify-between border-b border-[#eeeae1] px-3 py-2 text-left text-sm hover:bg-[#f7f5ef]"
                             >
                               <span className="font-semibold">{part.name}</span>
-                              <span className="text-xs text-[#6f746e]">{part.stock_qty} ml · {money(part.price)}</span>
+                              <span className="text-xs text-[#6f746e]">{part.stock_qty} {t("common.ml")} · {money(part.price)}</span>
                             </button>
                           ))}
                         </div>
@@ -2253,15 +2258,15 @@ export default function BillDetailPage() {
                     </div>
                     <div className="border-t border-[#e2ded4] pt-2 text-sm">
                       <div className="flex justify-between text-[#6f746e]">
-                        <span>Labor</span>
+                        <span>{t("bill.labor")}</span>
                         <span className="tabular-nums">{money(composerLaborAmount)}</span>
                       </div>
                       <div className="flex justify-between text-[#6f746e]">
-                        <span>Materials</span>
+                        <span>{t("bill.materials")}</span>
                         <span className="tabular-nums">{money(composerMaterialAmount)}</span>
                       </div>
                       <div className="mt-1 flex justify-between font-semibold text-[#167c73]">
-                        <span>Panel total</span>
+                        <span>{t("bill.panel_total")}</span>
                         <span className="tabular-nums">{money(panelTotal)}</span>
                       </div>
                     </div>
@@ -2271,7 +2276,7 @@ export default function BillDetailPage() {
                     <LaborCatalogPicker
                       categories={laborCategories}
                       selectedId={selectedLaborId}
-                      placeholder={isPaint ? "Search masking, blend, polish…" : "Search brakes, clutch, oil change…"}
+                      placeholder={isPaint ? t("bill.search_labor_blend") : t("bill.search_labor")}
                       onSelect={(item) => {
                         setSelectedLaborId(item ? String(item.id) : "");
                         if (item) setLaborHours(String(Number(item.standard_hours)));
@@ -2280,7 +2285,7 @@ export default function BillDetailPage() {
                     {selectedLabor ? (
                       <>
                         <label className="block text-xs font-bold uppercase">
-                          Hours
+                          {t("common.hours")}
                           <input
                             type="number"
                             min="0.01"
@@ -2292,28 +2297,28 @@ export default function BillDetailPage() {
                           />
                         </label>
                         <p className="text-sm text-[#167c73]">
-                          Amount {money(laborAmount)}
+                          {t("bill.amount_label", { amount: money(laborAmount) })}
                           <span className="ml-2 text-xs text-[#6f746e]">
-                            {money(selectedLabor.hourly_rate)}/h
+                            {t("common.per_hour", { amount: money(selectedLabor.hourly_rate) })}
                           </span>
                         </p>
                       </>
                     ) : (
                       <>
                         <p className="text-[11px] text-[#6f746e]">
-                          Pick from the catalog, or enter a custom labor line.
+                          {t("bill.custom_labor")}
                         </p>
                         <label className="block text-xs font-bold uppercase">
-                          Description
-                          <input name="description" required className={`${inputClass} mt-2`} placeholder={isPaint ? "e.g. Bumper respray — prep & spray" : "e.g. Front brake pads replacement"} />
+                          {t("common.description")}
+                          <input name="description" required className={`${inputClass} mt-2`} placeholder={isPaint ? t("bill.labor_placeholder_paint") : t("bill.labor_placeholder")} />
                         </label>
                         <div className="grid grid-cols-2 gap-3">
                           <label className="block text-xs font-bold uppercase">
-                            Hourly rate
+                            {t("bill.hourly_rate")}
                             <input name="unit_price" type="number" min="0" step="0.01" required className={`${inputClass} mt-2`} />
                           </label>
                           <label className="block text-xs font-bold uppercase">
-                            Hours
+                            {t("common.hours")}
                             <input
                               type="number"
                               min="0.01"
@@ -2331,23 +2336,23 @@ export default function BillDetailPage() {
                 ) : (
                   <>
                     <label className="block text-xs font-bold uppercase">
-                      {isStore && activeType === "labor" ? "Repair work" : "Description"}
+                      {isStore && activeType === "labor" ? t("bill.repair_work") : t("common.description")}
                       <input
                         name="description"
                         required
                         className={`${inputClass} mt-2`}
-                        placeholder={isStore && activeType === "labor" ? "e.g. Screen replacement" : undefined}
+                        placeholder={isStore && activeType === "labor" ? t("bill.screen_placeholder") : undefined}
                       />
                     </label>
                     {showCost && (
                       <label className="block text-xs font-bold uppercase">
-                        {isStore && activeType === "labor" ? "Amount" : "Cost"}
+                        {isStore && activeType === "labor" ? t("common.amount") : t("common.cost")}
                         <input name="unit_price" type="number" min="0" step="0.01" required className={`${inputClass} mt-2`} />
                       </label>
                     )}
                     {showQuantity && !(isStore && activeType === "labor") && (
                       <label className="block text-xs font-bold uppercase">
-                        Quantity
+                        {t("common.quantity")}
                         <input
                           name="quantity"
                           type="number"
@@ -2365,7 +2370,7 @@ export default function BillDetailPage() {
 
                 {isStockType && showQuantity && (selectedPartId || outsidePart || customerPart) && (
                   <label key={`qty-${outsidePart ? "outside" : customerPart ? "customer" : "stock"}`} className="block text-xs font-bold uppercase">
-                    {isPaint ? "Quantity (ml)" : "Quantity"}
+                    {isPaint ? t("bill.qty_ml") : t("common.quantity")}
                     <input
                       name="quantity"
                       type="number"
@@ -2382,15 +2387,15 @@ export default function BillDetailPage() {
                   <WarrantyFields
                     purchaseDate={bill?.admission_date}
                     hint={usesVehicleJobs(profile.type)
-                      ? "Optional cover on this line. Job warranty above covers the whole job."
-                      : "Starts on the day this customer bought the item. Set months or years, or a custom end date."}
+                      ? t("warranty.line_hint_job")
+                      : t("warranty.line_hint_sale")}
                   />
                 )}
                 </div>
 
                 <div className="shrink-0 border-t border-[#d7d3c8] bg-white p-4">
                   <button disabled={addingPanel} className={`${buttonClass} w-full`}>
-                    <Plus size={17} />{addingPanel ? "Adding..." : isPanelComposer ? "Add panel to bill" : "Add to bill"}
+                    <Plus size={17} />{addingPanel ? t("bill.adding") : isPanelComposer ? t("bill.add_panel") : t("bill.add_to_bill")}
                   </button>
                 </div>
               </form>
@@ -2398,28 +2403,28 @@ export default function BillDetailPage() {
             ) : (
               <form onSubmit={addPayment} className="space-y-4 p-5">
                 <label className="block text-xs font-bold uppercase">
-                  Amount
+                  {t("common.amount")}
                   <input name="amount" type="number" min="0.01" step="0.01" required className={`${inputClass} mt-2`} />
                 </label>
                 <label className="block text-xs font-bold uppercase">
-                  Method
+                  {t("common.method")}
                   <select
                     name="method"
                     value={paymentMethod}
                     onChange={(event) => setPaymentMethod(event.target.value)}
                     className={`${inputClass} mt-2`}
                   >
-                    <option value="cash">Cash</option>
-                    <option value="card">Card</option>
-                    <option value="bank_transfer">Bank transfer</option>
-                    <option value="cheque">Cheque</option>
-                    <option value="other">Other</option>
+                    <option value="cash">{t("method.cash")}</option>
+                    <option value="card">{t("method.card")}</option>
+                    <option value="bank_transfer">{t("method.bank_transfer")}</option>
+                    <option value="cheque">{t("method.cheque")}</option>
+                    <option value="other">{t("method.other")}</option>
                   </select>
                 </label>
                 {paymentMethod === "cheque" ? (
                   <>
                     <label className="block text-xs font-bold uppercase">
-                      Cheque date
+                      {t("bill.cheque_date")}
                       <input
                         name="cheque_date"
                         type="date"
@@ -2429,25 +2434,25 @@ export default function BillDetailPage() {
                       />
                     </label>
                     <label className="block text-xs font-bold uppercase">
-                      Cheque number
-                      <input name="cheque_number" required className={`${inputClass} mt-2`} placeholder="Cheque no." />
+                      {t("bill.cheque_number")}
+                      <input name="cheque_number" required className={`${inputClass} mt-2`} placeholder={t("bill.cheque_no")} />
                     </label>
                     <label className="block text-xs font-bold uppercase">
-                      Details / bank
-                      <input name="reference" className={`${inputClass} mt-2`} placeholder="Bank or note" />
+                      {t("bill.details_bank")}
+                      <input name="reference" className={`${inputClass} mt-2`} placeholder={t("bill.bank_note")} />
                     </label>
                     <p className="text-[11px] text-[#6f746e]">
-                      Cheque stays pending until you clear it. You cannot close the bill while a cheque is pending.
+                      {t("bill.cheque_hint")}
                     </p>
                   </>
                 ) : (
                   <label className="block text-xs font-bold uppercase">
-                    Reference
+                    {t("bill.reference")}
                     <input name="reference" className={`${inputClass} mt-2`} />
                   </label>
                 )}
                 <button className={`${buttonClass} w-full bg-[#167c73]`}>
-                  <CreditCard size={17} />Record payment
+                  <CreditCard size={17} />{t("bill.record_pay")}
                 </button>
               </form>
             )}
@@ -2455,31 +2460,31 @@ export default function BillDetailPage() {
           )}
 
           <Panel className="bill-summary p-5">
-            <p className="text-xs font-bold uppercase text-[#6f746e]">Bill summary</p>
+            <p className="text-xs font-bold uppercase text-[#6f746e]">{t("bill.summary")}</p>
             {hidePrintMoney && (
-              <p className="mt-3 hidden text-sm text-[#6f746e] print:block">Work list — amounts hidden on this repair note.</p>
+              <p className="mt-3 hidden text-sm text-[#6f746e] print:block">{t("bill.work_list")}</p>
             )}
             <div className={`mt-5 space-y-3 text-sm ${hidePrintMoney ? "print:hidden" : ""}`}>
-              <div className="flex justify-between gap-6"><span>Charges</span><strong className="tabular-nums">{money(bill.subtotal)}</strong></div>
+              <div className="flex justify-between gap-6"><span>{t("bill.charges")}</span><strong className="tabular-nums">{money(bill.subtotal)}</strong></div>
               <div className={`flex justify-between gap-6 ${Number(bill.total_deductions) > 0 ? "rounded-sm bg-[#e7f4f2] px-2 py-1.5 text-[#167c73]" : ""}`}>
-                <span>Deductions</span>
+                <span>{t("bill.deductions")}</span>
                 <strong className="tabular-nums">- {money(bill.total_deductions)}</strong>
               </div>
               {Number(bill.vat_amount) > 0 && (
-                <div className="flex justify-between gap-6"><span>VAT {bill.vat_rate ? `(${bill.vat_rate}%)` : ""}</span><strong className="tabular-nums">{money(bill.vat_amount ?? 0)}</strong></div>
+                <div className="flex justify-between gap-6"><span>{t("bill.vat")} {bill.vat_rate ? `(${bill.vat_rate}%)` : ""}</span><strong className="tabular-nums">{money(bill.vat_amount ?? 0)}</strong></div>
               )}
               {Number(bill.sscl_amount) > 0 && (
-                <div className="flex justify-between gap-6"><span>SSCL {bill.sscl_rate ? `(${bill.sscl_rate}%)` : ""}</span><strong className="tabular-nums">{money(bill.sscl_amount ?? 0)}</strong></div>
+                <div className="flex justify-between gap-6"><span>{t("bill.sscl")} {bill.sscl_rate ? `(${bill.sscl_rate}%)` : ""}</span><strong className="tabular-nums">{money(bill.sscl_amount ?? 0)}</strong></div>
               )}
-              <div className="flex justify-between gap-6"><span>Paid</span><strong className="tabular-nums">- {money(bill.amount_paid)}</strong></div>
+              <div className="flex justify-between gap-6"><span>{t("common.paid")}</span><strong className="tabular-nums">- {money(bill.amount_paid)}</strong></div>
               <div className="flex justify-between gap-6 border-t border-[#e2ded4] pt-3">
-                <span>Due</span>
+                <span>{t("common.due")}</span>
                 <strong className={`tabular-nums ${Number(bill.balance_due) > 0 ? "text-[#b84837]" : ""}`}>
                   {money(bill.balance_due)}
                 </strong>
               </div>
               <div className="flex justify-between gap-6 border-t-2 border-[#20221f] pt-4 text-sm uppercase">
-                <span>Balance</span>
+                <span>{t("common.balance")}</span>
                 <strong className={`tabular-nums ${Number(bill.customer_balance ?? 0) > 0 ? "text-[#167c73]" : ""}`}>
                   {money(bill.customer_balance ?? 0)}
                 </strong>
@@ -2488,7 +2493,7 @@ export default function BillDetailPage() {
           </Panel>
           {isGarage && internalNotes.trim() && (
             <div className={`bill-additional-note px-5 py-4 text-sm ${noteColor === "red" ? "bg-[#7a1c2e]/20 text-[#7a1c2e]" : "bg-[#1b365d]/20 text-[#1b365d]"}`}>
-              <p className="text-[10px] font-bold uppercase tracking-wide opacity-80">Additional note</p>
+              <p className="text-[10px] font-bold uppercase tracking-wide opacity-80">{t("bill.additional_note")}</p>
               <p className="mt-2 whitespace-pre-wrap">{internalNotes}</p>
             </div>
           )}
@@ -2548,6 +2553,7 @@ function ChargeItemRow({
   nested?: boolean;
   visible?: boolean;
 }) {
+  const t = useT();
   const fromCustomer = item.type === "customer_part";
   const isLaborLine = item.type === "labor";
   const isPartLine = item.type === "part" || fromCustomer;
@@ -2560,7 +2566,7 @@ function ChargeItemRow({
         <BillItemDescription item={item} />
       </td>
       <td className="px-3 py-3 whitespace-nowrap text-[#6f746e]">
-        {billItemLabel(item.type, profile)}
+        {billItemLabel(item.type, profile, t)}
       </td>
       <td className="px-3 py-3 whitespace-nowrap text-right tabular-nums">
         {isLaborLine ? (
@@ -2580,12 +2586,12 @@ function ChargeItemRow({
                     }
                   }}
                   className="h-8 w-[4.5rem] border border-[#c9c5b9] bg-white px-1.5 text-right text-[13px] tabular-nums"
-                  aria-label="Labor hours"
+                  aria-label={t("bill.labor_hours")}
                 />
-                <span className="text-[11px] text-[#6f746e]">h</span>
+                <span className="text-[11px] text-[#6f746e]">{t("common.h")}</span>
               </span>
             ) : (
-              <span className="no-print">{Number(item.quantity)} h</span>
+              <span className="no-print">{Number(item.quantity)} {t("common.h")}</span>
             )}
             <span className="hidden print:inline">—</span>
           </>
@@ -2596,7 +2602,7 @@ function ChargeItemRow({
           <span className="font-semibold text-[#167c73]">—</span>
         ) : isLaborLine ? (
           <>
-            <span className="no-print tabular-nums">{money(item.unit_price)}/h</span>
+            <span className="no-print tabular-nums">{t("common.per_hour", { amount: money(item.unit_price) })}</span>
             <span className="hidden print:inline">—</span>
           </>
         ) : (
@@ -2609,7 +2615,7 @@ function ChargeItemRow({
       <td className="px-4 py-3 whitespace-nowrap text-right">
         {fromCustomer ? (
           <span className="inline-block max-w-full font-semibold leading-snug text-[#167c73]">
-            Received from customer
+            {t("bill.received_customer")}
           </span>
         ) : (
           <>
@@ -2623,11 +2629,11 @@ function ChargeItemRow({
           {nested ? null : (
             <div className="flex items-center justify-end gap-1">
               {canWarranty && item.type !== "discount" && (
-                <button type="button" onClick={() => onEditWarranty?.(item)} className="text-[#167c73]" title={item.warranty_until ? "Edit warranty" : "Add warranty"}>
+                <button type="button" onClick={() => onEditWarranty?.(item)} className="text-[#167c73]" title={item.warranty_until ? t("warranty.edit") : t("warranty.add")}>
                   <ShieldCheck size={16} />
                 </button>
               )}
-              <button type="button" onClick={() => onRemove(item.id)} className="text-[#b84837]" title="Remove item">
+              <button type="button" onClick={() => onRemove(item.id)} className="text-[#b84837]" title={t("bill.remove_item")}>
                 <Trash2 size={16} />
               </button>
             </div>
@@ -2639,8 +2645,9 @@ function ChargeItemRow({
 }
 
 function BillItemDescription({ item }: { item: { description: string; included_services?: string[] | null; warranty_months?: number | null; warranty_starts_on?: string | null; warranty_until?: string | null } }) {
+  const t = useT();
   const { title, inclusions } = billLinePresentation(item);
-  const warranty = warrantyLabel(item.warranty_months, item.warranty_until, item.warranty_starts_on);
+  const warranty = warrantyLabel(item.warranty_months, item.warranty_until, item.warranty_starts_on, t);
   return (
     <>
       <p className="font-semibold">{title}</p>
@@ -2665,15 +2672,16 @@ function ServiceAddModeToggle({
   onChange: (mode: "services" | "inventory" | "discount") => void;
   paint?: boolean;
 }) {
-  const options = [
-    ["services", paint ? "Packages" : "Services"],
-    ...(!paint ? [["inventory", "Inventory"] as const] : []),
-    ["discount", "Discount"],
-  ] as const;
+  const t = useT();
+  const options: Array<["services" | "inventory" | "discount", string]> = [
+    ["services", paint ? t("bill.packages") : t("bill.services")],
+    ...(paint ? [] : [["inventory", t("bill.inventory")] as ["inventory", string]]),
+    ["discount", t("common.discount")],
+  ];
 
   return (
     <div>
-      <p className="mb-2 text-xs font-bold uppercase">Add</p>
+      <p className="mb-2 text-xs font-bold uppercase">{t("bill.add")}</p>
       <div className="flex gap-1">
         {options.map(([value, label]) => (
           <button

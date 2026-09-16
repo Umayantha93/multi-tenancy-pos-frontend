@@ -193,7 +193,8 @@ export function formatDate(value?: string | null) {
   const dateOnly = raw.match(/^(\d{4}-\d{2}-\d{2})/)?.[1];
   const parsed = new Date(dateOnly ? `${dateOnly}T12:00:00` : raw);
   if (Number.isNaN(parsed.getTime())) return raw;
-  return parsed.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  const locale = typeof window !== "undefined" && localStorage.getItem("garage_locale") === "si" ? "si-LK" : "en-GB";
+  return parsed.toLocaleDateString(locale, { day: "2-digit", month: "short", year: "numeric" });
 }
 
 export function mediaUrl(path?: string | null) {
