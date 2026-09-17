@@ -200,7 +200,29 @@ export default function BillsPage() {
       {error ? <ErrorMessage message={error} /> : loading ? (
         <PageState message={t("bills.loading", { kind: t(`terms.${profile.billingLabel}`).toLowerCase() })} />
       ) : (
-        <Panel>
+        <>
+        <div className="space-y-3 md:hidden">
+          {bills.map((bill) => {
+            const urgent = bill.status === "owe_in" && isOweInUrgent(bill.owe_in_due_date);
+            return (
+              <Link key={bill.id} href={`/bills/${bill.id}`}>
+                <Panel className={`p-4 ${urgent ? "border-[#b84837]" : ""}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">{bill.bill_number}</p>
+                      <p className="text-sm text-[#6f746e]">{bill.customer?.name ?? t("common.walk_in")}</p>
+                      <p className="mt-1 text-xs text-[#6f746e]">{usesStoreCounter(profile.type) ? (bill.notes || "—") : (bill.vehicle?.number_plate ?? "—")} · {formatDate(bill.admission_date)}</p>
+                    </div>
+                    <span className={`px-2 py-1 text-[10px] font-bold uppercase ${billStatusClass(billListStatus(bill), bill.owe_in_due_date)}`}>{billStatusLabel(billListStatus(bill), t)}</span>
+                  </div>
+                  <p className={`mt-3 text-right text-lg font-semibold ${urgent ? "text-[#b84837]" : ""}`}>{money(bill.balance_due)}</p>
+                </Panel>
+              </Link>
+            );
+          })}
+          {bills.length === 0 && <PageState message={t("bills.empty", { kind: t(`terms.${profile.billingLabel}`).toLowerCase() })} />}
+        </div>
+        <Panel className="hidden md:block">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-left text-sm">
               <thead className="bg-[#eeece5] text-[10px] uppercase text-[#6f746e]">
@@ -284,6 +306,7 @@ export default function BillsPage() {
             )}
           </div>
         </Panel>
+        </>
       )}
       {quickOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4" onClick={() => !quickSaving && setQuickOpen(false)}>

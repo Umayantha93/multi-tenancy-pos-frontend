@@ -71,7 +71,10 @@ const sharedPeopleFinance: Array<{ key: FeatureKey; name: string; group: string 
 
 const billProfitsNav: NavItem = { href: "/bill-profits", label: "Bill profits", icon: PieChart, feature: "bill_profits" };
 
+const myJobsNav: NavItem = { href: "/my-jobs", label: "My jobs", icon: ClipboardList, feature: "billing", staffSelf: true };
+
 const sharedNavTail: NavItem[] = [
+  myJobsNav,
   { href: "/customers", label: "Customers", icon: Contact, feature: "customers" },
   { href: "/employees", label: "Team", icon: Users, feature: "employees_management" },
   { href: "/shifts", label: "Shifts", icon: Clock, feature: "employees_management", staffSelf: true },
@@ -80,13 +83,14 @@ const sharedNavTail: NavItem[] = [
   { href: "/payroll", label: "Payroll", icon: ChartNoAxesCombined, feature: "payroll" },
   { href: "/reports", label: "Reports", icon: ClipboardList, feature: "reports" },
   { href: "/balance-sheet", label: "Finance", icon: ChartNoAxesCombined, feature: "balance_sheet" },
-  { href: "/shops", label: "Shops", icon: Store, owner: true },
+  { href: "/shops", label: "Shops", icon: Store },
   { href: "/profile", label: "Shop details", icon: UserRound, owner: true },
   { href: "/profile", label: "My details", icon: UserRound, staffSelf: true },
   { href: "/staff", label: "Staff access", icon: ShieldCheck, owner: true },
 ];
 
 const garmentPeopleNav: NavItem[] = [
+  myJobsNav,
   { href: "/customers", label: "Customers", icon: Contact, feature: "customers" },
   { href: "/employees", label: "Team", icon: Users, feature: "employees_management" },
   { href: "/shifts", label: "Shifts", icon: Clock, feature: "employees_management", staffSelf: true },
@@ -96,7 +100,7 @@ const garmentPeopleNav: NavItem[] = [
   { href: "/payroll", label: "Payroll", icon: ChartNoAxesCombined, feature: "payroll" },
   { href: "/reports", label: "Reports", icon: ClipboardList, feature: "reports" },
   { href: "/balance-sheet", label: "Finance", icon: ChartNoAxesCombined, feature: "balance_sheet" },
-  { href: "/shops", label: "Shops", icon: Store, owner: true },
+  { href: "/shops", label: "Shops", icon: Store },
   { href: "/profile", label: "Shop details", icon: UserRound, owner: true },
   { href: "/profile", label: "My details", icon: UserRound, staffSelf: true },
   { href: "/staff", label: "Staff access", icon: ShieldCheck, owner: true },
@@ -278,6 +282,55 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { value: "product", label: "Garment item", kind: "charge", allowQty: true },
       { value: "alteration", label: "Alteration", kind: "charge" },
       { value: "charge", label: "Other charge", kind: "charge" },
+      { value: "discount", label: "Discount", kind: "discount" },
+    ],
+  },
+  mobile_shop: {
+    type: "mobile_shop",
+    label: "Mobile shops",
+    operationsLabel: "Mobile shop operations",
+    billingLabel: "Sales",
+    billingSingular: "Sale",
+    openBillsLabel: "Open sales",
+    recentBillsTitle: "Latest sales",
+    recentBillsHint: "Phones, accessories, and open repairs",
+    primaryCta: { href: "/pos", label: "New sale", feature: "billing" },
+    quickActions: [
+      { href: "/pos", label: "New sale", feature: "billing" },
+      { href: "/repairs/new", label: "New repair", feature: "repair_bills" },
+      { href: "/warranties", label: "Warranties", feature: "warranties" },
+      { href: "/parts", label: "Find stock", feature: "parts_inventory" },
+      { href: "/bills", label: "Take payment", feature: "billing" },
+      { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
+    ],
+    defaultFeatures: [
+      "parts_inventory", "suppliers", "customers", "billing", "bill_sms", "bill_profits",
+      "repair_bills", "warranties",
+      "employees_management", "attendance", "payroll", "balance_sheet", "reports",
+    ],
+    moduleCatalog: [
+      { key: "billing", name: "Sales", group: "Service Intake" },
+      { key: "repair_bills", name: "Repair", group: "Service Intake" },
+      { key: "warranties", name: "Warranties", group: "Service Intake" },
+      { key: "parts_inventory", name: "Phones / stock", group: "Inventory" },
+      { key: "suppliers", name: "Suppliers", group: "Inventory" },
+      ...sharedPeopleFinance.filter((m) => m.key !== "billing"),
+    ],
+    navigation: [
+      { href: "/dashboard", label: "Overview", icon: Gauge },
+      { href: "/pos", label: "New sale", icon: ShoppingBag, feature: "billing" },
+      { href: "/bills", label: "Sales", icon: ReceiptText, feature: "billing" },
+      { href: "/repairs", label: "Repair bills", icon: Wrench, feature: "repair_bills" },
+      { href: "/warranties", label: "Warranties", icon: ShieldCheck, feature: "warranties" },
+      billProfitsNav,
+      { href: "/parts", label: "Stock", icon: Boxes, feature: "parts_inventory" },
+      suppliersNav,
+      ...sharedNavTail,
+    ],
+    billItemTypes: [
+      { value: "part", label: "Item", kind: "stock", allowQty: true },
+      { value: "charge", label: "Quick job", kind: "charge", allowQty: true },
+      { value: "labor", label: "Repair", kind: "charge" },
       { value: "discount", label: "Discount", kind: "discount" },
     ],
   },
@@ -512,6 +565,7 @@ export const BUSINESS_TYPE_OPTIONS: Array<{ value: BusinessType; label: string }
   { value: "photography", label: "Studios" },
   { value: "clothing", label: "Garments" },
   { value: "store", label: "Stores" },
+  { value: "mobile_shop", label: "Mobile shops" },
   { value: "salon", label: "Salons" },
   { value: "cottage", label: "Cottages" },
 ];
@@ -523,6 +577,7 @@ export const PLAN_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "studio-pro", label: "Studio Pro" },
   { value: "retail-pro", label: "Retail Pro" },
   { value: "store-pro", label: "Store Pro" },
+  { value: "mobile-pro", label: "Mobile Pro" },
   { value: "stay-pro", label: "Stay Pro" },
   { value: "salon-pro", label: "Salon Pro" },
   { value: "repair-pro", label: "Repair Pro" },
@@ -548,6 +603,8 @@ function matchPlan(type: BusinessType): string {
       return "retail-pro";
     case "store":
       return "store-pro";
+    case "mobile_shop":
+      return "mobile-pro";
     case "cottage":
       return "stay-pro";
     case "salon":
@@ -574,7 +631,11 @@ export function usesServiceAddonWorkspace(type?: string | null): boolean {
 }
 
 export function usesStoreCounter(type?: string | null): boolean {
-  return type === "store";
+  return type === "store" || type === "mobile_shop";
+}
+
+export function usesDeviceJobs(type?: string | null): boolean {
+  return type === "device_repair";
 }
 
 export function optionalFeaturesFor(type?: string | null): FeatureKey[] {

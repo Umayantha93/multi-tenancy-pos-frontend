@@ -137,6 +137,7 @@ export default function BillDetailPage() {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [error, setError] = useState("");
   const [mode, setMode] = useState<"item" | "payment">("item");
+  const [floorPane, setFloorPane] = useState<"work" | "pay">("work");
   const [type, setType] = useState<string>("");
   const [partQuery, setPartQuery] = useState("");
   const [selectedPartId, setSelectedPartId] = useState("");
@@ -1374,6 +1375,12 @@ export default function BillDetailPage() {
         </div>
       )}
       <BillingBranchBanner />
+      {!isClosed && (
+        <div className="no-print mb-4 grid grid-cols-2 xl:hidden">
+          <button type="button" onClick={() => setFloorPane("work")} className={`h-11 text-sm font-semibold ${floorPane === "work" ? "bg-[#20221f] text-white" : "border border-[#d7d3c8] bg-white"}`}>Items</button>
+          <button type="button" onClick={() => { setFloorPane("pay"); setMode("payment"); }} className={`h-11 text-sm font-semibold ${floorPane === "pay" ? "bg-[#167c73] text-white" : "border border-[#d7d3c8] bg-white"}`}>Pay {money(bill.balance_due)}</button>
+        </div>
+      )}
       <div className="bill-print-sheet min-w-0 max-w-full">
       <BillWatermark src={printWithLogo ? logoUrl : null} printOnly />
       <Panel className="bill-letterhead mb-5 overflow-hidden p-5">
@@ -1421,7 +1428,7 @@ export default function BillDetailPage() {
       </Panel>
 
       <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[1.55fr_0.75fr] print:block print:space-y-2">
-        <div className="min-w-0 space-y-5 print:space-y-2">
+        <div className={`min-w-0 space-y-5 print:space-y-2 ${!isClosed && floorPane !== "work" ? "hidden" : "block"} xl:block`}>
           <Panel>
             <div className="bill-meta grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
               <div>
@@ -1437,7 +1444,7 @@ export default function BillDetailPage() {
               {bill.vehicle ? (
                 <>
                   <div>
-                    <p className="text-[10px] font-bold uppercase text-[#6f746e]">{t("common.vehicle")}</p>
+                    <p className="text-[10px] font-bold uppercase text-[#6f746e]">{profile.type === "device_repair" ? t("admit.device") : t("common.vehicle")}</p>
                     <p className="mt-1 font-semibold">{bill.vehicle.number_plate}</p>
                     <p className="text-sm text-[#6f746e]">{bill.vehicle.make} {bill.vehicle.model}</p>
                   </div>
@@ -1866,7 +1873,7 @@ export default function BillDetailPage() {
           )}
         </div>
 
-        <div className="space-y-5 print:mt-2">
+        <div className={`space-y-5 print:mt-2 ${!isClosed && floorPane !== "pay" ? "hidden" : "block"} xl:block`}>
           {!isClosed && (
           <Panel className="no-print xl:sticky xl:top-4">
             {!isOweIn && (
@@ -2500,6 +2507,13 @@ export default function BillDetailPage() {
         </div>
       </div>
       </div>
+      {!isClosed && Number(bill.balance_due) > 0 && (
+        <div className="no-print sticky bottom-3 z-20 xl:hidden">
+          <button type="button" onClick={() => { setFloorPane("pay"); setMode("payment"); }} className={`${buttonClass} h-12 w-full text-sm`}>
+            Pay {money(bill.balance_due)}
+          </button>
+        </div>
+      )}
     </AppShell>
   );
 }

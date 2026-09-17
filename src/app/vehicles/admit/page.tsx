@@ -212,7 +212,7 @@ export default function AdmitVehiclePage() {
           <div>
             <p className="font-semibold">{isDevice ? t("admit.search_first_device") : t("admit.search_first_plate")}</p>
             <p className="text-sm text-[#6f746e]">
-              {isPaint ? t("admit.search_hint_paint") : t("admit.search_hint")}
+              {isPaint ? t("admit.search_hint_paint") : isDevice ? t("admit.search_hint_device") : t("admit.search_hint")}
             </p>
           </div>
         </div>
@@ -304,7 +304,7 @@ export default function AdmitVehiclePage() {
             <div className="border-b border-[#d7d3c8] px-5 py-4">
               <h2 className="font-display text-2xl font-semibold uppercase">{isDevice ? t("admit.new_customer_device") : t("admit.new_customer_vehicle")}</h2>
               <p className="mt-1 text-sm text-[#6f746e]">
-                {t("admit.form_hint")}
+                {isDevice ? t("admit.form_hint_device") : t("admit.form_hint")}
               </p>
             </div>
             <div className="grid gap-5 p-5 sm:grid-cols-2">

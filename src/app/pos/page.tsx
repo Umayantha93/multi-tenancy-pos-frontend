@@ -198,7 +198,7 @@ export default function PosPage() {
   return (
     <AppShell title={t("pos.title")} eyebrow={isStore ? t("pos.eyebrow_store") : t("pos.eyebrow")}>
       <BillingBranchBanner />
-      <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
+      <div className="flex flex-col-reverse gap-5 xl:grid xl:grid-cols-[1.25fr_0.75fr]">
         <Panel className="p-4">
           <label className="relative block">
             <ScanBarcode className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f746e]" size={16} />
@@ -368,7 +368,7 @@ export default function PosPage() {
               </label>
             )}
             {error && <ErrorMessage message={error} />}
-            <button disabled={saving || cart.length === 0} className={`${buttonClass} w-full`}>
+            <button disabled={saving || cart.length === 0} className={`${buttonClass} h-12 w-full text-sm sm:h-8 sm:text-[11px]`}>
               {saving ? t("pos.processing") : payLater ? t("pos.open_bill") : t("pos.complete_sale")}
             </button>
           </form>

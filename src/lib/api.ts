@@ -56,7 +56,7 @@ export type FeatureKey =
   | "service_ops_report"
   | "job_videos";
 
-export type BusinessType = "garage" | "tyre" | "device_repair" | "paint" | "photography" | "clothing" | "salon" | "cottage" | "store";
+export type BusinessType = "garage" | "tyre" | "device_repair" | "paint" | "photography" | "clothing" | "salon" | "cottage" | "store" | "mobile_shop";
 
 export type PhoneEntry = { label?: string; number: string };
 

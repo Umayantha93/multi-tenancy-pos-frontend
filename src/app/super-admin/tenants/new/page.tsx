@@ -267,6 +267,7 @@ export default function NewTenantPage() {
           <p className="mt-2 text-sm text-[#6f746e]">
             Modules switch when you change business type — only what fits {profile.label.toLowerCase()}.
             {businessType === "store" ? " Repair and Warranties stay off until you tick them." : ""}
+            {businessType === "mobile_shop" ? " Sales, repairs, and warranties are on by default." : ""}
           </p>
           <div className="mt-6 space-y-5">
             {groupModules(profile.moduleCatalog).map(({ group, features: modules }) => (

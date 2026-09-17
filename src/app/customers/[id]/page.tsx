@@ -3,18 +3,22 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
-import { ArrowLeft, ArrowRight, Pencil } from "lucide-react";
+import { ArrowLeft, ArrowRight, Pencil, Printer } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { api, formatDate, money } from "@/lib/api";
 import { billStatusClass, billStatusLabel } from "@/lib/bill-stamp";
 import { useBusinessProfile } from "@/lib/use-business-profile";
+import { usesVehicleJobs } from "@/lib/business-profiles";
 
 type CustomerDetail = {
   id: number;
   name: string;
   phone?: string | null;
   address?: string | null;
+  sms_opt_in?: boolean;
+  outstanding_balance?: number | string;
+  last_bill?: { id: number; bill_number: string; admission_date: string; status: string } | null;
   vehicles_count: number;
   bills_count: number;
   vehicles: Array<{ id: number; number_plate: string; make?: string; model?: string; chassis_number: string }>;
@@ -49,7 +53,12 @@ export default function CustomerDetailPage() {
     try {
       const updated = await api<CustomerDetail>(`/customers/${customer.id}`, {
         method: "PUT",
-        body: JSON.stringify({ name: data.name, phone: data.phone, address: data.address || null }),
+        body: JSON.stringify({
+          name: data.name,
+          phone: data.phone,
+          address: data.address || null,
+          sms_opt_in: data.sms_opt_in === "on",
+        }),
       });
       setCustomer((current) => current ? { ...current, ...updated } : current);
       setEditing(false);
@@ -83,15 +92,24 @@ export default function CustomerDetailPage() {
                 <p className="text-[10px] font-bold uppercase text-[#167c73]">Customer</p>
                 <h2 className="mt-1 font-display text-3xl font-semibold uppercase">{customer.name}</h2>
               </div>
-              <button type="button" onClick={() => setEditing((value) => !value)} className="flex h-8 items-center gap-1 border border-[#d7d3c8] px-3 text-xs font-bold uppercase">
-                <Pencil size={13} /> {editing ? "Cancel" : "Edit"}
-              </button>
+              <div className="flex gap-2">
+                <Link href={`/customers/${customer.id}/statement`} className="flex h-8 items-center gap-1 border border-[#d7d3c8] px-3 text-xs font-bold uppercase">
+                  <Printer size={13} /> Statement
+                </Link>
+                <button type="button" onClick={() => setEditing((value) => !value)} className="flex h-8 items-center gap-1 border border-[#d7d3c8] px-3 text-xs font-bold uppercase">
+                  <Pencil size={13} /> {editing ? "Cancel" : "Edit"}
+                </button>
+              </div>
             </div>
             {editing ? (
               <form onSubmit={saveCustomer} className="mt-6 grid gap-3">
                 <label className="text-xs font-bold uppercase">Name<input name="name" defaultValue={customer.name} className={`${inputClass} mt-2`} /></label>
                 <label className="text-xs font-bold uppercase">Phone<input name="phone" defaultValue={customer.phone ?? ""} className={`${inputClass} mt-2`} /></label>
                 <label className="text-xs font-bold uppercase">Address<input name="address" defaultValue={customer.address ?? ""} className={`${inputClass} mt-2`} /></label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="sms_opt_in" defaultChecked={customer.sms_opt_in !== false} className="size-4 accent-[#167c73]" />
+                  SMS bills and reminders
+                </label>
                 <button className={buttonClass}>Save customer</button>
               </form>
             ) : (
@@ -105,7 +123,19 @@ export default function CustomerDetailPage() {
                 <dd className="text-right">{customer.address || "—"}</dd>
               </div>
               <div className="flex justify-between border-b border-[#e2ded4] pb-3">
-                <dt className="text-[#6f746e]">Vehicles</dt>
+                <dt className="text-[#6f746e]">Outstanding</dt>
+                <dd className={`font-semibold ${Number(customer.outstanding_balance ?? 0) > 0 ? "text-[#b84837]" : ""}`}>{money(customer.outstanding_balance ?? 0)}</dd>
+              </div>
+              <div className="flex justify-between border-b border-[#e2ded4] pb-3">
+                <dt className="text-[#6f746e]">Last job</dt>
+                <dd className="text-right font-semibold">{customer.last_bill?.bill_number ?? "—"}</dd>
+              </div>
+              <div className="flex justify-between border-b border-[#e2ded4] pb-3">
+                <dt className="text-[#6f746e]">SMS</dt>
+                <dd className="font-semibold">{customer.sms_opt_in === false ? "Opted out" : "Opted in"}</dd>
+              </div>
+              <div className="flex justify-between border-b border-[#e2ded4] pb-3">
+                <dt className="text-[#6f746e]">{usesVehicleJobs(profile.type) && profile.type !== "device_repair" ? "Vehicles" : "Records"}</dt>
                 <dd className="font-semibold">{customer.vehicles_count}</dd>
               </div>
               <div className="flex justify-between">
