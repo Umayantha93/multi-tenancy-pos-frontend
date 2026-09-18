@@ -3,15 +3,16 @@
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
-import { Check, Plus, Power, Trash2, Users } from "lucide-react";
+import { Banknote, Plus, Power, Trash2, Users } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
 import { AddressField } from "@/components/address-field";
 import { ConfirmModal, ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
 import { api, Branch, mediaUrl, PhoneEntry, Tenant } from "@/lib/api";
 import { PAYMENT_PLAN_OPTIONS, PLAN_OPTIONS, optionalFeaturesFor, profileFor } from "@/lib/business-profiles";
-import { groupModules } from "@/lib/feature-modules";
+import { FeaturePlanToggles } from "@/components/feature-plan-toggles";
 
-type Feature = { id: number; key: string; name: string; group?: string | null };
+type Feature = { id: number; key: string; name: string; group?: string | null; parent?: string | null };
+type FeatureResponse = { available: Feature[]; enabled: string[]; optional?: string[]; nested?: Record<string, string>; business_type?: string };
 type Detail = Tenant & {
   owner_name: string;
   owner_email: string;
@@ -23,7 +24,6 @@ type Detail = Tenant & {
   users: Array<{ id: number; name: string; email: string; role: string; status: string; is_secondary_view?: boolean }>;
   features: Feature[];
 };
-type FeatureResponse = { available: Feature[]; enabled: string[]; optional?: string[]; business_type?: string };
 type FeePayment = {
   id: number;
   year: number;
@@ -35,13 +35,28 @@ type FeePayment = {
   marked_by?: { id: number; name: string; email: string } | null;
 };
 type FeePaymentsResponse = { current_month_paid: boolean; payments: FeePayment[] };
+type SetupFeePayment = {
+  id: number;
+  amount: number | string;
+  paid_at: string;
+  notes?: string | null;
+  marked_by?: { id: number; name: string; email: string } | null;
+};
+type SetupFeeResponse = {
+  setup_fee_amount: number | string | null;
+  setup_fee_paid: number;
+  setup_fee_balance: number;
+  setup_fee_settled: boolean;
+  payments: SetupFeePayment[];
+};
 
 type ConfirmState = {
   title: string;
   message: string;
   confirmLabel: string;
   tone: "default" | "danger" | "teal";
-  action: "status" | "dual-enable" | "dual-disable" | "fee-paid" | "fee-unpaid" | "delete";
+  action: "status" | "dual-enable" | "dual-disable" | "fee-paid" | "fee-unpaid" | "delete" | "setup-remove";
+  paymentId?: number;
 };
 
 function money(value: number | string | null | undefined) {
@@ -53,6 +68,11 @@ function periodLabel(period: string) {
   const [year, month] = period.split("-").map(Number);
   if (!year || !month) return period;
   return new Date(year, month - 1, 1).toLocaleString("en-LK", { month: "long", year: "numeric" });
+}
+
+function localToday() {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 export default function TenantDetailPage() {
@@ -77,6 +97,15 @@ export default function TenantDetailPage() {
   const [secondaryPassword, setSecondaryPassword] = useState("");
   const [feePayments, setFeePayments] = useState<FeePayment[]>([]);
   const [currentMonthPaid, setCurrentMonthPaid] = useState(false);
+  const [setupPayments, setSetupPayments] = useState<SetupFeePayment[]>([]);
+  const [setupPaid, setSetupPaid] = useState(0);
+  const [setupBalance, setSetupBalance] = useState(0);
+  const [setupSettled, setSetupSettled] = useState(false);
+  const [setupAmount, setSetupAmount] = useState("");
+  const [setupNotes, setSetupNotes] = useState("");
+  const [setupPaidOn, setSetupPaidOn] = useState("");
+  const [setupSettleOpen, setSetupSettleOpen] = useState(false);
+  const [setupSaving, setSetupSaving] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchSaving, setBranchSaving] = useState(false);
@@ -86,14 +115,19 @@ export default function TenantDetailPage() {
       api<Detail>(`/super-admin/tenants/${id}`),
       api<FeatureResponse>(`/super-admin/tenants/${id}/features`),
       api<FeePaymentsResponse>(`/super-admin/tenants/${id}/fee-payments`),
+      api<SetupFeeResponse>(`/super-admin/tenants/${id}/setup-fee-payments`),
       api<Branch[]>(`/super-admin/tenants/${id}/branches`),
     ])
-      .then(([detail, features, fees, shopList]) => {
+      .then(([detail, features, fees, setup, shopList]) => {
         setTenant(detail);
         setFeatureData(features);
         setEnabled(features.enabled);
         setFeePayments(fees.payments);
         setCurrentMonthPaid(fees.current_month_paid);
+        setSetupPayments(setup.payments);
+        setSetupPaid(Number(setup.setup_fee_paid || 0));
+        setSetupBalance(Number(setup.setup_fee_balance || 0));
+        setSetupSettled(Boolean(setup.setup_fee_settled));
         setBranches(shopList);
         const phones = detail.contact_phones?.length
           ? detail.contact_phones
@@ -303,6 +337,113 @@ export default function TenantDetailPage() {
     }
   }
 
+  function applySetup(result: SetupFeeResponse) {
+    setSetupPayments(result.payments);
+    setSetupPaid(Number(result.setup_fee_paid || 0));
+    setSetupBalance(Number(result.setup_fee_balance || 0));
+    setSetupSettled(Boolean(result.setup_fee_settled));
+    setTenant((current) =>
+      current
+        ? {
+            ...current,
+            setup_fee_amount: result.setup_fee_amount,
+            setup_fee_paid: result.setup_fee_paid,
+            setup_fee_balance: result.setup_fee_balance,
+            setup_fee_settled: result.setup_fee_settled,
+          }
+        : current,
+    );
+  }
+
+  function openSetupSettle() {
+    setSetupAmount(setupBalance > 0 ? String(setupBalance) : "");
+    setSetupNotes("");
+    setSetupPaidOn(localToday());
+    setSetupSettleOpen(true);
+    setError("");
+  }
+
+  async function saveSetupFeeAmount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const value = Number(new FormData(event.currentTarget).get("setup_fee_amount"));
+    if (!Number.isFinite(value) || value < 0) return;
+    setSetupSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const updated = await api<Detail>(`/super-admin/tenants/${id}`, {
+        method: "POST",
+        body: JSON.stringify({ setup_fee_amount: value }),
+      });
+      setTenant((current) => (current ? { ...current, ...updated } : updated));
+      setSetupPaid(Number(updated.setup_fee_paid || 0));
+      setSetupBalance(Number(updated.setup_fee_balance ?? value));
+      setSetupSettled(Boolean(updated.setup_fee_settled));
+      setNotice("One-time amount saved. Use Settle payment to record what the tenant paid.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to save the one-time amount.");
+    } finally {
+      setSetupSaving(false);
+    }
+  }
+
+  async function recordSetupPayment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!tenant) return;
+    setSetupSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await api<SetupFeeResponse>(`/super-admin/tenants/${id}/setup-fee-payments`, {
+        method: "POST",
+        body: JSON.stringify({
+          amount: setupAmount ? Number(setupAmount) : undefined,
+          notes: setupNotes.trim() || null,
+          paid_at: setupPaidOn || undefined,
+        }),
+      });
+      applySetup(result);
+      setSetupAmount("");
+      setSetupNotes("");
+      setSetupSettleOpen(false);
+      setNotice(result.setup_fee_settled ? "One-time payment is fully settled." : "Settlement recorded. It is included in Income.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to record this settlement.");
+    } finally {
+      setSetupSaving(false);
+    }
+  }
+
+  function requestRemoveSetupPayment(payment: SetupFeePayment) {
+    if (!tenant) return;
+    setConfirm({
+      title: "Remove settlement",
+      message: `Remove the ${money(payment.amount)} settlement from ${tenant.business_name}'s one-time payment?`,
+      confirmLabel: "Remove",
+      tone: "danger",
+      action: "setup-remove",
+      paymentId: payment.id,
+    });
+  }
+
+  async function removeSetupPayment(paymentId: number) {
+    setSetupSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await api<SetupFeeResponse>(`/super-admin/tenants/${id}/setup-fee-payments/${paymentId}`, {
+        method: "DELETE",
+      });
+      applySetup(result);
+      setNotice("Settlement removed.");
+      setConfirm(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to remove the installment.");
+    } finally {
+      setSetupSaving(false);
+    }
+  }
+
   async function handleConfirm() {
     if (!confirm) return;
     if (confirm.action === "status") await changeStatus();
@@ -311,6 +452,7 @@ export default function TenantDetailPage() {
     if (confirm.action === "dual-disable") await saveDualFinancialView(false);
     if (confirm.action === "fee-paid") await saveFeePayment(true);
     if (confirm.action === "fee-unpaid") await saveFeePayment(false);
+    if (confirm.action === "setup-remove" && confirm.paymentId) await removeSetupPayment(confirm.paymentId);
   }
 
   async function saveFeatures() {
@@ -349,6 +491,9 @@ export default function TenantDetailPage() {
     try {
       const updated = await api<Detail>(`/super-admin/tenants/${id}`, { method: "POST", body: formData });
       setTenant((current) => (current ? { ...current, ...updated } : updated));
+      if (updated.setup_fee_paid != null) setSetupPaid(Number(updated.setup_fee_paid));
+      if (updated.setup_fee_balance != null) setSetupBalance(Number(updated.setup_fee_balance));
+      if (updated.setup_fee_settled != null) setSetupSettled(Boolean(updated.setup_fee_settled));
       setAddress(updated.address || "");
       setNotice("Tenant details saved.");
       const logoInput = form.querySelector<HTMLInputElement>('input[name="logo"]');
@@ -381,6 +526,14 @@ export default function TenantDetailPage() {
           >
             Grant 21-day demo
           </button>
+          {Number(tenant.setup_fee_amount || 0) > 0 && !setupSettled && (
+            <button
+              onClick={openSetupSettle}
+              className="flex h-8 items-center gap-2 bg-[#f5c842] px-2.5 text-[11px] font-semibold"
+            >
+              <Banknote size={17} /> Settle payment
+            </button>
+          )}
           <button
             onClick={requestDelete}
             className="flex h-8 items-center gap-2 border border-[#b84837] bg-white px-2.5 text-[11px] font-semibold text-[#b84837]"
@@ -396,10 +549,75 @@ export default function TenantDetailPage() {
         message={confirm?.message ?? ""}
         confirmLabel={confirm?.confirmLabel}
         tone={confirm?.tone}
-        busy={dualSaving || statusSaving || feeSaving || deleting}
-        onCancel={() => { if (!dualSaving && !statusSaving && !feeSaving && !deleting) setConfirm(null); }}
+        busy={dualSaving || statusSaving || feeSaving || deleting || setupSaving}
+        onCancel={() => { if (!dualSaving && !statusSaving && !feeSaving && !deleting && !setupSaving) setConfirm(null); }}
         onConfirm={handleConfirm}
       />
+      {setupSettleOpen && tenant && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+          <button type="button" aria-label="Close dialog" className="absolute inset-0 bg-[#181b19]/55" onClick={() => !setupSaving && setSetupSettleOpen(false)} />
+          <form onSubmit={recordSetupPayment} className="relative z-10 w-full max-w-md border border-[#d7d3c8] bg-[#fbfaf6] p-5">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-[#167c73]">Settle one-time payment</p>
+            <h2 className="mt-1 font-display text-2xl font-semibold uppercase">Pay this bill in steps</h2>
+            <p className="mt-2 text-sm font-semibold">{tenant.business_name}</p>
+            <p className="mt-1 text-sm text-[#6f746e]">Enter any amount the tenant is paying now. It is added to Income.</p>
+            <dl className="mt-4 space-y-2 text-sm">
+              <div className="flex justify-between"><dt className="text-[#6f746e]">Original</dt><dd className="font-semibold">{money(tenant.setup_fee_amount)}</dd></div>
+              <div className="flex justify-between"><dt className="text-[#6f746e]">Paid so far</dt><dd className="font-semibold">{money(setupPaid)}</dd></div>
+              <div className="flex justify-between"><dt className="text-[#6f746e]">Balance</dt><dd className="font-semibold text-[#b84837]">{money(setupBalance)}</dd></div>
+            </dl>
+            {(setupPayments.length ?? 0) > 0 && (
+              <div className="mt-4 border-t border-[#e2ded4] pt-3">
+                <p className="text-[10px] font-bold uppercase text-[#6f746e]">Earlier payments</p>
+                <ul className="mt-2 space-y-1 text-xs">
+                  {setupPayments.map((row) => (
+                    <li key={row.id} className="flex justify-between">
+                      <span>{row.paid_at ? new Date(row.paid_at).toLocaleDateString("en-LK") : "—"}</span>
+                      <span>{money(row.amount)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <label className="mt-4 block text-xs font-bold uppercase">
+              Amount to pay now
+              <input
+                value={setupAmount}
+                onChange={(event) => setSetupAmount(event.target.value)}
+                type="number"
+                min="0.01"
+                step="0.01"
+                required
+                className={`${inputClass} mt-2`}
+              />
+            </label>
+            <label className="mt-3 block text-xs font-bold uppercase">
+              Paid on
+              <input
+                value={setupPaidOn}
+                onChange={(event) => setSetupPaidOn(event.target.value)}
+                type="date"
+                className={`${inputClass} mt-2`}
+              />
+            </label>
+            <label className="mt-3 block text-xs font-bold uppercase">
+              Note
+              <input
+                value={setupNotes}
+                onChange={(event) => setSetupNotes(event.target.value)}
+                placeholder="Optional"
+                className={`${inputClass} mt-2`}
+              />
+            </label>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setSetupSettleOpen(false)} className="h-8 border border-[#d7d3c8] px-2.5 text-[11px]">Cancel</button>
+              <button disabled={setupSaving} className={buttonClass}>
+                {setupSaving ? "Saving..." : "Record payment"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
       {notice && <div className="mb-5"><SuccessMessage message={notice} /></div>}
       {!tenant || !featureData ? (
@@ -434,6 +652,19 @@ export default function TenantDetailPage() {
                 <div className="flex justify-between border-b border-[#e2ded4] pb-3"><dt className="text-[#6f746e]">Plan</dt><dd>{tenant.plan ?? "Custom"}</dd></div>
                 <div className="flex justify-between border-b border-[#e2ded4] pb-3"><dt className="text-[#6f746e]">Payment plan</dt><dd className="capitalize">{tenant.payment_plan ?? "monthly"}</dd></div>
                 <div className="flex justify-between border-b border-[#e2ded4] pb-3"><dt className="text-[#6f746e]">Amount</dt><dd>{tenant.plan_amount != null ? `LKR ${Number(tenant.plan_amount).toLocaleString("en-LK", { minimumFractionDigits: 2 })}` : "—"}</dd></div>
+                <div className="flex justify-between border-b border-[#e2ded4] pb-3">
+                  <dt className="text-[#6f746e]">One-time payment</dt>
+                  <dd className="text-right">
+                    {Number(tenant.setup_fee_amount || 0) > 0 ? (
+                      <>
+                        <span className="block">{money(tenant.setup_fee_amount)}</span>
+                        <span className={`text-[10px] font-bold uppercase ${setupSettled ? "text-[#167c73]" : "text-[#b84837]"}`}>
+                          {setupSettled ? "Settled" : `Due ${money(setupBalance)}`}
+                        </span>
+                      </>
+                    ) : "—"}
+                  </dd>
+                </div>
                 <div className="flex justify-between"><dt className="text-[#6f746e]">Users</dt><dd>{tenant.users_count}</dd></div>
               </dl>
               <Link href={`/super-admin/tenants/${id}/users`} className={`${buttonClass} mt-6 w-full`}>
@@ -445,6 +676,73 @@ export default function TenantDetailPage() {
               <Link href={`/super-admin/inventory?tenant=${id}`} className="mt-2 inline-flex h-8 w-full items-center justify-center border border-[#20221f] bg-white px-2.5 text-[11px] font-semibold hover:bg-[#20221f] hover:text-white">
                 Tenant inventory
               </Link>
+            </Panel>
+
+            <Panel className="p-5">
+              <h2 className="font-display text-2xl font-semibold uppercase">One-time payment</h2>
+              <p className="mt-2 text-sm text-[#6f746e]">
+                Pay this in steps, same as Finance settle. Enter any amount toward the balance. Each payment is added to Income.
+              </p>
+              {Number(tenant.setup_fee_amount || 0) > 0 ? (
+                <>
+                  <dl className="mt-4 space-y-2 border border-[#d7d3c8] px-4 py-3 text-sm">
+                    <div className="flex justify-between"><dt className="text-[#6f746e]">Original</dt><dd className="font-semibold">{money(tenant.setup_fee_amount)}</dd></div>
+                    <div className="flex justify-between"><dt className="text-[#6f746e]">Paid so far</dt><dd className="font-semibold">{money(setupPaid)}</dd></div>
+                    <div className="flex justify-between">
+                      <dt className="text-[#6f746e]">Balance</dt>
+                      <dd className={`font-semibold ${setupSettled ? "text-[#167c73]" : "text-[#b84837]"}`}>
+                        {setupSettled ? "Settled" : money(setupBalance)}
+                      </dd>
+                    </div>
+                  </dl>
+                  {!setupSettled && (
+                    <button type="button" onClick={openSetupSettle} className={`${buttonClass} mt-4 w-full`}>
+                      Settle payment
+                    </button>
+                  )}
+                  {(setupPayments.length ?? 0) > 0 && (
+                    <div className="mt-4 border-t border-[#e2ded4] pt-3">
+                      <p className="text-[10px] font-bold uppercase text-[#6f746e]">Earlier payments</p>
+                      <ul className="mt-2 space-y-1 text-xs">
+                        {setupPayments.map((payment) => (
+                          <li key={payment.id} className="flex items-center justify-between gap-3">
+                            <span>{payment.paid_at ? new Date(payment.paid_at).toLocaleDateString("en-LK") : "—"}{payment.notes ? ` · ${payment.notes}` : ""}</span>
+                            <span className="flex items-center gap-3">
+                              <span className="font-semibold">{money(payment.amount)}</span>
+                              <button
+                                type="button"
+                                disabled={setupSaving}
+                                onClick={() => requestRemoveSetupPayment(payment)}
+                                className="text-[10px] font-bold uppercase text-[#b84837]"
+                              >
+                                Remove
+                              </button>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <form onSubmit={saveSetupFeeAmount} className="mt-4 space-y-3">
+                  <label className="block text-xs font-bold uppercase">
+                    One-time amount (LKR)
+                    <input
+                      name="setup_fee_amount"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      required
+                      placeholder="e.g. 60000"
+                      className={`${inputClass} mt-2`}
+                    />
+                  </label>
+                  <button disabled={setupSaving} className={`${buttonClass} w-full`}>
+                    {setupSaving ? "Saving..." : "Save amount"}
+                  </button>
+                </form>
+              )}
             </Panel>
 
             <Panel className="p-5">
@@ -729,6 +1027,20 @@ export default function TenantDetailPage() {
                       className={`${inputClass} mt-2`}
                     />
                   </label>
+                  <label className="block text-xs font-bold uppercase sm:col-span-2">
+                    One-time payment (LKR)
+                    <input
+                      name="setup_fee_amount"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      defaultValue={tenant.setup_fee_amount ?? ""}
+                      className={`${inputClass} mt-2`}
+                    />
+                    <span className="mt-1 block text-[10px] font-normal normal-case text-[#6f746e]">
+                      Cannot be lower than {money(setupPaid)} already received.
+                    </span>
+                  </label>
                 </div>
                 <label className="block text-xs font-bold uppercase">
                   Logo image
@@ -745,36 +1057,17 @@ export default function TenantDetailPage() {
             <p className="mt-2 text-sm text-[#6f746e]">
               Only modules that fit this business type are shown. Disabling one removes it from that business sidebar immediately.
               {tenant.business_type === "store" ? " Repair and Warranties are optional modules." : ""}
-              {tenant.business_type === "garage" ? " Owner bill SMS, service operations report, and job videos are optional." : ""}
+              {tenant.business_type === "mobile_shop" ? " Sales, repairs, and warranties are on by default." : ""}
+              {tenant.business_type === "garage" ? " Admit vehicle can be repair, service, or both. Nested ticks sit under that module." : ""}
             </p>
-            <div className="mt-6 space-y-6">
-              {groupModules(featureData.available).map(({ group, features }) => (
-                <div key={group}>
-                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-[#6f746e]">{group}</p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {features.map((feature) => {
-                      const active = enabled.includes(feature.key);
-                      const optional = (featureData.optional ?? optionalFeaturesFor(tenant.business_type)).includes(feature.key);
-                      return (
-                        <button
-                          type="button"
-                          key={feature.id}
-                          onClick={() => setEnabled((value) => active ? value.filter((key) => key !== feature.key) : [...value, feature.key])}
-                          className={`flex min-h-14 items-center justify-between border px-4 py-2 text-left text-sm font-semibold ${active ? "border-[#167c73] bg-[#167c73]/7" : "border-[#d7d3c8] text-[#6f746e]"}`}
-                        >
-                          <span>
-                            {feature.name}
-                            {optional && <span className="ml-2 text-[10px] font-bold uppercase text-[#9a5b12]">Optional</span>}
-                          </span>
-                          <span className={`grid size-6 place-items-center ${active ? "bg-[#167c73] text-white" : "bg-[#e7e4db]"}`}>
-                            {active && <Check size={15} />}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
+            <div className="mt-6">
+              <FeaturePlanToggles
+                features={featureData.available}
+                enabled={enabled}
+                optional={featureData.optional ?? optionalFeaturesFor(tenant.business_type)}
+                garageAdmit={tenant.business_type === "garage"}
+                onChange={setEnabled}
+              />
             </div>
             <button onClick={saveFeatures} disabled={saving} className={`${buttonClass} mt-6`}>
               {saving ? "Saving..." : "Save feature plan"}

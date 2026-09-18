@@ -136,7 +136,7 @@ export default function BillProfitsPage() {
     const type = currentUser()?.tenant?.business_type;
     setIsGarage(type === "garage" || type === "tyre" || type === "device_repair" || type === "paint");
     setIsPaint(type === "paint");
-    setIsStore(type === "store");
+    setIsStore(type === "store" || type === "mobile_shop");
     setHasRepair(currentFeatures().includes("repair_bills"));
   }, []);
 

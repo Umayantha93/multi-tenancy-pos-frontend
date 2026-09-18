@@ -11,12 +11,12 @@ import { useBusinessProfile } from "@/lib/use-business-profile";
 import { BillingBranchBanner } from "@/components/branch-chip";
 import { useT } from "@/lib/locale";
 
-type Part = { id: number; name: string; sku?: string | null; barcode?: string | null; brand?: string; price: string; stock_qty: number };
+type Part = { id: number; name: string; sku?: string | null; barcode?: string | null; brand?: string; price: string; stock_qty: number; serialized?: boolean };
 type Product = { id: number; name: string; sku: string | null; size: string | null; color: string | null; price: string; stock_qty: number };
 type WarrantyCover = "" | "months" | "years" | "custom";
-type CartLine = { id: number; name: string; detail: string; price: number; stock: number; quantity: number; warrantyCover?: WarrantyCover; warrantyAmount?: number; warrantyUntil?: string };
+type CartLine = { id: number; name: string; detail: string; price: number; stock: number; quantity: number; warrantyCover?: WarrantyCover; warrantyAmount?: number; warrantyUntil?: string; serialized?: boolean; serials?: string[] };
 
-function toCartLine(row: Part | Product, store: boolean, stockLabel = "Stock"): CartLine {
+function toCartLine(row: Part | Product, store: boolean, stockLabel = "Stock", serials?: string[]): CartLine {
   if (store) {
     const part = row as Part;
     return {
@@ -25,8 +25,10 @@ function toCartLine(row: Part | Product, store: boolean, stockLabel = "Stock"): 
       detail: [part.barcode, part.sku, part.brand].filter(Boolean).join(" · ") || stockLabel,
       price: Number(part.price),
       stock: part.stock_qty,
-      quantity: 1,
+      quantity: serials?.length || 1,
       warrantyCover: "",
+      serialized: Boolean(part.serialized),
+      serials,
     };
   }
   const product = row as Product;
@@ -57,6 +59,7 @@ export default function PosPage() {
   const [tendered, setTendered] = useState("");
   const scanRef = useRef<HTMLInputElement>(null);
   const canWarranty = sessionReady && isStore && currentFeatures().includes("warranties");
+  const canSerial = sessionReady && isStore && currentFeatures().includes("serial_inventory");
 
   useEffect(() => {
     setSessionReady(true);
@@ -87,8 +90,24 @@ export default function PosPage() {
   const changeDue = !payLater && tenderedAmount > total ? tenderedAmount - total : 0;
 
   function add(item: CartLine) {
+    if (item.serialized && (!item.serials || item.serials.length === 0)) {
+      setError(t("serials.need_imei"));
+      return;
+    }
     if (item.stock < 1) return;
     setCart((lines) => {
+      if (item.serials?.length) {
+        const existing = lines.find((line) => line.id === item.id);
+        const incoming = item.serials.map((code) => code.toUpperCase());
+        if (existing) {
+          const have = new Set((existing.serials ?? []).map((code) => code.toUpperCase()));
+          const extra = incoming.filter((code) => !have.has(code));
+          if (extra.length === 0) return lines;
+          const serials = [...(existing.serials ?? []), ...extra];
+          return lines.map((line) => line.id === item.id ? { ...line, serials, quantity: serials.length } : line);
+        }
+        return [...lines, { ...item, serials: incoming, quantity: incoming.length }];
+      }
       const existing = lines.find((line) => line.id === item.id);
       if (existing) {
         if (existing.quantity >= item.stock) return lines;
@@ -101,7 +120,7 @@ export default function PosPage() {
 
   function setQty(id: number, quantity: number, stock: number) {
     const next = Math.max(1, Math.min(stock, quantity));
-    setCart((lines) => lines.map((line) => line.id === id ? { ...line, quantity: next } : line));
+    setCart((lines) => lines.map((line) => line.id === id && !line.serials?.length ? { ...line, quantity: next } : line));
   }
 
   function setWarranty(id: number, patch: Partial<Pick<CartLine, "warrantyCover" | "warrantyAmount" | "warrantyUntil">>) {
@@ -110,6 +129,18 @@ export default function PosPage() {
 
   async function scanExact(needle: string): Promise<CartLine | null> {
     if (!isStore || !needle) return null;
+    if (canSerial) {
+      try {
+        const row = await api<{ serial: string; status: string; part: Part }>(`/serials/lookup?q=${encodeURIComponent(needle)}`);
+        if (row.status !== "in_stock") {
+          setError(t("serials.already_sold"));
+          return null;
+        }
+        return toCartLine(row.part, true, t("common.stock"), [row.serial]);
+      } catch {
+        // Not an IMEI — fall through to barcode / SKU.
+      }
+    }
     try {
       const exact = await api<{ data: Part[] }>(`/parts?barcode=${encodeURIComponent(needle)}&per_page=1`);
       if (exact.data[0]) return toCartLine(exact.data[0], true, t("common.stock"));
@@ -150,6 +181,10 @@ export default function PosPage() {
       setError(t("warranty.enter_length"));
       return;
     }
+    if (canSerial && cart.some((line) => line.serialized && !line.serials?.length)) {
+      setError(t("serials.need_imei"));
+      return;
+    }
     setSaving(true);
     setError("");
     const form = new FormData(event.currentTarget);
@@ -166,6 +201,7 @@ export default function PosPage() {
             items: cart.map((line) => ({
               part_id: line.id,
               quantity: line.quantity,
+              ...(line.serials?.length ? { serials: line.serials } : {}),
               ...(canWarranty && line.warrantyCover
                 ? line.warrantyCover === "custom"
                   ? { warranty_until: line.warrantyUntil || null }
@@ -198,7 +234,7 @@ export default function PosPage() {
   return (
     <AppShell title={t("pos.title")} eyebrow={isStore ? t("pos.eyebrow_store") : t("pos.eyebrow")}>
       <BillingBranchBanner />
-      <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
+      <div className="flex flex-col-reverse gap-5 xl:grid xl:grid-cols-[1.25fr_0.75fr]">
         <Panel className="p-4">
           <label className="relative block">
             <ScanBarcode className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f746e]" size={16} />
@@ -245,8 +281,11 @@ export default function PosPage() {
                   <div className="min-w-0">
                     <p className="truncate font-semibold">{line.name}</p>
                     <p className="tabular-nums text-[#6f746e]">{money(line.price)} × {line.quantity}</p>
+                    {line.serials?.length ? <p className="mt-1 truncate text-[11px] text-[#6f746e]">{line.serials.join(" · ")}</p> : null}
                   </div>
                   <div className="flex items-center gap-2">
+                    {!line.serials?.length && (
+                      <>
                     <button type="button" className="grid size-8 place-items-center border" onClick={() => setQty(line.id, line.quantity - 1, line.stock)}><Minus size={14} /></button>
                     <input
                       type="number"
@@ -257,6 +296,8 @@ export default function PosPage() {
                       className="h-8 w-12 border border-[#c9c5b9] bg-white text-center text-sm tabular-nums"
                     />
                     <button type="button" className="grid size-8 place-items-center border" onClick={() => setQty(line.id, line.quantity + 1, line.stock)}><Plus size={14} /></button>
+                      </>
+                    )}
                     <strong className="w-16 text-right tabular-nums">{money(line.price * line.quantity)}</strong>
                     <button type="button" className="text-[#b84837]" onClick={() => setCart((rows) => rows.filter((row) => row.id !== line.id))}><Trash2 size={16} /></button>
                   </div>
@@ -368,7 +409,7 @@ export default function PosPage() {
               </label>
             )}
             {error && <ErrorMessage message={error} />}
-            <button disabled={saving || cart.length === 0} className={`${buttonClass} w-full`}>
+            <button disabled={saving || cart.length === 0} className={`${buttonClass} h-12 w-full text-sm sm:h-8 sm:text-[11px]`}>
               {saving ? t("pos.processing") : payLater ? t("pos.open_bill") : t("pos.complete_sale")}
             </button>
           </form>

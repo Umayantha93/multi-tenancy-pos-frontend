@@ -1,10 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { ArrowRightLeft, Store } from "lucide-react";
+import Link from "next/link";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ArrowRightLeft, Plus, Printer, Store, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
-import { api, Branch, currentFeatures, money } from "@/lib/api";
+import { api, Branch, currentFeatures, currentUser, formatDate, money } from "@/lib/api";
 
 type ShopSummary = {
   branch: Branch;
@@ -15,6 +16,24 @@ type ShopSummary = {
 };
 
 type CatalogItem = { id: number; name: string; stock_qty: number; kind: "part" | "product" };
+type TransferLine = { kind: "part" | "product"; item_id: string; quantity: string };
+type TransferItem = {
+  id: number;
+  quantity: number;
+  part?: { id: number; name: string; sku?: string | null } | null;
+  product?: { id: number; name: string; sku?: string | null } | null;
+};
+type Transfer = {
+  id: number;
+  transfer_number?: string | null;
+  status: string;
+  notes?: string | null;
+  created_at: string;
+  received_at?: string | null;
+  from_branch?: { id: number; name: string };
+  to_branch?: { id: number; name: string };
+  items?: TransferItem[];
+};
 
 export default function ShopsPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -25,6 +44,9 @@ export default function ShopsPage() {
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [itemKind, setItemKind] = useState<"part" | "product">("part");
   const [saving, setSaving] = useState(false);
+  const [lines, setLines] = useState<TransferLine[]>([{ kind: "part", item_id: "", quantity: "1" }]);
+  const [transfers, setTransfers] = useState<Transfer[]>([]);
+  const isOwner = currentUser()?.role === "business_owner";
 
   async function load() {
     try {
@@ -39,6 +61,8 @@ export default function ShopsPage() {
         }
       }));
       setSummaries(next);
+      const history = await api<{ data: Transfer[] }>("/stock-transfers?per_page=20");
+      setTransfers(history.data);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to load shops.");
     }
@@ -67,9 +91,12 @@ export default function ShopsPage() {
       setItems(catalog);
       if (!catalog.some((item) => item.kind === "part") && catalog.some((item) => item.kind === "product")) {
         setItemKind("product");
+        setLines([{ kind: "product", item_id: "", quantity: "1" }]);
       }
     });
   }, []);
+
+  const kindOptions = useMemo(() => items.filter((item) => item.kind === itemKind), [items, itemKind]);
 
   async function rename(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -101,22 +128,42 @@ export default function ShopsPage() {
     setSaving(true);
     setError("");
     const form = new FormData(event.currentTarget);
-    const kind = String(form.get("item_kind") || itemKind);
-    const itemId = Number(form.get("item_id"));
+    const payloadItems = lines
+      .filter((line) => line.item_id && Number(line.quantity) > 0)
+      .map((line) => ({
+        ...(line.kind === "product" ? { product_id: Number(line.item_id) } : { part_id: Number(line.item_id) }),
+        quantity: Number(line.quantity),
+      }));
     try {
       await api("/stock-transfers", {
         method: "POST",
         body: JSON.stringify({
           from_branch_id: Number(form.get("from_branch_id")),
           to_branch_id: Number(form.get("to_branch_id")),
-          quantity: Number(form.get("quantity")),
-          ...(kind === "product" ? { product_id: itemId } : { part_id: itemId }),
+          notes: form.get("notes") || null,
+          items: payloadItems,
         }),
       });
-      setNotice("Stock moved.");
+      setNotice("Transfer note created. Receive it at the destination shop.");
       event.currentTarget.reset();
+      setLines([{ kind: itemKind, item_id: "", quantity: "1" }]);
+      load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to transfer stock.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function receive(id: number) {
+    setSaving(true);
+    setError("");
+    try {
+      await api(`/stock-transfers/${id}/receive`, { method: "POST" });
+      setNotice("Stock received.");
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to receive transfer.");
     } finally {
       setSaving(false);
     }
@@ -127,11 +174,11 @@ export default function ShopsPage() {
       {error && <div className="mb-4"><ErrorMessage message={error} /></div>}
       {notice && <div className="mb-4"><SuccessMessage message={notice} /></div>}
       {branches.length === 0 ? <PageState message="Loading shops..." /> : (
-        <div className="grid gap-5 xl:grid-cols-[1fr_0.55fr]">
+        <div className="grid gap-5 xl:grid-cols-[1fr_0.7fr]">
           <Panel>
             <div className="border-b border-[#d7d3c8] px-5 py-4">
               <h2 className="font-display text-2xl font-semibold uppercase">Your shops</h2>
-              <p className="text-xs text-[#6f746e]">You can rename a shop. Super-admin adds new locations.</p>
+              <p className="text-xs text-[#6f746e]">{isOwner ? "You can rename a shop. Super-admin adds new locations." : "Receive stock sent to this shop."}</p>
             </div>
             <div className="divide-y divide-[#dedad0]">
               {branches.map((branch) => {
@@ -150,7 +197,7 @@ export default function ShopsPage() {
                         <span>{summary.staff_count} staff</span>
                       </div>
                     )}
-                    <button onClick={() => setEditing(branch)} className="h-8 border border-[#cbc7bc] px-3 text-xs font-semibold hover:bg-[#f5c842]">Rename</button>
+                    {isOwner && <button onClick={() => setEditing(branch)} className="h-8 border border-[#cbc7bc] px-3 text-xs font-semibold hover:bg-[#f5c842]">Rename</button>}
                   </div>
                 );
               })}
@@ -171,11 +218,11 @@ export default function ShopsPage() {
                 </form>
               </Panel>
             )}
-            {branches.length > 1 && (
+            {branches.length > 1 && isOwner && (
               <Panel className="p-5">
                 <div className="flex items-center gap-2">
                   <ArrowRightLeft size={18} className="text-[#167c73]" />
-                  <h2 className="font-display text-2xl font-semibold uppercase">Move stock</h2>
+                  <h2 className="font-display text-2xl font-semibold uppercase">Transfer note</h2>
                 </div>
                 <form onSubmit={transfer} className="mt-4 space-y-3">
                   <label className="block text-sm font-semibold">From
@@ -185,25 +232,75 @@ export default function ShopsPage() {
                     <select required name="to_branch_id" className={`mt-1 ${inputClass}`}>{branches.filter((b) => b.status !== "inactive").map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
                   </label>
                   {items.some((item) => item.kind === "part") && items.some((item) => item.kind === "product") && (
-                    <label className="block text-sm font-semibold">Item
-                      <select required name="item_kind" value={itemKind} onChange={(event) => setItemKind(event.target.value as "part" | "product")} className={`mt-1 ${inputClass}`}>
+                    <label className="block text-sm font-semibold">Catalog
+                      <select value={itemKind} onChange={(event) => setItemKind(event.target.value as "part" | "product")} className={`mt-1 ${inputClass}`}>
                         <option value="part">Part</option>
                         <option value="product">Product</option>
                       </select>
                     </label>
                   )}
-                  <label className="block text-sm font-semibold">Stock
-                    <select required name="item_id" className={`mt-1 ${inputClass}`}>
-                      {items.filter((item) => item.kind === itemKind).map((item) => (
-                        <option key={`${item.kind}-${item.id}`} value={item.id}>{item.name}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="block text-sm font-semibold">Quantity<input required name="quantity" type="number" min={1} className={`mt-1 ${inputClass}`} /></label>
-                  <button disabled={saving} className={`${buttonClass} w-full`}>{saving ? "Moving..." : "Transfer"}</button>
+                  <div className="space-y-2">
+                    {lines.map((line, index) => (
+                      <div key={index} className="grid grid-cols-[1fr_5rem_auto] gap-2">
+                        <select
+                          required
+                          value={line.item_id}
+                          onChange={(event) => setLines((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, kind: itemKind, item_id: event.target.value } : row))}
+                          className={inputClass}
+                        >
+                          <option value="">Stock</option>
+                          {kindOptions.map((item) => (
+                            <option key={`${item.kind}-${item.id}`} value={item.id}>{item.name}</option>
+                          ))}
+                        </select>
+                        <input
+                          required
+                          type="number"
+                          min={1}
+                          value={line.quantity}
+                          onChange={(event) => setLines((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: event.target.value } : row))}
+                          className={inputClass}
+                        />
+                        {lines.length > 1 && (
+                          <button type="button" onClick={() => setLines((rows) => rows.filter((_, rowIndex) => rowIndex !== index))} className="grid size-8 place-items-center text-[#b84837]" aria-label="Remove line">
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => setLines((rows) => [...rows, { kind: itemKind, item_id: "", quantity: "1" }])} className="inline-flex h-8 items-center gap-1 text-xs font-semibold text-[#167c73]">
+                      <Plus size={14} /> Add line
+                    </button>
+                  </div>
+                  <label className="block text-sm font-semibold">Note<input name="notes" className={`mt-1 ${inputClass}`} /></label>
+                  <button disabled={saving} className={`${buttonClass} w-full`}>{saving ? "Saving..." : "Create transfer"}</button>
                 </form>
               </Panel>
             )}
+            <Panel>
+              <div className="border-b border-[#d7d3c8] px-5 py-4">
+                <h2 className="font-display text-2xl font-semibold uppercase">Transfer history</h2>
+              </div>
+              <div className="divide-y divide-[#e2ded4]">
+                {transfers.map((transferRow) => (
+                  <div key={transferRow.id} className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold">{transferRow.transfer_number || `TRF-${transferRow.id}`}</p>
+                      <p className="text-xs text-[#6f746e]">
+                        {transferRow.from_branch?.name} → {transferRow.to_branch?.name} · {formatDate(transferRow.created_at)} · {transferRow.status}
+                      </p>
+                    </div>
+                    {transferRow.status === "pending" && (
+                      <button type="button" disabled={saving} onClick={() => receive(transferRow.id)} className="h-8 border border-[#167c73] px-3 text-xs font-semibold text-[#167c73]">Receive</button>
+                    )}
+                    <Link href={`/shops/transfers/${transferRow.id}`} className="grid size-8 place-items-center border border-[#cbc7bc]" aria-label="Print transfer">
+                      <Printer size={14} />
+                    </Link>
+                  </div>
+                ))}
+                {transfers.length === 0 && <p className="p-5 text-sm text-[#6f746e]">No transfers yet.</p>}
+              </div>
+            </Panel>
           </div>
         </div>
       )}

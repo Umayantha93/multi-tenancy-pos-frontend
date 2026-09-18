@@ -4,8 +4,9 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Plus, Save, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
-import { api, currentUser, money } from "@/lib/api";
+import { api, currentFeatures, currentUser, money } from "@/lib/api";
 import { useBusinessProfile } from "@/lib/use-business-profile";
+import { allowsServiceJobs } from "@/lib/business-profiles";
 
 type ServiceAddon = {
   id: number;
@@ -30,6 +31,8 @@ export default function ServiceAddonsPage() {
   const regularAddons = useMemo(() => addons.filter((addon) => !addon.is_full_service), [addons]);
   const fullService = useMemo(() => addons.find((addon) => addon.is_full_service) ?? null, [addons]);
   const isPaint = useBusinessProfile().type === "paint";
+  const profileType = useBusinessProfile().type;
+  const serviceAllowed = allowsServiceJobs(profileType, currentFeatures());
 
   function load() {
     setLoading(true);
@@ -141,6 +144,10 @@ export default function ServiceAddonsPage() {
 
   return (
     <AppShell title={isPaint ? "Paint packages" : "Service addons"} eyebrow={isPaint ? "Buttons on paint-package jobs" : "Buttons on service job cards"}>
+      {!serviceAllowed && profileType === "garage" ? (
+        <PageState message="Service jobs are off for this shop. Super-admin can enable them under Admit vehicle." />
+      ) : (
+      <>
       {!isOwner && (
         <p className="mb-5 text-sm text-[#6f746e]">Only the owner can add, price, or remove these buttons.</p>
       )}
@@ -229,6 +236,8 @@ export default function ServiceAddonsPage() {
           )}
         </form>
       </Panel>
+      )}
+      </>
       )}
     </AppShell>
   );

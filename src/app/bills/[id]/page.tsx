@@ -2,7 +2,7 @@
 
 import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { ChevronDown, CreditCard, Lock, MessageSquare, Plus, Printer, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
+import { ChevronDown, CreditCard, Lock, MessageCircle, MessageSquare, Plus, Printer, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { EmployeePicker } from "@/components/employee-picker";
 import { LaborCatalogPicker, type LaborCategory } from "@/components/labor-catalog-picker";
@@ -17,8 +17,9 @@ import { BillingBranchBanner } from "@/components/branch-chip";
 import { WarrantyFields, warrantyFromForm } from "@/components/warranty-fields";
 import { JobVideos } from "@/components/job-videos";
 import { useLocale, useT } from "@/lib/locale";
+import { billShareUrl, whatsappHref } from "@/lib/whatsapp";
 
-type Part = { id: number; name: string; price: string; stock_qty: number; sku?: string | null; barcode?: string | null; brand?: string };
+type Part = { id: number; name: string; price: string; stock_qty: number; sku?: string | null; barcode?: string | null; brand?: string; serialized?: boolean };
 type ComposerLabor = { key: string; laborItemId: string; name: string; hours: string; rate: number };
 type ComposerMaterial = { key: string; partId: number; name: string; qty: string; unitPrice: number; stock: number };
 type ServiceAddon = {
@@ -50,6 +51,8 @@ type Bill = {
   customer_balance?: string | number;
   mileage?: number | string | null;
   next_service_mileage?: number | string | null;
+  next_service_due_on?: string | null;
+  floor_status?: string | null;
   odometer?: number | string | null;
   notes?: string | null;
   internal_notes?: string | null;
@@ -132,11 +135,13 @@ export default function BillDetailPage() {
   const [addons, setAddons] = useState<ServiceAddon[]>([]);
   const [addonQty, setAddonQty] = useState("1");
   const [itemQty, setItemQty] = useState("1");
+  const [itemSerials, setItemSerials] = useState("");
   const [addingAddonId, setAddingAddonId] = useState<number | null>(null);
   const [serviceAddMode, setServiceAddMode] = useState<"services" | "inventory" | "discount">("services");
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [error, setError] = useState("");
   const [mode, setMode] = useState<"item" | "payment">("item");
+  const [floorPane, setFloorPane] = useState<"work" | "pay">("work");
   const [type, setType] = useState<string>("");
   const [partQuery, setPartQuery] = useState("");
   const [selectedPartId, setSelectedPartId] = useState("");
@@ -164,7 +169,9 @@ export default function BillDetailPage() {
   const [clearingPaymentId, setClearingPaymentId] = useState<number | null>(null);
   const [mileageDraft, setMileageDraft] = useState("");
   const [nextServiceMileageDraft, setNextServiceMileageDraft] = useState("");
+  const [nextServiceDueDraft, setNextServiceDueDraft] = useState("");
   const [savingMileage, setSavingMileage] = useState(false);
+  const [savingFloor, setSavingFloor] = useState(false);
   const [internalNotes, setInternalNotes] = useState("");
   const [noteColor, setNoteColor] = useState<"blue" | "red">("blue");
   const [savingNotes, setSavingNotes] = useState(false);
@@ -188,11 +195,16 @@ export default function BillDetailPage() {
   const [savingWarranty, setSavingWarranty] = useState(false);
   const [savingJobWarranty, setSavingJobWarranty] = useState(false);
   const [printWithLogo, setPrintWithLogo] = useState(true);
+  const [printThermal, setPrintThermal] = useState(false);
   const canSendSms = features.includes("bill_sms");
+  const canWhatsapp = features.includes("bill_whatsapp");
   const canOwnerSms = features.includes("owner_bill_sms");
   const canJobVideos = features.includes("job_videos");
+  const canJobBoard = features.includes("job_board");
+  const canReminders = features.includes("service_reminders");
   const canAssignEmployees = features.includes("employees_management") || features.includes("attendance");
   const canWarranty = features.includes("warranties");
+  const canSerial = features.includes("serial_inventory");
 
   const logoUrl = mediaUrl(tenant?.logo_url || tenant?.logo);
   const contactEmail = tenant?.contact_email || tenant?.owner_email || "";
@@ -297,6 +309,10 @@ export default function BillDetailPage() {
   }, []);
 
   useEffect(() => {
+    setPrintThermal(isStore && bill?.job_kind === "parts_sale");
+  }, [isStore, bill?.job_kind]);
+
+  useEffect(() => {
     if (!itemTypes.length) return;
     if (!type || !itemTypes.some((option) => option.value === type)) {
       setType(itemTypes[0].value);
@@ -329,6 +345,7 @@ export default function BillDetailPage() {
     setLaborHours("1");
     setAddonQty("1");
     setItemQty("1");
+    setItemSerials("");
     setPanelName("");
     setPanelCustom(false);
     setComposerLabor([]);
@@ -411,6 +428,34 @@ export default function BillDetailPage() {
     }
   }
 
+  function openBillWhatsApp() {
+    if (!bill?.customer?.phone) {
+      setError(t("bill.whatsapp_need_phone"));
+      return;
+    }
+    const link = billShareUrl(bill.share_token);
+    if (!link) {
+      setError(t("bill.whatsapp_need_link"));
+      return;
+    }
+    const name = bill.customer.name?.trim();
+    const greeting = name ? `Hi ${name},` : "Hi,";
+    const kind = stamp === "paid" ? "paid bill" : bill.hide_amounts ? "repair note" : "quotation";
+    const href = whatsappHref(bill.customer.phone, `${greeting} ${kind} from ${tenant?.business_name || "us"}: ${link}`);
+    if (!href) {
+      setError(t("bill.whatsapp_need_phone"));
+      return;
+    }
+    window.open(href, "_blank", "noopener,noreferrer");
+  }
+
+  function printBill() {
+    document.documentElement.classList.toggle("thermal-print", printThermal);
+    const cleanup = () => document.documentElement.classList.remove("thermal-print");
+    window.addEventListener("afterprint", cleanup, { once: true });
+    window.print();
+  }
+
   async function toggleHideAmounts() {
     if (!bill) return;
     setError("");
@@ -431,6 +476,7 @@ export default function BillDetailPage() {
         setBill(result);
         setMileageDraft(result.mileage != null && result.mileage !== "" ? String(result.mileage) : "");
         setNextServiceMileageDraft(result.next_service_mileage != null && result.next_service_mileage !== "" ? String(result.next_service_mileage) : "");
+        setNextServiceDueDraft(result.next_service_due_on ? String(result.next_service_due_on).slice(0, 10) : "");
         setInternalNotes(result.internal_notes || result.notes || "");
         setNoteColor(result.additional_note_color === "red" ? "red" : "blue");
         setEmployeeIds((result.employees ?? []).map((employee) => employee.id));
@@ -566,7 +612,7 @@ export default function BillDetailPage() {
     const form = event.currentTarget;
     const formData = new FormData(form);
     const lineType = activeType;
-    const payload: Record<string, string> = {
+    const payload: Record<string, unknown> = {
       type: String(formData.get("type") || lineType),
     };
 
@@ -648,6 +694,15 @@ export default function BillDetailPage() {
         }
         payload.part_id = selectedPartId;
         payload.quantity = String(formData.get("quantity") || "1");
+        if (canSerial && selectedPart?.serialized) {
+          const serials = itemSerials.split(/[\n,;]+/).map((code) => code.trim()).filter(Boolean);
+          if (serials.length === 0) {
+            setError(t("serials.need_imei"));
+            return;
+          }
+          payload.serials = serials;
+          payload.quantity = String(serials.length);
+        }
       }
     } else if (isLaborType && selectedLaborId) {
       payload.type = "labor";
@@ -853,11 +908,14 @@ export default function BillDetailPage() {
     setSavingMileage(true);
     setError("");
     try {
-      const payload: Record<string, number | null> = {
+      const payload: Record<string, number | string | null> = {
         mileage: mileageDraft === "" ? null : Number(mileageDraft),
       };
       if (isServiceJob) {
         payload.next_service_mileage = nextServiceMileageDraft === "" ? null : Number(nextServiceMileageDraft);
+        if (canReminders) {
+          payload.next_service_due_on = nextServiceDueDraft === "" ? null : nextServiceDueDraft;
+        }
       }
       const updated = await api<Bill>(`/bills/${id}`, {
         method: "PUT",
@@ -870,6 +928,7 @@ export default function BillDetailPage() {
           ? String(updated.next_service_mileage)
           : "",
       );
+      setNextServiceDueDraft(updated.next_service_due_on ? String(updated.next_service_due_on).slice(0, 10) : "");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("bill.err_mileage"));
     } finally {
@@ -1063,6 +1122,26 @@ export default function BillDetailPage() {
               <MessageSquare size={15} />
             </button>
           )}
+          {canWhatsapp && (
+            <button
+              type="button"
+              onClick={openBillWhatsApp}
+              disabled={!bill.customer?.phone || !bill.share_token}
+              className="grid size-8 shrink-0 place-items-center border border-[#c9c5b9] disabled:cursor-not-allowed disabled:opacity-40"
+              title={!bill.customer?.phone ? t("bill.whatsapp_need_phone") : t("bill.whatsapp")}
+            >
+              <MessageCircle size={15} />
+            </button>
+          )}
+          <label className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap border border-[#c9c5b9] bg-white px-2.5 text-[11px] font-bold uppercase">
+            <input
+              type="checkbox"
+              checked={printThermal}
+              onChange={(event) => setPrintThermal(event.target.checked)}
+              className="size-3.5 accent-[#167c73]"
+            />
+            {t("bill.print_80")}
+          </label>
           <label className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap border border-[#c9c5b9] bg-white px-2.5 text-[11px] font-bold uppercase">
             <input
               type="checkbox"
@@ -1080,7 +1159,7 @@ export default function BillDetailPage() {
             />
             {t("common.watermark")}
           </label>
-          <button onClick={() => window.print()} className="grid size-8 shrink-0 place-items-center border border-[#c9c5b9]" title={t("bill.print_bill")}>
+          <button onClick={printBill} className="grid size-8 shrink-0 place-items-center border border-[#c9c5b9]" title={t("bill.print_bill")}>
             <Printer size={15} />
           </button>
           {canRefund && (
@@ -1374,7 +1453,13 @@ export default function BillDetailPage() {
         </div>
       )}
       <BillingBranchBanner />
-      <div className="bill-print-sheet min-w-0 max-w-full">
+      {!isClosed && (
+        <div className="no-print mb-4 grid grid-cols-2 xl:hidden">
+          <button type="button" onClick={() => setFloorPane("work")} className={`h-11 text-sm font-semibold ${floorPane === "work" ? "bg-[#20221f] text-white" : "border border-[#d7d3c8] bg-white"}`}>Items</button>
+          <button type="button" onClick={() => { setFloorPane("pay"); setMode("payment"); }} className={`h-11 text-sm font-semibold ${floorPane === "pay" ? "bg-[#167c73] text-white" : "border border-[#d7d3c8] bg-white"}`}>Pay {money(bill.balance_due)}</button>
+        </div>
+      )}
+      <div className={`bill-print-sheet min-w-0 max-w-full ${!isClosed && Number(bill.balance_due) > 0 ? "pb-12 xl:pb-0" : ""}`}>
       <BillWatermark src={printWithLogo ? logoUrl : null} printOnly />
       <Panel className="bill-letterhead mb-5 overflow-hidden p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1421,7 +1506,7 @@ export default function BillDetailPage() {
       </Panel>
 
       <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[1.55fr_0.75fr] print:block print:space-y-2">
-        <div className="min-w-0 space-y-5 print:space-y-2">
+        <div className={`min-w-0 space-y-5 print:space-y-2 ${!isClosed && floorPane !== "work" ? "hidden" : "block"} xl:block`}>
           <Panel>
             <div className="bill-meta grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
               <div>
@@ -1437,7 +1522,7 @@ export default function BillDetailPage() {
               {bill.vehicle ? (
                 <>
                   <div>
-                    <p className="text-[10px] font-bold uppercase text-[#6f746e]">{t("common.vehicle")}</p>
+                    <p className="text-[10px] font-bold uppercase text-[#6f746e]">{profile.type === "device_repair" ? t("admit.device") : t("common.vehicle")}</p>
                     <p className="mt-1 font-semibold">{bill.vehicle.number_plate}</p>
                     <p className="text-sm text-[#6f746e]">{bill.vehicle.make} {bill.vehicle.model}</p>
                   </div>
@@ -1457,6 +1542,7 @@ export default function BillDetailPage() {
                           {bill.next_service_mileage != null && bill.next_service_mileage !== ""
                             ? t("common.km", { count: Number(bill.next_service_mileage).toLocaleString() })
                             : "—"}
+                          {bill.next_service_due_on ? ` · ${formatDate(bill.next_service_due_on)}` : ""}
                         </p>
                       </>
                     )}
@@ -1489,6 +1575,15 @@ export default function BillDetailPage() {
                               className={inputClass}
                               placeholder={t("bill.next_km")}
                             />
+                            {canReminders && (
+                              <input
+                                type="date"
+                                value={nextServiceDueDraft}
+                                onChange={(event) => setNextServiceDueDraft(event.target.value)}
+                                className={inputClass}
+                                aria-label={t("bill.next_due")}
+                              />
+                            )}
                             <button type="submit" disabled={savingMileage} className="inline-flex h-8 items-center justify-center border border-[#20221f] px-3 text-[10px] font-bold uppercase">
                               {savingMileage ? "..." : t("common.save")}
                             </button>
@@ -1608,6 +1703,28 @@ export default function BillDetailPage() {
                   />
                   {savingEmployees && <p className="text-[11px] text-[#6f746e]">{t("common.saving")}</p>}
                 </div>
+              )}
+              {canJobBoard && !isClosed && bill.job_kind !== "parts_sale" && (
+                <label className="block text-[11px] font-bold uppercase">
+                  {t("job_board.floor_status")}
+                  <select
+                    value={bill.floor_status || "waiting"}
+                    disabled={savingFloor}
+                    onChange={(event) => {
+                      const floor_status = event.target.value;
+                      setSavingFloor(true);
+                      api<Bill>(`/bills/${id}/floor-status`, { method: "PUT", body: JSON.stringify({ floor_status }) })
+                        .then((updated) => setBill(updated))
+                        .catch((caught) => setError(caught instanceof Error ? caught.message : t("job_board.move_failed")))
+                        .finally(() => setSavingFloor(false));
+                    }}
+                    className={`${inputClass} mt-2 font-normal normal-case`}
+                  >
+                    {["waiting", "diagnosis", "waiting_parts", "in_progress", "qc", "ready"].map((status) => (
+                      <option key={status} value={status}>{t(`job_board.${status}`)}</option>
+                    ))}
+                  </select>
+                </label>
               )}
             </div>
           </Panel>
@@ -1866,7 +1983,7 @@ export default function BillDetailPage() {
           )}
         </div>
 
-        <div className="space-y-5 print:mt-2">
+        <div className={`space-y-5 print:mt-2 ${!isClosed && floorPane !== "pay" ? "hidden" : "block"} xl:block`}>
           {!isClosed && (
           <Panel className="no-print xl:sticky xl:top-4">
             {!isOweIn && (
@@ -2368,7 +2485,7 @@ export default function BillDetailPage() {
                   </>
                 )}
 
-                {isStockType && showQuantity && (selectedPartId || outsidePart || customerPart) && (
+                {isStockType && showQuantity && (selectedPartId || outsidePart || customerPart) && !(canSerial && selectedPart?.serialized && !outsidePart && !customerPart) && (
                   <label key={`qty-${outsidePart ? "outside" : customerPart ? "customer" : "stock"}`} className="block text-xs font-bold uppercase">
                     {isPaint ? t("bill.qty_ml") : t("common.quantity")}
                     <input
@@ -2380,6 +2497,19 @@ export default function BillDetailPage() {
                       onChange={(event) => setItemQty(event.target.value)}
                       required
                       className={`${inputClass} mt-2`}
+                    />
+                  </label>
+                )}
+                {isStockType && canSerial && selectedPart?.serialized && !outsidePart && !customerPart && (
+                  <label className="block text-xs font-bold uppercase">
+                    {t("serials.enter_imeis")}
+                    <textarea
+                      value={itemSerials}
+                      onChange={(event) => setItemSerials(event.target.value)}
+                      rows={3}
+                      required
+                      className={`${inputClass} mt-2`}
+                      placeholder="356938035643809"
                     />
                   </label>
                 )}
@@ -2500,6 +2630,13 @@ export default function BillDetailPage() {
         </div>
       </div>
       </div>
+      {!isClosed && Number(bill.balance_due) > 0 && (
+        <div className="no-print sticky bottom-3 z-20 mt-2 xl:hidden">
+          <button type="button" onClick={() => { setFloorPane("pay"); setMode("payment"); }} className={`${buttonClass} h-12 w-full text-sm`}>
+            Pay {money(bill.balance_due)}
+          </button>
+        </div>
+      )}
     </AppShell>
   );
 }

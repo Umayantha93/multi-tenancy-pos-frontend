@@ -2,13 +2,13 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Check, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { Building2, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
 import { AddressField } from "@/components/address-field";
 import { ErrorMessage, Panel, PasswordInput, buttonClass, inputClass } from "@/components/ui";
 import { api, BusinessType, Tenant } from "@/lib/api";
 import { BUSINESS_TYPE_OPTIONS, PAYMENT_PLAN_OPTIONS, PLAN_OPTIONS, defaultPlanFor, optionalFeaturesFor, profileFor } from "@/lib/business-profiles";
-import { groupModules } from "@/lib/feature-modules";
+import { FeaturePlanToggles } from "@/components/feature-plan-toggles";
 
 type PhoneRow = { label: string; number: string };
 
@@ -127,6 +127,20 @@ export default function NewTenantPage() {
                   placeholder={paymentPlan === "monthly" ? "Monthly fee" : "Yearly fee"}
                   className={`mt-2 ${inputClass}`}
                 />
+              </label>
+              <label className="text-sm font-semibold">
+                One-time payment (LKR)
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  name="setup_fee_amount"
+                  placeholder="e.g. 60000"
+                  className={`mt-2 ${inputClass}`}
+                />
+                <span className="mt-1 block text-xs font-normal text-[#6f746e]">
+                  Setup fee. Settle later in any amounts, like Finance.
+                </span>
               </label>
               <label className="flex items-center gap-2 text-sm font-semibold sm:col-span-2">
                 <input name="demo_access" type="checkbox" className="size-4" />
@@ -267,35 +281,17 @@ export default function NewTenantPage() {
           <p className="mt-2 text-sm text-[#6f746e]">
             Modules switch when you change business type — only what fits {profile.label.toLowerCase()}.
             {businessType === "store" ? " Repair and Warranties stay off until you tick them." : ""}
+            {businessType === "mobile_shop" ? " Sales, repairs, and warranties are on by default." : ""}
           </p>
-          <div className="mt-6 space-y-5">
-            {groupModules(profile.moduleCatalog).map(({ group, features: modules }) => (
-              <div key={group}>
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-[#6f746e]">{group}</p>
-                <div className="space-y-2">
-                  {modules.map((module) => {
-                    const enabled = features.includes(module.key);
-                    const optional = optionalFeaturesFor(businessType).includes(module.key);
-                    return (
-                      <button
-                        type="button"
-                        key={module.key}
-                        onClick={() => setFeatures((value) => enabled ? value.filter((item) => item !== module.key) : [...value, module.key])}
-                        className={`flex h-12 w-full items-center justify-between border px-3 text-left text-sm font-semibold ${enabled ? "border-[#167c73] bg-[#167c73]/7" : "border-[#d7d3c8] text-[#6f746e]"}`}
-                      >
-                        <span>
-                          {module.name}
-                          {optional && <span className="ml-2 text-[10px] font-bold uppercase text-[#9a5b12]">Optional</span>}
-                        </span>
-                        <span className={`grid size-6 place-items-center ${enabled ? "bg-[#167c73] text-white" : "bg-[#e7e4db]"}`}>
-                          {enabled && <Check size={15} />}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+          <div className="mt-6">
+            <FeaturePlanToggles
+              features={profile.moduleCatalog}
+              enabled={features}
+              optional={optionalFeaturesFor(businessType)}
+              garageAdmit={businessType === "garage"}
+              columns={1}
+              onChange={setFeatures}
+            />
           </div>
           <button disabled={loading} className={`${buttonClass} mt-6 w-full justify-between`}>
             {loading ? "Creating tenant..." : "Create tenant and owner"}

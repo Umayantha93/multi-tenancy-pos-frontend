@@ -9,6 +9,7 @@ import { EmployeePicker } from "@/components/employee-picker";
 import { buttonClass, ErrorMessage, inputClass, Panel } from "@/components/ui";
 import { api, currentFeatures } from "@/lib/api";
 import { useBusinessProfile } from "@/lib/use-business-profile";
+import { allowsRepairJobs, allowsServiceJobs } from "@/lib/business-profiles";
 import { useT } from "@/lib/locale";
 
 type VehicleMatch = {
@@ -83,6 +84,8 @@ export default function AdmitVehiclePage() {
   const [customerVehicles, setCustomerVehicles] = useState<CustomerDetail["vehicles"]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [jobKind, setJobKind] = useState<JobKind>("repair");
+  const [canRepair, setCanRepair] = useState(true);
+  const [canService, setCanService] = useState(true);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [employeeIds, setEmployeeIds] = useState<number[]>([]);
   const [canAssignEmployees, setCanAssignEmployees] = useState(false);
@@ -91,7 +94,13 @@ export default function AdmitVehiclePage() {
   useEffect(() => {
     const features = currentFeatures();
     setCanAssignEmployees(features.includes("employees_management") || features.includes("attendance"));
-  }, []);
+    const repair = allowsRepairJobs(profile.type, features);
+    const service = allowsServiceJobs(profile.type, features);
+    setCanRepair(repair);
+    setCanService(service);
+    if (repair && !service) setJobKind("repair");
+    if (service && !repair) setJobKind("service");
+  }, [profile.type]);
 
   useEffect(() => {
     if (!canAssignEmployees) return;
@@ -212,7 +221,7 @@ export default function AdmitVehiclePage() {
           <div>
             <p className="font-semibold">{isDevice ? t("admit.search_first_device") : t("admit.search_first_plate")}</p>
             <p className="text-sm text-[#6f746e]">
-              {isPaint ? t("admit.search_hint_paint") : t("admit.search_hint")}
+              {isPaint ? t("admit.search_hint_paint") : isDevice ? t("admit.search_hint_device") : t("admit.search_hint")}
             </p>
           </div>
         </div>
@@ -265,8 +274,13 @@ export default function AdmitVehiclePage() {
         <Panel className="p-5">
           <h2 className="font-display text-2xl font-semibold uppercase">{t("admit.job_type")}</h2>
           <p className="mt-1 text-sm text-[#6f746e]">
-            {isPaint ? t("admit.job_type_hint_paint") : t("admit.job_type_hint")}
+            {isPaint
+              ? t("admit.job_type_hint_paint")
+              : isGarage && !(canRepair && canService)
+                ? (canService ? "Every new admission is a service job." : "Every new admission is a repair job.")
+                : t("admit.job_type_hint")}
           </p>
+          {(!isGarage || (canRepair && canService)) ? (
           <div className="mt-4 grid max-w-md grid-cols-2 gap-2">
             {([
               ["repair", isPaint ? t("admit.panel_work") : t("admit.repair")],
@@ -289,6 +303,9 @@ export default function AdmitVehiclePage() {
               );
             })}
           </div>
+          ) : (
+            <p className="mt-4 text-sm font-semibold">{canService ? t("admit.service") : t("admit.repair")}</p>
+          )}
           {canAssignEmployees && (
             <div className="mt-5">
               <p className="mb-2 text-xs font-semibold">{t("admit.assign_employees")} <span className="font-normal text-[#6f746e]">{t("admit.assign_employees_hint")}</span></p>
@@ -304,7 +321,7 @@ export default function AdmitVehiclePage() {
             <div className="border-b border-[#d7d3c8] px-5 py-4">
               <h2 className="font-display text-2xl font-semibold uppercase">{isDevice ? t("admit.new_customer_device") : t("admit.new_customer_vehicle")}</h2>
               <p className="mt-1 text-sm text-[#6f746e]">
-                {t("admit.form_hint")}
+                {isDevice ? t("admit.form_hint_device") : t("admit.form_hint")}
               </p>
             </div>
             <div className="grid gap-5 p-5 sm:grid-cols-2">

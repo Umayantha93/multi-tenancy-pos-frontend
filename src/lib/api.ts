@@ -33,9 +33,19 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
 
 export type FeatureKey =
   | "admit_vehicle"
+  | "admit_repair"
+  | "admit_service"
+  | "job_board"
+  | "job_bookings"
+  | "service_reminders"
+  | "purchase_orders"
+  | "part_fitment"
+  | "serial_inventory"
+  | "cash_up"
   | "customers"
   | "billing"
   | "bill_sms"
+  | "bill_whatsapp"
   | "bill_profits"
   | "repair_bills"
   | "warranties"
@@ -56,7 +66,7 @@ export type FeatureKey =
   | "service_ops_report"
   | "job_videos";
 
-export type BusinessType = "garage" | "tyre" | "device_repair" | "paint" | "photography" | "clothing" | "salon" | "cottage" | "store";
+export type BusinessType = "garage" | "tyre" | "device_repair" | "paint" | "photography" | "clothing" | "salon" | "cottage" | "store" | "mobile_shop";
 
 export type PhoneEntry = { label?: string; number: string };
 
@@ -69,6 +79,10 @@ export type Tenant = {
   plan?: string | null;
   payment_plan?: "monthly" | "yearly" | null;
   plan_amount?: number | string | null;
+  setup_fee_amount?: number | string | null;
+  setup_fee_paid?: number | string | null;
+  setup_fee_balance?: number | string | null;
+  setup_fee_settled?: boolean;
   payment_due_soon?: boolean;
   current_month_paid?: boolean;
   logo?: string | null;

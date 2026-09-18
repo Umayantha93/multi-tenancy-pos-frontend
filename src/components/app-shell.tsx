@@ -73,6 +73,15 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
   }, [router, setLocale]);
 
   useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [open]);
+
+  useEffect(() => {
     if (!user) return;
     const required = navigation.find((item) => {
       if (item.href === "/dashboard" || !pathname.startsWith(item.href)) return false;
@@ -103,7 +112,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[240px_1fr]">
-      <aside className={`no-print fixed inset-y-0 left-0 z-40 flex w-[240px] flex-col bg-[#242723] text-white transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>
+      <aside className={`no-print fixed inset-y-0 left-0 z-50 flex w-[240px] flex-col bg-[#242723] text-white transition-transform lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="flex h-20 items-center justify-between border-b border-white/10 px-5">
           <Link href="/dashboard" className="flex min-w-0 items-center gap-3">
             {logoUrl ? (
@@ -148,7 +157,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
           </button>
         </div>
       </aside>
-      {open && <button aria-label={t("shell.close_overlay")} onClick={() => setOpen(false)} className="no-print fixed inset-0 z-30 bg-black/45 lg:hidden" />}
+      {open && <button aria-label={t("shell.close_overlay")} onClick={() => setOpen(false)} className="no-print fixed inset-0 z-40 bg-black/45 lg:hidden" />}
       <main className="min-w-0">
         {showPaymentReminder && (
           <div className="no-print flex min-h-20 items-center justify-center bg-[#6b1e2a] px-4 py-5 text-center sm:min-h-24 sm:px-7 sm:py-6">
@@ -169,7 +178,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
             </Link>
           </div>
         )}
-        <header className="no-print relative z-40 border-b border-[#d7d3c8] bg-[#f3f0e8]/95 px-4 backdrop-blur sm:px-7">
+        <header className="no-print relative z-20 border-b border-[#d7d3c8] bg-[#f3f0e8]/95 px-4 backdrop-blur sm:px-7">
           <div className="flex min-h-20 flex-col gap-3 py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
             <div className="flex min-w-0 items-center gap-3">
               <button onClick={() => setOpen(true)} className="grid size-8 shrink-0 place-items-center border border-[#d7d3c8] lg:hidden" aria-label={t("shell.open_nav")}><Menu size={16} /></button>
@@ -178,7 +187,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
                 <h1 className="break-words font-display text-2xl font-semibold uppercase leading-tight sm:text-4xl sm:leading-none">{title}</h1>
               </div>
             </div>
-            <div className="relative z-50 flex min-w-0 flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end">
+            <div className="relative z-20 flex min-w-0 flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end">
               <BranchChip />
               {action}
             </div>
