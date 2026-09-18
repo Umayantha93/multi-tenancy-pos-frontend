@@ -53,6 +53,7 @@ export const FEATURE_PARENTS: Record<string, string> = {
   owner_bill_sms: "admit_vehicle",
   job_videos: "admit_vehicle",
   service_reminders: "bill_sms",
+  serial_inventory: "parts_inventory",
 };
 
 /** Full catalog fallback — prefer profileFor(type).moduleCatalog when type is known. */

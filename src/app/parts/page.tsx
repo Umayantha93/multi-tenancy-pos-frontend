@@ -24,6 +24,7 @@ type Part = {
   description?: string;
   images?: string[];
   image_urls?: string[];
+  serialized?: boolean;
 };
 
 type Mode = "add" | "edit" | "restock" | null;
@@ -56,6 +57,7 @@ export default function PartsPage() {
   const [importPayment, setImportPayment] = useState("paid");
   const [importDue, setImportDue] = useState("");
   const [importSupplierId, setImportSupplierId] = useState("");
+  const [canSerial, setCanSerial] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
   const profile = useBusinessProfile();
   const isPaint = profile.type === "paint";
@@ -75,6 +77,7 @@ export default function PartsPage() {
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       setAdmin(currentUser()?.role === "business_owner");
+      setCanSerial(currentFeatures().includes("serial_inventory"));
       load("");
       if (currentFeatures().includes("suppliers")) {
         api<{ data: Supplier[] }>("/suppliers?per_page=100")
@@ -213,8 +216,10 @@ export default function PartsPage() {
     setNotice("");
     try {
       if (mode === "edit" && selected) {
+        formData.set("serialized", form.querySelector<HTMLInputElement>('input[name="serialized"]')?.checked ? "1" : "0");
         await api(`/parts/${selected.id}`, { method: "POST", body: formData });
       } else {
+        formData.set("serialized", form.querySelector<HTMLInputElement>('input[name="serialized"]')?.checked ? "1" : "0");
         await api("/parts", { method: "POST", body: formData });
       }
       form.reset();
@@ -232,7 +237,15 @@ export default function PartsPage() {
     event.preventDefault();
     if (!selected) return;
     const form = event.currentTarget;
-    const payload = Object.fromEntries(new FormData(form));
+    const payload = Object.fromEntries(new FormData(form)) as Record<string, string>;
+    const serials = String(payload.serials || "")
+      .split(/[\n,;]+/)
+      .map((code) => code.trim())
+      .filter(Boolean);
+    delete payload.serials;
+    if (serials.length) {
+      payload.quantity = String(serials.length);
+    }
     if (!payload.due_date || payload.payment_status !== "credit") {
       delete payload.due_date;
     }
@@ -249,7 +262,7 @@ export default function PartsPage() {
     try {
       await api(`/parts/${selected.id}/restock`, {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: JSON.stringify(serials.length ? { ...payload, serials } : payload),
       });
       form.reset();
       setMode(null);
@@ -386,6 +399,7 @@ export default function PartsPage() {
                         {part.stock_qty} {isPaint ? "ml" : "in stock"}
                       </span>
                     </div>
+                    {part.serialized ? <p className="mt-1 text-[10px] font-bold uppercase text-[#167c73]">IMEI</p> : null}
                     <p className="mt-2 truncate text-xs text-[#6f746e]">{part.model || "Universal"} {part.year || ""}</p>
                     {(part.barcode || part.sku) && (
                       <p className="mt-1 truncate text-xs text-[#6f746e]">
@@ -489,6 +503,12 @@ export default function PartsPage() {
                 Description
                 <textarea name="description" defaultValue={selected?.description ?? ""} rows={3} className={`${inputClass} mt-2`} />
               </label>
+              {canSerial && (
+                <label className="flex items-center gap-2 text-xs font-bold uppercase sm:col-span-2">
+                  <input type="checkbox" name="serialized" defaultChecked={Boolean(selected?.serialized)} className="size-4 accent-[#167c73]" />
+                  Track by IMEI / serial
+                </label>
+              )}
               <label className="text-xs font-bold uppercase sm:col-span-2">
                 Images
                 <input name="images" type="file" accept="image/*" multiple className="mt-2 block w-full border border-[#c9c5b9] bg-white p-3 text-sm" />
@@ -552,8 +572,14 @@ export default function PartsPage() {
               </p>
               <label className="block text-xs font-bold uppercase">
                 Quantity to add{isPaint ? " (ml)" : ""}
-                <input name="quantity" type="number" min="1" step="1" required className={`${inputClass} mt-2`} />
+                <input name="quantity" type="number" min="1" step="1" required={!canSerial || !selected.serialized} className={`${inputClass} mt-2`} />
               </label>
+              {canSerial && (
+                <label className="block text-xs font-bold uppercase">
+                  IMEIs / serials (one per line)
+                  <textarea name="serials" rows={4} required={Boolean(selected.serialized)} placeholder="356938035643809" className={`${inputClass} mt-2`} />
+                </label>
+              )}
               <label className="block text-xs font-bold uppercase">
                 Unit cost
                 <input name="unit_cost" type="number" min="0" step="0.01" defaultValue={selected.cost_price || ""} className={`${inputClass} mt-2`} />

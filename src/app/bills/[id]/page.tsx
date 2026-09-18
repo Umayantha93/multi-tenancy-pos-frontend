@@ -18,7 +18,7 @@ import { WarrantyFields, warrantyFromForm } from "@/components/warranty-fields";
 import { JobVideos } from "@/components/job-videos";
 import { useLocale, useT } from "@/lib/locale";
 
-type Part = { id: number; name: string; price: string; stock_qty: number; sku?: string | null; barcode?: string | null; brand?: string };
+type Part = { id: number; name: string; price: string; stock_qty: number; sku?: string | null; barcode?: string | null; brand?: string; serialized?: boolean };
 type ComposerLabor = { key: string; laborItemId: string; name: string; hours: string; rate: number };
 type ComposerMaterial = { key: string; partId: number; name: string; qty: string; unitPrice: number; stock: number };
 type ServiceAddon = {
@@ -134,6 +134,7 @@ export default function BillDetailPage() {
   const [addons, setAddons] = useState<ServiceAddon[]>([]);
   const [addonQty, setAddonQty] = useState("1");
   const [itemQty, setItemQty] = useState("1");
+  const [itemSerials, setItemSerials] = useState("");
   const [addingAddonId, setAddingAddonId] = useState<number | null>(null);
   const [serviceAddMode, setServiceAddMode] = useState<"services" | "inventory" | "discount">("services");
   const [tenant, setTenant] = useState<Tenant | null>(null);
@@ -200,6 +201,7 @@ export default function BillDetailPage() {
   const canReminders = features.includes("service_reminders");
   const canAssignEmployees = features.includes("employees_management") || features.includes("attendance");
   const canWarranty = features.includes("warranties");
+  const canSerial = features.includes("serial_inventory");
 
   const logoUrl = mediaUrl(tenant?.logo_url || tenant?.logo);
   const contactEmail = tenant?.contact_email || tenant?.owner_email || "";
@@ -336,6 +338,7 @@ export default function BillDetailPage() {
     setLaborHours("1");
     setAddonQty("1");
     setItemQty("1");
+    setItemSerials("");
     setPanelName("");
     setPanelCustom(false);
     setComposerLabor([]);
@@ -574,7 +577,7 @@ export default function BillDetailPage() {
     const form = event.currentTarget;
     const formData = new FormData(form);
     const lineType = activeType;
-    const payload: Record<string, string> = {
+    const payload: Record<string, unknown> = {
       type: String(formData.get("type") || lineType),
     };
 
@@ -656,6 +659,15 @@ export default function BillDetailPage() {
         }
         payload.part_id = selectedPartId;
         payload.quantity = String(formData.get("quantity") || "1");
+        if (canSerial && selectedPart?.serialized) {
+          const serials = itemSerials.split(/[\n,;]+/).map((code) => code.trim()).filter(Boolean);
+          if (serials.length === 0) {
+            setError(t("serials.need_imei"));
+            return;
+          }
+          payload.serials = serials;
+          payload.quantity = String(serials.length);
+        }
       }
     } else if (isLaborType && selectedLaborId) {
       payload.type = "labor";
@@ -2418,7 +2430,7 @@ export default function BillDetailPage() {
                   </>
                 )}
 
-                {isStockType && showQuantity && (selectedPartId || outsidePart || customerPart) && (
+                {isStockType && showQuantity && (selectedPartId || outsidePart || customerPart) && !(canSerial && selectedPart?.serialized && !outsidePart && !customerPart) && (
                   <label key={`qty-${outsidePart ? "outside" : customerPart ? "customer" : "stock"}`} className="block text-xs font-bold uppercase">
                     {isPaint ? t("bill.qty_ml") : t("common.quantity")}
                     <input
@@ -2430,6 +2442,19 @@ export default function BillDetailPage() {
                       onChange={(event) => setItemQty(event.target.value)}
                       required
                       className={`${inputClass} mt-2`}
+                    />
+                  </label>
+                )}
+                {isStockType && canSerial && selectedPart?.serialized && !outsidePart && !customerPart && (
+                  <label className="block text-xs font-bold uppercase">
+                    {t("serials.enter_imeis")}
+                    <textarea
+                      value={itemSerials}
+                      onChange={(event) => setItemSerials(event.target.value)}
+                      rows={3}
+                      required
+                      className={`${inputClass} mt-2`}
+                      placeholder="356938035643809"
                     />
                   </label>
                 )}

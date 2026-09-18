@@ -12,6 +12,7 @@ import {
   ReceiptText,
   ShieldCheck,
   ShoppingBag,
+  Smartphone,
   Store,
   Users,
   ChartNoAxesCombined,
@@ -116,6 +117,7 @@ const garmentPeopleNav: NavItem[] = [
 
 const suppliersNav: NavItem = { href: "/suppliers", label: "Suppliers", icon: Truck, feature: "suppliers" };
 const warrantiesNav: NavItem = { href: "/warranties", label: "Warranties", icon: ShieldCheck, feature: "warranties" };
+const serialsNav: NavItem = { href: "/serials", label: "IMEI stock", icon: Smartphone, feature: "serial_inventory" };
 const bayCalendarNav: NavItem = { href: "/bay-calendar", label: "Bay calendar", icon: CalendarDays, feature: "job_bookings" };
 const jobBoardNav: NavItem = { href: "/job-board", label: "Job board", icon: LayoutGrid, feature: "job_board" };
 const remindersNav: NavItem = { href: "/service-reminders", label: "Service reminders", icon: Bell, feature: "service_reminders" };
@@ -322,6 +324,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
     quickActions: [
       { href: "/pos", label: "New sale", feature: "billing" },
       { href: "/repairs/new", label: "New repair", feature: "repair_bills" },
+      { href: "/serials", label: "IMEI / warranty lookup", feature: "serial_inventory" },
       { href: "/warranties", label: "Warranties", feature: "warranties" },
       { href: "/parts", label: "Find stock", feature: "parts_inventory" },
       { href: "/bills", label: "Take payment", feature: "billing" },
@@ -350,6 +353,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/warranties", label: "Warranties", icon: ShieldCheck, feature: "warranties" },
       billProfitsNav,
       { href: "/parts", label: "Stock", icon: Boxes, feature: "parts_inventory" },
+      serialsNav,
       suppliersNav,
       ...sharedNavTail,
     ],
@@ -373,6 +377,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
     quickActions: [
       { href: "/pos", label: "New sale", feature: "billing" },
       { href: "/repairs/new", label: "New repair", feature: "repair_bills" },
+      { href: "/serials", label: "IMEI / warranty lookup", feature: "serial_inventory" },
       { href: "/warranties", label: "Warranties", feature: "warranties" },
       { href: "/parts", label: "Find stock", feature: "parts_inventory" },
       { href: "/bills", label: "Take payment", feature: "billing" },
@@ -400,6 +405,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/warranties", label: "Warranties", icon: ShieldCheck, feature: "warranties" },
       billProfitsNav,
       { href: "/parts", label: "Stock", icon: Boxes, feature: "parts_inventory" },
+      serialsNav,
       suppliersNav,
       ...sharedNavTail,
     ],
@@ -536,6 +542,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/parts-pos", label: "Instant bill", icon: ShoppingBag, feature: "billing" },
       billProfitsNav,
       { href: "/parts", label: "Spares", icon: Boxes, feature: "parts_inventory" },
+      serialsNav,
       suppliersNav,
       ...sharedNavTail,
     ],
@@ -667,6 +674,11 @@ export function usesServiceAddonWorkspace(type?: string | null): boolean {
 
 export function usesStoreCounter(type?: string | null): boolean {
   return type === "store" || type === "mobile_shop";
+}
+
+export function usesCounterHome(type?: string | null, features: string[] = []): boolean {
+  if (type === "mobile_shop") return true;
+  return type === "store" && features.includes("repair_bills");
 }
 
 export function usesDeviceJobs(type?: string | null): boolean {
