@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import { Banknote, Building2, Boxes, CircleUser, Gauge, LogOut, Menu, Plus, ReceiptText, ShieldCheck, X } from "lucide-react";
-import { api, clearSession, currentUser } from "@/lib/api";
+import { api, clearSession, currentUser, type User } from "@/lib/api";
 import { LanguageToggle } from "@/components/language-toggle";
 import { useT } from "@/lib/locale";
 
@@ -23,11 +23,16 @@ export function PlatformShell({ children, title, eyebrow, action }: { children: 
   const router = useRouter();
   const t = useT();
   const [open, setOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
   const headerEyebrow = eyebrow ?? t("shell.platform_control");
 
   useEffect(() => {
-    const user = currentUser();
-    if (!localStorage.getItem("garage_token") || user?.role !== "super_admin") router.replace("/super-admin/login");
+    const sessionUser = currentUser();
+    if (!localStorage.getItem("garage_token") || sessionUser?.role !== "super_admin") {
+      router.replace("/super-admin/login");
+      return;
+    }
+    setUser(sessionUser);
   }, [router]);
 
   async function logout() {
@@ -64,8 +69,8 @@ export function PlatformShell({ children, title, eyebrow, action }: { children: 
       </nav>
       <div className="border-t border-white/10 p-4">
         <LanguageToggle />
-        <p className="mb-1 truncate text-sm font-semibold">{currentUser()?.name ?? t("shell.super_administrator")}</p>
-        <p className="mb-3 truncate text-[10px] uppercase text-white/35">{currentUser()?.email ?? t("shell.platform_account")}</p>
+        <p className="mb-1 truncate text-sm font-semibold">{user?.name ?? t("shell.super_administrator")}</p>
+        <p className="mb-3 truncate text-[10px] uppercase text-white/35">{user?.email ?? t("shell.platform_account")}</p>
         <button onClick={logout} className="flex items-center gap-2 text-sm text-white/60 hover:text-white">
           <LogOut size={16} />{t("shell.sign_out")}
         </button>

@@ -78,6 +78,10 @@ export type Tenant = {
   plan?: string | null;
   payment_plan?: "monthly" | "yearly" | null;
   plan_amount?: number | string | null;
+  setup_fee_amount?: number | string | null;
+  setup_fee_paid?: number | string | null;
+  setup_fee_balance?: number | string | null;
+  setup_fee_settled?: boolean;
   payment_due_soon?: boolean;
   current_month_paid?: boolean;
   logo?: string | null;

@@ -50,6 +50,8 @@ type Bill = {
   customer_balance?: string | number;
   mileage?: number | string | null;
   next_service_mileage?: number | string | null;
+  next_service_due_on?: string | null;
+  floor_status?: string | null;
   odometer?: number | string | null;
   notes?: string | null;
   internal_notes?: string | null;
@@ -165,7 +167,9 @@ export default function BillDetailPage() {
   const [clearingPaymentId, setClearingPaymentId] = useState<number | null>(null);
   const [mileageDraft, setMileageDraft] = useState("");
   const [nextServiceMileageDraft, setNextServiceMileageDraft] = useState("");
+  const [nextServiceDueDraft, setNextServiceDueDraft] = useState("");
   const [savingMileage, setSavingMileage] = useState(false);
+  const [savingFloor, setSavingFloor] = useState(false);
   const [internalNotes, setInternalNotes] = useState("");
   const [noteColor, setNoteColor] = useState<"blue" | "red">("blue");
   const [savingNotes, setSavingNotes] = useState(false);
@@ -192,6 +196,8 @@ export default function BillDetailPage() {
   const canSendSms = features.includes("bill_sms");
   const canOwnerSms = features.includes("owner_bill_sms");
   const canJobVideos = features.includes("job_videos");
+  const canJobBoard = features.includes("job_board");
+  const canReminders = features.includes("service_reminders");
   const canAssignEmployees = features.includes("employees_management") || features.includes("attendance");
   const canWarranty = features.includes("warranties");
 
@@ -432,6 +438,7 @@ export default function BillDetailPage() {
         setBill(result);
         setMileageDraft(result.mileage != null && result.mileage !== "" ? String(result.mileage) : "");
         setNextServiceMileageDraft(result.next_service_mileage != null && result.next_service_mileage !== "" ? String(result.next_service_mileage) : "");
+        setNextServiceDueDraft(result.next_service_due_on ? String(result.next_service_due_on).slice(0, 10) : "");
         setInternalNotes(result.internal_notes || result.notes || "");
         setNoteColor(result.additional_note_color === "red" ? "red" : "blue");
         setEmployeeIds((result.employees ?? []).map((employee) => employee.id));
@@ -854,11 +861,14 @@ export default function BillDetailPage() {
     setSavingMileage(true);
     setError("");
     try {
-      const payload: Record<string, number | null> = {
+      const payload: Record<string, number | string | null> = {
         mileage: mileageDraft === "" ? null : Number(mileageDraft),
       };
       if (isServiceJob) {
         payload.next_service_mileage = nextServiceMileageDraft === "" ? null : Number(nextServiceMileageDraft);
+        if (canReminders) {
+          payload.next_service_due_on = nextServiceDueDraft === "" ? null : nextServiceDueDraft;
+        }
       }
       const updated = await api<Bill>(`/bills/${id}`, {
         method: "PUT",
@@ -871,6 +881,7 @@ export default function BillDetailPage() {
           ? String(updated.next_service_mileage)
           : "",
       );
+      setNextServiceDueDraft(updated.next_service_due_on ? String(updated.next_service_due_on).slice(0, 10) : "");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("bill.err_mileage"));
     } finally {
@@ -1464,6 +1475,7 @@ export default function BillDetailPage() {
                           {bill.next_service_mileage != null && bill.next_service_mileage !== ""
                             ? t("common.km", { count: Number(bill.next_service_mileage).toLocaleString() })
                             : "—"}
+                          {bill.next_service_due_on ? ` · ${formatDate(bill.next_service_due_on)}` : ""}
                         </p>
                       </>
                     )}
@@ -1496,6 +1508,15 @@ export default function BillDetailPage() {
                               className={inputClass}
                               placeholder={t("bill.next_km")}
                             />
+                            {canReminders && (
+                              <input
+                                type="date"
+                                value={nextServiceDueDraft}
+                                onChange={(event) => setNextServiceDueDraft(event.target.value)}
+                                className={inputClass}
+                                aria-label={t("bill.next_due")}
+                              />
+                            )}
                             <button type="submit" disabled={savingMileage} className="inline-flex h-8 items-center justify-center border border-[#20221f] px-3 text-[10px] font-bold uppercase">
                               {savingMileage ? "..." : t("common.save")}
                             </button>
@@ -1615,6 +1636,28 @@ export default function BillDetailPage() {
                   />
                   {savingEmployees && <p className="text-[11px] text-[#6f746e]">{t("common.saving")}</p>}
                 </div>
+              )}
+              {canJobBoard && !isClosed && bill.job_kind !== "parts_sale" && (
+                <label className="block text-[11px] font-bold uppercase">
+                  {t("job_board.floor_status")}
+                  <select
+                    value={bill.floor_status || "waiting"}
+                    disabled={savingFloor}
+                    onChange={(event) => {
+                      const floor_status = event.target.value;
+                      setSavingFloor(true);
+                      api<Bill>(`/bills/${id}/floor-status`, { method: "PUT", body: JSON.stringify({ floor_status }) })
+                        .then((updated) => setBill(updated))
+                        .catch((caught) => setError(caught instanceof Error ? caught.message : t("job_board.move_failed")))
+                        .finally(() => setSavingFloor(false));
+                    }}
+                    className={`${inputClass} mt-2 font-normal normal-case`}
+                  >
+                    {["waiting", "diagnosis", "waiting_parts", "in_progress", "qc", "ready"].map((status) => (
+                      <option key={status} value={status}>{t(`job_board.${status}`)}</option>
+                    ))}
+                  </select>
+                </label>
               )}
             </div>
           </Panel>

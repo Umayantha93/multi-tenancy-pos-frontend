@@ -128,6 +128,20 @@ export default function NewTenantPage() {
                   className={`mt-2 ${inputClass}`}
                 />
               </label>
+              <label className="text-sm font-semibold">
+                One-time payment (LKR)
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  name="setup_fee_amount"
+                  placeholder="e.g. 60000"
+                  className={`mt-2 ${inputClass}`}
+                />
+                <span className="mt-1 block text-xs font-normal text-[#6f746e]">
+                  Setup fee. Settle later in any amounts, like Finance.
+                </span>
+              </label>
               <label className="flex items-center gap-2 text-sm font-semibold sm:col-span-2">
                 <input name="demo_access" type="checkbox" className="size-4" />
                 21-day demo access (auto-deactivates when the days end)

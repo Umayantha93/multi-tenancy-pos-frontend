@@ -21,6 +21,8 @@ import {
   Truck,
   UserRound,
   Wrench,
+  LayoutGrid,
+  Bell,
   type LucideIcon,
 } from "lucide-react";
 
@@ -114,6 +116,9 @@ const garmentPeopleNav: NavItem[] = [
 
 const suppliersNav: NavItem = { href: "/suppliers", label: "Suppliers", icon: Truck, feature: "suppliers" };
 const warrantiesNav: NavItem = { href: "/warranties", label: "Warranties", icon: ShieldCheck, feature: "warranties" };
+const bayCalendarNav: NavItem = { href: "/bay-calendar", label: "Bay calendar", icon: CalendarDays, feature: "job_bookings" };
+const jobBoardNav: NavItem = { href: "/job-board", label: "Job board", icon: LayoutGrid, feature: "job_board" };
+const remindersNav: NavItem = { href: "/service-reminders", label: "Service reminders", icon: Bell, feature: "service_reminders" };
 
 export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
   garage: {
@@ -157,7 +162,10 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
     navigation: [
       { href: "/dashboard", label: "Overview", icon: Gauge },
       { href: "/vehicles/admit", label: "Admit vehicle", icon: ClipboardList, feature: "admit_vehicle" },
+      bayCalendarNav,
+      jobBoardNav,
       { href: "/bills", label: "Job cards", icon: ReceiptText, feature: "billing" },
+      remindersNav,
       warrantiesNav,
       { href: "/parts-pos", label: "Instant bill", icon: ShoppingBag, feature: "billing" },
       billProfitsNav,
@@ -203,6 +211,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
     navigation: [
       { href: "/dashboard", label: "Overview", icon: Gauge },
       { href: "/vehicles/admit", label: "Admit vehicle", icon: ClipboardList, feature: "admit_vehicle" },
+      bayCalendarNav,
       { href: "/bills", label: "Paint jobs", icon: ReceiptText, feature: "billing" },
       warrantiesNav,
       { href: "/parts-pos", label: "Counter sale", icon: ShoppingBag, feature: "billing" },
@@ -473,6 +482,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
     navigation: [
       { href: "/dashboard", label: "Overview", icon: Gauge },
       { href: "/vehicles/admit", label: "Admit vehicle", icon: ClipboardList, feature: "admit_vehicle" },
+      bayCalendarNav,
       { href: "/bills", label: "Job cards", icon: ReceiptText, feature: "billing" },
       warrantiesNav,
       { href: "/parts-pos", label: "Instant bill", icon: ShoppingBag, feature: "billing" },
@@ -520,6 +530,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
     navigation: [
       { href: "/dashboard", label: "Overview", icon: Gauge },
       { href: "/vehicles/admit", label: "Admit device", icon: ClipboardList, feature: "admit_vehicle" },
+      bayCalendarNav,
       { href: "/bills", label: "Tickets", icon: ReceiptText, feature: "billing" },
       warrantiesNav,
       { href: "/parts-pos", label: "Instant bill", icon: ShoppingBag, feature: "billing" },

@@ -21,6 +21,7 @@ type Dashboard = {
   monthly_profit: number | null;
   recent_bills: Array<{ id: number; bill_number: string; status: string; balance_due: string; notes?: string | null; customer: { name: string }; vehicle?: { number_plate: string } | null }>;
   upcoming_bookings?: Array<{ id: number; scheduled_at: string; status: string; customer: { name: string }; package?: { name: string } | null }>;
+  upcoming_job_bookings?: Array<{ id: number; starts_at: string; number_plate?: string | null; customer?: { name: string } | null; bay?: { name: string } | null }>;
   active_stays?: Array<{ id: number; check_in: string; check_out: string; status: string; customer: { name: string }; room: { name: string } }>;
 };
 
@@ -70,7 +71,21 @@ export default function DashboardPage() {
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.5fr_0.75fr]">
         {can("billing") && <Panel><div className="flex items-center justify-between border-b border-[#d7d3c8] px-5 py-4"><div><h2 className="font-display text-2xl font-semibold uppercase">{profile.recentBillsTitle}</h2><p className="text-xs text-[#6f746e]">{profile.recentBillsHint}</p></div><Link href="/bills" className="text-[#167c73]" aria-label={`View all ${profile.billingLabel}`}><ArrowRight size={20} /></Link></div><div className="overflow-x-auto"><table className="w-full min-w-[620px] text-left text-sm"><thead className="bg-[#eeece5] text-[10px] uppercase text-[#6f746e]"><tr><th className="px-5 py-3">Ref</th><th>Detail</th><th>Customer</th><th>Status</th><th className="pr-5 text-right">Due</th></tr></thead><tbody>{data.recent_bills.map((bill) => <tr key={bill.id} className="border-t border-[#e2ded4]"><td className="px-5 py-4 font-semibold">{bill.bill_number}</td><td>{usesStoreCounter(profile.type) ? (bill.notes || "—") : (bill.vehicle?.number_plate ?? "—")}</td><td>{bill.customer?.name ?? "Walk-in"}</td><td><span className={`px-2 py-1 text-[10px] font-bold uppercase ${billStatusClass(bill.status)}`}>{billStatusLabel(bill.status)}</span></td><td className="pr-5 text-right font-semibold">{money(bill.balance_due)}</td></tr>)}</tbody></table>{data.recent_bills.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No {profile.billingLabel.toLowerCase()} yet.</p>}</div></Panel>}
         <div className="space-y-5">
-          {can("photo_bookings") && (data.upcoming_bookings?.length ?? 0) >= 0 && (
+          {can("job_bookings") && (
+            <Panel className="p-5">
+              <p className="text-xs font-bold uppercase text-[#6f746e]">Upcoming bays</p>
+              <div className="mt-3 space-y-3 text-sm">
+                {(data.upcoming_job_bookings ?? []).slice(0, 4).map((booking) => (
+                  <Link key={booking.id} href="/bay-calendar" className="flex justify-between border-b border-[#e2ded4] pb-2 hover:text-[#167c73]">
+                    <span className="font-semibold">{booking.number_plate ?? booking.customer?.name ?? "Booking"}{booking.bay?.name ? ` · ${booking.bay.name}` : ""}</span>
+                    <span className="text-[#6f746e]">{booking.starts_at ? new Date(booking.starts_at.replace(" ", "T")).toLocaleString() : ""}</span>
+                  </Link>
+                ))}
+                {(data.upcoming_job_bookings ?? []).length === 0 && <p className="text-[#6f746e]">No upcoming bay bookings.</p>}
+              </div>
+            </Panel>
+          )}
+          {can("photo_bookings") && (
             <Panel className="p-5">
               <p className="text-xs font-bold uppercase text-[#6f746e]">Upcoming sessions</p>
               <div className="mt-3 space-y-3 text-sm">
