@@ -31,6 +31,17 @@ type Bill = {
   vehicle: { number_plate: string; make?: string; model?: string } | null;
 };
 
+function billJobKindLabel(bill: Bill, type: string, t: ReturnType<typeof useT>): string | null {
+  if (!(type === "garage" || type === "paint" || usesStoreCounter(type))) return null;
+  if (usesStoreCounter(type)) {
+    return bill.bill_number.startsWith("QCK-") ? t("bills.quick") : t("bills.sale");
+  }
+  if (bill.job_kind === "service") return type === "paint" ? t("bills.package") : t("bills.service");
+  if (bill.job_kind === "parts_sale") return type === "paint" ? t("bills.counter") : t("bills.instant");
+  if (bill.job_kind === "repair" || !bill.job_kind) return type === "paint" ? t("bills.panel") : t("bills.repair");
+  return bill.job_kind;
+}
+
 export default function BillsPage() {
   const [bills, setBills] = useState<Bill[]>([]);
   const [search, setSearch] = useState("");
@@ -204,6 +215,7 @@ export default function BillsPage() {
         <div className="space-y-3 md:hidden">
           {bills.map((bill) => {
             const urgent = bill.status === "owe_in" && isOweInUrgent(bill.owe_in_due_date);
+            const kind = billJobKindLabel(bill, profile.type, t);
             return (
               <Link key={bill.id} href={`/bills/${bill.id}`}>
                 <Panel className={`p-4 ${urgent ? "border-[#b84837]" : ""}`}>
@@ -215,7 +227,12 @@ export default function BillsPage() {
                     </div>
                     <span className={`px-2 py-1 text-[10px] font-bold uppercase ${billStatusClass(billListStatus(bill), bill.owe_in_due_date)}`}>{billStatusLabel(billListStatus(bill), t)}</span>
                   </div>
-                  <p className={`mt-3 text-right text-lg font-semibold ${urgent ? "text-[#b84837]" : ""}`}>{money(bill.balance_due)}</p>
+                  <div className="mt-3 flex items-end justify-between gap-3">
+                    {kind ? (
+                      <span className="bg-[#eeece5] px-2 py-1 text-[10px] font-bold uppercase text-[#6f746e]">{kind}</span>
+                    ) : <span />}
+                    <p className={`text-right text-lg font-semibold ${urgent ? "text-[#b84837]" : ""}`}>{money(bill.balance_due)}</p>
+                  </div>
                 </Panel>
               </Link>
             );
@@ -240,22 +257,15 @@ export default function BillsPage() {
               <tbody>
                 {bills.map((bill) => {
                   const urgent = bill.status === "owe_in" && isOweInUrgent(bill.owe_in_due_date);
+                  const kind = billJobKindLabel(bill, profile.type, t);
                   return (
                   <tr key={bill.id} className={`border-t border-[#e2ded4] ${urgent ? "bg-[#b84837]/8" : ""}`}>
                     <td className="px-5 py-4 font-semibold">{bill.bill_number}</td>
                     <td>{formatDate(bill.admission_date)}</td>
                     <td>
-                      {profile.type === "garage" || profile.type === "paint" || usesStoreCounter(profile.type) ? (
+                      {kind ? (
                         <span className="px-2 py-1 text-[10px] font-bold uppercase bg-[#eeece5] text-[#6f746e]">
-                          {usesStoreCounter(profile.type)
-                            ? (bill.bill_number.startsWith("QCK-") ? t("bills.quick") : t("bills.sale"))
-                            : bill.job_kind === "service"
-                              ? (profile.type === "paint" ? t("bills.package") : t("bills.service"))
-                              : bill.job_kind === "parts_sale"
-                                ? (profile.type === "paint" ? t("bills.counter") : t("bills.instant"))
-                                : bill.job_kind === "repair" || !bill.job_kind
-                                  ? (profile.type === "paint" ? t("bills.panel") : t("bills.repair"))
-                                  : bill.job_kind}
+                          {kind}
                         </span>
                       ) : "—"}
                     </td>

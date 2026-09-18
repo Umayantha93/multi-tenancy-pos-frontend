@@ -24,6 +24,7 @@ type Customer = {
   vehicles_count: number;
   bills_count: number;
   outstanding_balance?: number | string;
+  outstanding_days?: number;
   last_bill?: LastBill | null;
 };
 
@@ -143,6 +144,9 @@ export default function CustomersPage() {
                     <div>
                       <p className="text-[#6f746e]">Outstanding</p>
                       <strong className={outstanding > 0 ? "text-[#b84837]" : ""}>{money(outstanding)}</strong>
+                      {outstanding > 0 && customer.outstanding_days != null && (
+                        <p className="mt-0.5 text-[#6f746e]">{customer.outstanding_days} day{customer.outstanding_days === 1 ? "" : "s"}</p>
+                      )}
                     </div>
                     <div>
                       <p className="text-[#6f746e]">Last job</p>

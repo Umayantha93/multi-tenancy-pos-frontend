@@ -2,7 +2,7 @@
 
 import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { ChevronDown, CreditCard, Lock, MessageSquare, Plus, Printer, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
+import { ChevronDown, CreditCard, Lock, MessageCircle, MessageSquare, Plus, Printer, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { EmployeePicker } from "@/components/employee-picker";
 import { LaborCatalogPicker, type LaborCategory } from "@/components/labor-catalog-picker";
@@ -17,6 +17,7 @@ import { BillingBranchBanner } from "@/components/branch-chip";
 import { WarrantyFields, warrantyFromForm } from "@/components/warranty-fields";
 import { JobVideos } from "@/components/job-videos";
 import { useLocale, useT } from "@/lib/locale";
+import { billShareUrl, whatsappHref } from "@/lib/whatsapp";
 
 type Part = { id: number; name: string; price: string; stock_qty: number; sku?: string | null; barcode?: string | null; brand?: string; serialized?: boolean };
 type ComposerLabor = { key: string; laborItemId: string; name: string; hours: string; rate: number };
@@ -194,7 +195,9 @@ export default function BillDetailPage() {
   const [savingWarranty, setSavingWarranty] = useState(false);
   const [savingJobWarranty, setSavingJobWarranty] = useState(false);
   const [printWithLogo, setPrintWithLogo] = useState(true);
+  const [printThermal, setPrintThermal] = useState(false);
   const canSendSms = features.includes("bill_sms");
+  const canWhatsapp = features.includes("bill_whatsapp");
   const canOwnerSms = features.includes("owner_bill_sms");
   const canJobVideos = features.includes("job_videos");
   const canJobBoard = features.includes("job_board");
@@ -304,6 +307,10 @@ export default function BillDetailPage() {
       /* ignore */
     }
   }, []);
+
+  useEffect(() => {
+    setPrintThermal(isStore && bill?.job_kind === "parts_sale");
+  }, [isStore, bill?.job_kind]);
 
   useEffect(() => {
     if (!itemTypes.length) return;
@@ -419,6 +426,34 @@ export default function BillDetailPage() {
     } finally {
       setSendingSms(false);
     }
+  }
+
+  function openBillWhatsApp() {
+    if (!bill?.customer?.phone) {
+      setError(t("bill.whatsapp_need_phone"));
+      return;
+    }
+    const link = billShareUrl(bill.share_token);
+    if (!link) {
+      setError(t("bill.whatsapp_need_link"));
+      return;
+    }
+    const name = bill.customer.name?.trim();
+    const greeting = name ? `Hi ${name},` : "Hi,";
+    const kind = stamp === "paid" ? "paid bill" : bill.hide_amounts ? "repair note" : "quotation";
+    const href = whatsappHref(bill.customer.phone, `${greeting} ${kind} from ${tenant?.business_name || "us"}: ${link}`);
+    if (!href) {
+      setError(t("bill.whatsapp_need_phone"));
+      return;
+    }
+    window.open(href, "_blank", "noopener,noreferrer");
+  }
+
+  function printBill() {
+    document.documentElement.classList.toggle("thermal-print", printThermal);
+    const cleanup = () => document.documentElement.classList.remove("thermal-print");
+    window.addEventListener("afterprint", cleanup, { once: true });
+    window.print();
   }
 
   async function toggleHideAmounts() {
@@ -1087,6 +1122,26 @@ export default function BillDetailPage() {
               <MessageSquare size={15} />
             </button>
           )}
+          {canWhatsapp && (
+            <button
+              type="button"
+              onClick={openBillWhatsApp}
+              disabled={!bill.customer?.phone || !bill.share_token}
+              className="grid size-8 shrink-0 place-items-center border border-[#c9c5b9] disabled:cursor-not-allowed disabled:opacity-40"
+              title={!bill.customer?.phone ? t("bill.whatsapp_need_phone") : t("bill.whatsapp")}
+            >
+              <MessageCircle size={15} />
+            </button>
+          )}
+          <label className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap border border-[#c9c5b9] bg-white px-2.5 text-[11px] font-bold uppercase">
+            <input
+              type="checkbox"
+              checked={printThermal}
+              onChange={(event) => setPrintThermal(event.target.checked)}
+              className="size-3.5 accent-[#167c73]"
+            />
+            {t("bill.print_80")}
+          </label>
           <label className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap border border-[#c9c5b9] bg-white px-2.5 text-[11px] font-bold uppercase">
             <input
               type="checkbox"
@@ -1104,7 +1159,7 @@ export default function BillDetailPage() {
             />
             {t("common.watermark")}
           </label>
-          <button onClick={() => window.print()} className="grid size-8 shrink-0 place-items-center border border-[#c9c5b9]" title={t("bill.print_bill")}>
+          <button onClick={printBill} className="grid size-8 shrink-0 place-items-center border border-[#c9c5b9]" title={t("bill.print_bill")}>
             <Printer size={15} />
           </button>
           {canRefund && (

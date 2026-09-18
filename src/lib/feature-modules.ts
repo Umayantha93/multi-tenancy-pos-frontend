@@ -24,6 +24,7 @@ const FALLBACK_GROUP: Record<string, string> = {
   customers: "Service Intake",
   billing: "Service Intake",
   bill_sms: "Service Intake",
+  bill_whatsapp: "Service Intake",
   service_reminders: "Service Intake",
   bill_profits: "Service Intake",
   repair_bills: "Service Intake",
@@ -54,6 +55,7 @@ export const FEATURE_PARENTS: Record<string, string> = {
   job_videos: "admit_vehicle",
   service_reminders: "bill_sms",
   serial_inventory: "parts_inventory",
+  bill_whatsapp: "billing",
 };
 
 /** Full catalog fallback — prefer profileFor(type).moduleCatalog when type is known. */

@@ -252,3 +252,40 @@ button, a { -webkit-tap-highlight-color: transparent; }
     padding: 0 !important;
   }
 }
+
+@media print {
+  html.thermal-print {
+    @page {
+      size: 80mm auto;
+      margin: 3mm;
+    }
+  }
+  html.thermal-print .bill-print-sheet {
+    font-size: 10px;
+    max-width: 74mm;
+  }
+  html.thermal-print .bill-letterhead {
+    padding: 4px 0 !important;
+    margin-bottom: 4px !important;
+  }
+  html.thermal-print .bill-letterhead img {
+    height: 1.6rem !important;
+    width: 1.6rem !important;
+  }
+  html.thermal-print .bill-letterhead .font-display {
+    font-size: 0.95rem !important;
+  }
+  html.thermal-print .bill-meta,
+  html.thermal-print .bill-summary {
+    padding: 4px 0 !important;
+  }
+  html.thermal-print .bill-items-table th,
+  html.thermal-print .bill-items-table td {
+    padding-left: 2px !important;
+    padding-right: 2px !important;
+    font-size: 9px !important;
+  }
+  html.thermal-print .bill-watermark {
+    display: none !important;
+  }
+}

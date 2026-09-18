@@ -24,6 +24,8 @@ import {
   Wrench,
   LayoutGrid,
   Bell,
+  Banknote,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -64,6 +66,7 @@ const sharedPeopleFinance: Array<{ key: FeatureKey; name: string; group: string 
   { key: "customers", name: "Customers", group: "Service Intake" },
   { key: "billing", name: "Billing", group: "Service Intake" },
   { key: "bill_sms", name: "Bill SMS", group: "Service Intake" },
+  { key: "bill_whatsapp", name: "WhatsApp bill share", group: "Service Intake" },
   { key: "bill_profits", name: "Bill Profits Analysis", group: "Service Intake" },
   { key: "employees_management", name: "Team", group: "People" },
   { key: "attendance", name: "Attendance", group: "People" },
@@ -85,12 +88,14 @@ const myJobsNav: NavItem = { href: "/my-jobs", label: "My jobs", icon: Clipboard
 const sharedNavTail: NavItem[] = [
   myJobsNav,
   { href: "/customers", label: "Customers", icon: Contact, feature: "customers" },
+  { href: "/outstanding", label: "Outstanding", icon: Banknote, feature: "customers" },
   { href: "/employees", label: "Team", icon: Users, feature: "employees_management" },
   { href: "/shifts", label: "Shifts", icon: Clock, feature: "employees_management", staffSelf: true },
   { href: "/leave", label: "Leave", icon: CalendarDays, feature: "employees_management", staffSelf: true },
   { href: "/attendance", label: "Attendance", icon: Fingerprint, feature: "attendance" },
   { href: "/payroll", label: "Payroll", icon: ChartNoAxesCombined, feature: "payroll" },
   { href: "/reports", label: "Reports", icon: ClipboardList, feature: "reports" },
+  { href: "/cash-up", label: "Cash-up", icon: Wallet, feature: "cash_up" },
   { href: "/balance-sheet", label: "Finance", icon: ChartNoAxesCombined, feature: "balance_sheet" },
   { href: "/shops", label: "Shops", icon: Store },
   { href: "/profile", label: "Shop details", icon: UserRound, owner: true },
@@ -101,6 +106,7 @@ const sharedNavTail: NavItem[] = [
 const garmentPeopleNav: NavItem[] = [
   myJobsNav,
   { href: "/customers", label: "Customers", icon: Contact, feature: "customers" },
+  { href: "/outstanding", label: "Outstanding", icon: Banknote, feature: "customers" },
   { href: "/employees", label: "Team", icon: Users, feature: "employees_management" },
   { href: "/shifts", label: "Shifts", icon: Clock, feature: "employees_management", staffSelf: true },
   { href: "/leave", label: "Leave", icon: CalendarDays, feature: "employees_management", staffSelf: true },
@@ -108,6 +114,7 @@ const garmentPeopleNav: NavItem[] = [
   { href: "/attendance", label: "Attendance", icon: Fingerprint, feature: "attendance" },
   { href: "/payroll", label: "Payroll", icon: ChartNoAxesCombined, feature: "payroll" },
   { href: "/reports", label: "Reports", icon: ClipboardList, feature: "reports" },
+  { href: "/cash-up", label: "Cash-up", icon: Wallet, feature: "cash_up" },
   { href: "/balance-sheet", label: "Finance", icon: ChartNoAxesCombined, feature: "balance_sheet" },
   { href: "/shops", label: "Shops", icon: Store },
   { href: "/profile", label: "Shop details", icon: UserRound, owner: true },
@@ -686,18 +693,18 @@ export function usesDeviceJobs(type?: string | null): boolean {
 }
 
 export function optionalFeaturesFor(type?: string | null): FeatureKey[] {
-  if (type === "store") return ["repair_bills", "warranties", "purchase_orders", "part_fitment", "serial_inventory"];
-  if (type === "mobile_shop") return ["purchase_orders", "part_fitment", "serial_inventory"];
+  if (type === "store") return ["repair_bills", "warranties", "purchase_orders", "part_fitment", "serial_inventory", "bill_whatsapp"];
+  if (type === "mobile_shop") return ["purchase_orders", "part_fitment", "serial_inventory", "bill_whatsapp"];
   if (type === "garage") {
     return [
       "owner_bill_sms", "service_ops_report", "job_videos",
       "job_board", "job_bookings", "service_reminders",
-      "purchase_orders", "part_fitment", "cash_up",
+      "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp",
     ];
   }
-  if (type === "tyre" || type === "paint") return ["job_bookings", "purchase_orders", "part_fitment", "cash_up"];
-  if (type === "device_repair") return ["job_bookings", "purchase_orders", "part_fitment", "serial_inventory", "cash_up"];
-  return ["cash_up"];
+  if (type === "tyre" || type === "paint") return ["job_bookings", "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp"];
+  if (type === "device_repair") return ["job_bookings", "purchase_orders", "part_fitment", "serial_inventory", "cash_up", "bill_whatsapp"];
+  return ["cash_up", "bill_whatsapp"];
 }
 
 export function allowsServiceJobs(type?: string | null, features: string[] = []): boolean {

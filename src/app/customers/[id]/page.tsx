@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
-import { ArrowLeft, ArrowRight, Pencil, Printer } from "lucide-react";
+import { ArrowLeft, ArrowRight, MessageCircle, Pencil, Printer } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
-import { api, formatDate, money } from "@/lib/api";
+import { api, currentFeatures, formatDate, money } from "@/lib/api";
 import { billStatusClass, billStatusLabel } from "@/lib/bill-stamp";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 import { usesVehicleJobs } from "@/lib/business-profiles";
+import { billShareUrl, whatsappHref } from "@/lib/whatsapp";
 
 type CustomerDetail = {
   id: number;
@@ -18,6 +19,8 @@ type CustomerDetail = {
   address?: string | null;
   sms_opt_in?: boolean;
   outstanding_balance?: number | string;
+  outstanding_days?: number;
+  oldest_unpaid_bill?: { id: number; bill_number: string; share_token?: string | null } | null;
   last_bill?: { id: number; bill_number: string; admission_date: string; status: string } | null;
   vehicles_count: number;
   bills_count: number;
@@ -38,9 +41,11 @@ export default function CustomerDetailPage() {
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
+  const [canWhatsapp, setCanWhatsapp] = useState(false);
   const profile = useBusinessProfile();
 
   useEffect(() => {
+    setCanWhatsapp(currentFeatures().includes("bill_whatsapp"));
     api<CustomerDetail>(`/customers/${id}`)
       .then(setCustomer)
       .catch((caught) => setError(caught.message));
@@ -93,6 +98,23 @@ export default function CustomerDetailPage() {
                 <h2 className="mt-1 font-display text-3xl font-semibold uppercase">{customer.name}</h2>
               </div>
               <div className="flex gap-2">
+                {canWhatsapp && Number(customer.outstanding_balance ?? 0) > 0 && customer.phone && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const days = customer.outstanding_days ?? 0;
+                      const link = billShareUrl(customer.oldest_unpaid_bill?.share_token);
+                      const href = whatsappHref(
+                        customer.phone || "",
+                        `Hi ${customer.name}, you have ${money(customer.outstanding_balance ?? 0)} outstanding (${days} day${days === 1 ? "" : "s"}).${link ? ` ${link}` : ""}`,
+                      );
+                      if (href) window.open(href, "_blank", "noopener,noreferrer");
+                    }}
+                    className="flex h-8 items-center gap-1 border border-[#d7d3c8] px-3 text-xs font-bold uppercase"
+                  >
+                    <MessageCircle size={13} /> Remind
+                  </button>
+                )}
                 <Link href={`/customers/${customer.id}/statement`} className="flex h-8 items-center gap-1 border border-[#d7d3c8] px-3 text-xs font-bold uppercase">
                   <Printer size={13} /> Statement
                 </Link>
@@ -124,7 +146,10 @@ export default function CustomerDetailPage() {
               </div>
               <div className="flex justify-between border-b border-[#e2ded4] pb-3">
                 <dt className="text-[#6f746e]">Outstanding</dt>
-                <dd className={`font-semibold ${Number(customer.outstanding_balance ?? 0) > 0 ? "text-[#b84837]" : ""}`}>{money(customer.outstanding_balance ?? 0)}</dd>
+                <dd className={`font-semibold ${Number(customer.outstanding_balance ?? 0) > 0 ? "text-[#b84837]" : ""}`}>
+                  {money(customer.outstanding_balance ?? 0)}
+                  {Number(customer.outstanding_balance ?? 0) > 0 && customer.outstanding_days != null ? ` · ${customer.outstanding_days} day${customer.outstanding_days === 1 ? "" : "s"}` : ""}
+                </dd>
               </div>
               <div className="flex justify-between border-b border-[#e2ded4] pb-3">
                 <dt className="text-[#6f746e]">Last job</dt>

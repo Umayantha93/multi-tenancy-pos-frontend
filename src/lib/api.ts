@@ -45,6 +45,7 @@ export type FeatureKey =
   | "customers"
   | "billing"
   | "bill_sms"
+  | "bill_whatsapp"
   | "bill_profits"
   | "repair_bills"
   | "warranties"
