@@ -3,15 +3,16 @@
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
-import { Check, Plus, Power, Trash2, Users } from "lucide-react";
+import { Plus, Power, Trash2, Users } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
 import { AddressField } from "@/components/address-field";
 import { ConfirmModal, ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
 import { api, Branch, mediaUrl, PhoneEntry, Tenant } from "@/lib/api";
 import { PAYMENT_PLAN_OPTIONS, PLAN_OPTIONS, optionalFeaturesFor, profileFor } from "@/lib/business-profiles";
-import { groupModules } from "@/lib/feature-modules";
+import { FeaturePlanToggles } from "@/components/feature-plan-toggles";
 
-type Feature = { id: number; key: string; name: string; group?: string | null };
+type Feature = { id: number; key: string; name: string; group?: string | null; parent?: string | null };
+type FeatureResponse = { available: Feature[]; enabled: string[]; optional?: string[]; nested?: Record<string, string>; business_type?: string };
 type Detail = Tenant & {
   owner_name: string;
   owner_email: string;
@@ -23,7 +24,6 @@ type Detail = Tenant & {
   users: Array<{ id: number; name: string; email: string; role: string; status: string; is_secondary_view?: boolean }>;
   features: Feature[];
 };
-type FeatureResponse = { available: Feature[]; enabled: string[]; optional?: string[]; business_type?: string };
 type FeePayment = {
   id: number;
   year: number;
@@ -746,36 +746,16 @@ export default function TenantDetailPage() {
               Only modules that fit this business type are shown. Disabling one removes it from that business sidebar immediately.
               {tenant.business_type === "store" ? " Repair and Warranties are optional modules." : ""}
               {tenant.business_type === "mobile_shop" ? " Sales, repairs, and warranties are on by default." : ""}
-              {tenant.business_type === "garage" ? " Owner bill SMS, service operations report, and job videos are optional." : ""}
+              {tenant.business_type === "garage" ? " Admit vehicle can be repair, service, or both. Nested ticks sit under that module." : ""}
             </p>
-            <div className="mt-6 space-y-6">
-              {groupModules(featureData.available).map(({ group, features }) => (
-                <div key={group}>
-                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-[#6f746e]">{group}</p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {features.map((feature) => {
-                      const active = enabled.includes(feature.key);
-                      const optional = (featureData.optional ?? optionalFeaturesFor(tenant.business_type)).includes(feature.key);
-                      return (
-                        <button
-                          type="button"
-                          key={feature.id}
-                          onClick={() => setEnabled((value) => active ? value.filter((key) => key !== feature.key) : [...value, feature.key])}
-                          className={`flex min-h-14 items-center justify-between border px-4 py-2 text-left text-sm font-semibold ${active ? "border-[#167c73] bg-[#167c73]/7" : "border-[#d7d3c8] text-[#6f746e]"}`}
-                        >
-                          <span>
-                            {feature.name}
-                            {optional && <span className="ml-2 text-[10px] font-bold uppercase text-[#9a5b12]">Optional</span>}
-                          </span>
-                          <span className={`grid size-6 place-items-center ${active ? "bg-[#167c73] text-white" : "bg-[#e7e4db]"}`}>
-                            {active && <Check size={15} />}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
+            <div className="mt-6">
+              <FeaturePlanToggles
+                features={featureData.available}
+                enabled={enabled}
+                optional={featureData.optional ?? optionalFeaturesFor(tenant.business_type)}
+                garageAdmit={tenant.business_type === "garage"}
+                onChange={setEnabled}
+              />
             </div>
             <button onClick={saveFeatures} disabled={saving} className={`${buttonClass} mt-6`}>
               {saving ? "Saving..." : "Save feature plan"}

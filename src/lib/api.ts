@@ -33,6 +33,15 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
 
 export type FeatureKey =
   | "admit_vehicle"
+  | "admit_repair"
+  | "admit_service"
+  | "job_board"
+  | "job_bookings"
+  | "service_reminders"
+  | "purchase_orders"
+  | "part_fitment"
+  | "serial_inventory"
+  | "cash_up"
   | "customers"
   | "billing"
   | "bill_sms"

@@ -66,7 +66,13 @@ const sharedPeopleFinance: Array<{ key: FeatureKey; name: string; group: string 
   { key: "attendance", name: "Attendance", group: "People" },
   { key: "payroll", name: "Payroll", group: "People" },
   { key: "balance_sheet", name: "Finance", group: "Finance" },
+  { key: "cash_up", name: "Day-end cash-up", group: "Finance" },
   { key: "reports", name: "Reports", group: "Finance" },
+];
+
+const inventoryPlanExtras: Array<{ key: FeatureKey; name: string; group: string }> = [
+  { key: "purchase_orders", name: "Purchase orders", group: "Inventory" },
+  { key: "part_fitment", name: "Part fitment / substitutes", group: "Inventory" },
 ];
 
 const billProfitsNav: NavItem = { href: "/bill-profits", label: "Bill profits", icon: PieChart, feature: "bill_profits" };
@@ -128,17 +134,24 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
     ],
     defaultFeatures: [
-      "admit_vehicle", "parts_inventory", "suppliers", "customers", "billing", "bill_sms", "bill_profits", "warranties",
+      "admit_vehicle", "admit_repair", "admit_service", "parts_inventory", "suppliers", "customers", "billing", "bill_sms", "bill_profits", "warranties",
       "employees_management", "attendance", "payroll", "balance_sheet", "reports",
     ],
     moduleCatalog: [
       { key: "admit_vehicle", name: "Admit vehicle", group: "Service Intake" },
-      { key: "warranties", name: "Warranties", group: "Service Intake" },
+      { key: "admit_repair", name: "Repair jobs", group: "Service Intake" },
+      { key: "admit_service", name: "Service jobs", group: "Service Intake" },
+      { key: "job_board", name: "Job status board", group: "Service Intake" },
       { key: "owner_bill_sms", name: "Owner bill SMS", group: "Service Intake" },
       { key: "job_videos", name: "Job videos", group: "Service Intake" },
+      { key: "job_bookings", name: "Bay calendar", group: "Service Intake" },
+      { key: "warranties", name: "Warranties", group: "Service Intake" },
       { key: "parts_inventory", name: "Parts inventory", group: "Inventory" },
       { key: "suppliers", name: "Suppliers", group: "Inventory" },
+      { key: "purchase_orders", name: "Purchase orders", group: "Inventory" },
+      { key: "part_fitment", name: "Part fitment / substitutes", group: "Inventory" },
       ...sharedPeopleFinance.map((m) => m.key === "billing" ? { ...m, name: "Job cards" } : m),
+      { key: "service_reminders", name: "Next-service reminders", group: "Service Intake" },
       { key: "service_ops_report", name: "Service operations report", group: "Finance" },
     ],
     navigation: [
@@ -183,6 +196,8 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { key: "warranties", name: "Warranties", group: "Service Intake" },
       { key: "parts_inventory", name: "Color stock", group: "Inventory" },
       { key: "suppliers", name: "Suppliers", group: "Inventory" },
+      ...inventoryPlanExtras,
+      { key: "job_bookings", name: "Bay calendar", group: "Service Intake" },
       ...sharedPeopleFinance.map((m) => m.key === "billing" ? { ...m, name: "Paint jobs" } : m),
     ],
     navigation: [
@@ -306,7 +321,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
     defaultFeatures: [
       "parts_inventory", "suppliers", "customers", "billing", "bill_sms", "bill_profits",
       "repair_bills", "warranties",
-      "employees_management", "attendance", "payroll", "balance_sheet", "reports",
+      "employees_management", "attendance", "payroll", "balance_sheet", "cash_up", "reports",
     ],
     moduleCatalog: [
       { key: "billing", name: "Sales", group: "Service Intake" },
@@ -314,6 +329,8 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { key: "warranties", name: "Warranties", group: "Service Intake" },
       { key: "parts_inventory", name: "Phones / stock", group: "Inventory" },
       { key: "suppliers", name: "Suppliers", group: "Inventory" },
+      ...inventoryPlanExtras,
+      { key: "serial_inventory", name: "IMEI / serial stock", group: "Inventory" },
       ...sharedPeopleFinance.filter((m) => m.key !== "billing"),
     ],
     navigation: [
@@ -354,7 +371,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
     ],
     defaultFeatures: [
       "parts_inventory", "suppliers", "customers", "billing", "bill_sms", "bill_profits",
-      "employees_management", "attendance", "payroll", "balance_sheet", "reports",
+      "employees_management", "attendance", "payroll", "balance_sheet", "cash_up", "reports",
     ],
     moduleCatalog: [
       { key: "billing", name: "Sales", group: "Service Intake" },
@@ -362,6 +379,8 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { key: "warranties", name: "Warranties", group: "Service Intake" },
       { key: "parts_inventory", name: "Stock", group: "Inventory" },
       { key: "suppliers", name: "Suppliers", group: "Inventory" },
+      ...inventoryPlanExtras,
+      { key: "serial_inventory", name: "IMEI / serial stock", group: "Inventory" },
       ...sharedPeopleFinance.filter((m) => m.key !== "billing"),
     ],
     navigation: [
@@ -447,6 +466,8 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { key: "warranties", name: "Warranties", group: "Service Intake" },
       { key: "parts_inventory", name: "Tyres / parts", group: "Inventory" },
       { key: "suppliers", name: "Suppliers", group: "Inventory" },
+      ...inventoryPlanExtras,
+      { key: "job_bookings", name: "Bay calendar", group: "Service Intake" },
       ...sharedPeopleFinance.map((m) => m.key === "billing" ? { ...m, name: "Job cards" } : m),
     ],
     navigation: [
@@ -491,6 +512,9 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { key: "warranties", name: "Warranties", group: "Service Intake" },
       { key: "parts_inventory", name: "Spares", group: "Inventory" },
       { key: "suppliers", name: "Suppliers", group: "Inventory" },
+      ...inventoryPlanExtras,
+      { key: "serial_inventory", name: "IMEI / serial stock", group: "Inventory" },
+      { key: "job_bookings", name: "Bay calendar", group: "Service Intake" },
       ...sharedPeopleFinance.map((m) => m.key === "billing" ? { ...m, name: "Repair tickets" } : m),
     ],
     navigation: [
@@ -639,9 +663,32 @@ export function usesDeviceJobs(type?: string | null): boolean {
 }
 
 export function optionalFeaturesFor(type?: string | null): FeatureKey[] {
-  if (type === "store") return ["repair_bills", "warranties"];
-  if (type === "garage") return ["owner_bill_sms", "service_ops_report", "job_videos"];
-  return [];
+  if (type === "store") return ["repair_bills", "warranties", "purchase_orders", "part_fitment", "serial_inventory"];
+  if (type === "mobile_shop") return ["purchase_orders", "part_fitment", "serial_inventory"];
+  if (type === "garage") {
+    return [
+      "owner_bill_sms", "service_ops_report", "job_videos",
+      "job_board", "job_bookings", "service_reminders",
+      "purchase_orders", "part_fitment", "cash_up",
+    ];
+  }
+  if (type === "tyre" || type === "paint") return ["job_bookings", "purchase_orders", "part_fitment", "cash_up"];
+  if (type === "device_repair") return ["job_bookings", "purchase_orders", "part_fitment", "serial_inventory", "cash_up"];
+  return ["cash_up"];
+}
+
+export function allowsServiceJobs(type?: string | null, features: string[] = []): boolean {
+  if (type !== "garage") return type === "paint" || type === "tyre" || type === "device_repair";
+  const hasLocks = features.includes("admit_repair") || features.includes("admit_service");
+  if (!hasLocks) return true;
+  return features.includes("admit_service");
+}
+
+export function allowsRepairJobs(type?: string | null, features: string[] = []): boolean {
+  if (type !== "garage") return true;
+  const hasLocks = features.includes("admit_repair") || features.includes("admit_service");
+  if (!hasLocks) return true;
+  return features.includes("admit_repair");
 }
 
 export function profileFor(type?: string | null): BusinessProfile {

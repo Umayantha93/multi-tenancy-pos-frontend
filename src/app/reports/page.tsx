@@ -8,6 +8,7 @@ import { ErrorMessage, PageState, Panel, inputClass } from "@/components/ui";
 import { api, currentFeatures, formatDate, money } from "@/lib/api";
 import { billStatusClass, billStatusLabel } from "@/lib/bill-stamp";
 import { useBusinessProfile } from "@/lib/use-business-profile";
+import { allowsServiceJobs } from "@/lib/business-profiles";
 import { ShopFilter } from "@/components/branch-chip";
 
 type EmployeeOption = { id: number; name: string; position?: string | null };
@@ -122,7 +123,7 @@ export default function ReportsPage() {
 
   useEffect(() => {
     const isGarage = profile.type === "garage";
-    setCanServiceOps(isGarage && currentFeatures().includes("service_ops_report"));
+    setCanServiceOps(isGarage && currentFeatures().includes("service_ops_report") && allowsServiceJobs("garage", currentFeatures()));
   }, [profile.type]);
 
   const load = useCallback(() => {

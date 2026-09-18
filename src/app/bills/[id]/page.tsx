@@ -1381,7 +1381,7 @@ export default function BillDetailPage() {
           <button type="button" onClick={() => { setFloorPane("pay"); setMode("payment"); }} className={`h-11 text-sm font-semibold ${floorPane === "pay" ? "bg-[#167c73] text-white" : "border border-[#d7d3c8] bg-white"}`}>Pay {money(bill.balance_due)}</button>
         </div>
       )}
-      <div className="bill-print-sheet min-w-0 max-w-full">
+      <div className={`bill-print-sheet min-w-0 max-w-full ${!isClosed && Number(bill.balance_due) > 0 ? "pb-12 xl:pb-0" : ""}`}>
       <BillWatermark src={printWithLogo ? logoUrl : null} printOnly />
       <Panel className="bill-letterhead mb-5 overflow-hidden p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -2508,7 +2508,7 @@ export default function BillDetailPage() {
       </div>
       </div>
       {!isClosed && Number(bill.balance_due) > 0 && (
-        <div className="no-print sticky bottom-3 z-20 xl:hidden">
+        <div className="no-print sticky bottom-3 z-20 mt-2 xl:hidden">
           <button type="button" onClick={() => { setFloorPane("pay"); setMode("payment"); }} className={`${buttonClass} h-12 w-full text-sm`}>
             Pay {money(bill.balance_due)}
           </button>

@@ -5,8 +5,8 @@ import { FormEvent, useEffect, useState } from "react";
 import { ArrowRight, ClipboardPlus, Hammer, Search, Wrench, X, Zap } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
-import { api, currentUser, formatDate, money } from "@/lib/api";
-import { usesLaborCatalog, usesServiceAddonWorkspace, usesStoreCounter } from "@/lib/business-profiles";
+import { api, currentFeatures, currentUser, formatDate, money } from "@/lib/api";
+import { allowsServiceJobs, usesLaborCatalog, usesServiceAddonWorkspace, usesStoreCounter } from "@/lib/business-profiles";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 import { billListStatus, billStatusClass, billStatusLabel, isOweInUrgent } from "@/lib/bill-stamp";
 import { BillingBranchBanner } from "@/components/branch-chip";
@@ -127,7 +127,7 @@ export default function BillsPage() {
                 <Hammer size={14} /><span className="hidden sm:inline">{profile.type === "paint" ? t("bills.paint_labor") : t("bills.repair_addons")}</span>
               </Link>
               )}
-              {usesServiceAddonWorkspace(profile.type) && (
+              {usesServiceAddonWorkspace(profile.type) && allowsServiceJobs(profile.type, currentFeatures()) && (
               <Link
                 href="/service-addons"
                 className="flex h-8 items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-[11px] font-semibold hover:border-[#167c73]"

@@ -1,13 +1,13 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Check, Power, UserPlus } from "lucide-react";
+import { Power, UserPlus } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
-import { api, Branch } from "@/lib/api";
-import { groupModules } from "@/lib/feature-modules";
+import { api, Branch, currentUser } from "@/lib/api";
+import { FeaturePlanToggles } from "@/components/feature-plan-toggles";
 
-type Feature = { id: number; key: string; name: string; group?: string | null; pivot?: { can_access: boolean } };
+type Feature = { id: number; key: string; name: string; group?: string | null; parent?: string | null; pivot?: { can_access: boolean } };
 type Staff = { id: number; name: string; email: string; status: "active" | "inactive"; employee_id?: number | null; home_branch_id?: number | null; home_branch?: { id: number; name: string } | null; employee?: { id: number; name: string } | null; permissions: Feature[] };
 type PermissionResponse = { available: Feature[]; permissions: Feature[] };
 
@@ -95,8 +95,6 @@ export default function StaffPage() {
       setError(caught instanceof Error ? caught.message : "Unable to deactivate staff.");
     }
   }
-
-  const grouped = groupModules(available);
 
   return (
     <AppShell title="Staff access" eyebrow="Owner control">
@@ -188,30 +186,13 @@ export default function StaffPage() {
               </div>
               <button onClick={() => setSelected(null)} className="text-sm text-[#6f746e]">Close</button>
             </div>
-            <div className="mt-6 space-y-6">
-              {grouped.map(({ group, features }) => (
-                <div key={group}>
-                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-[#6f746e]">{group}</p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {features.map((feature) => {
-                      const active = enabled.includes(feature.key);
-                      return (
-                        <button
-                          type="button"
-                          key={feature.id}
-                          onClick={() => setEnabled((value) => active ? value.filter((key) => key !== feature.key) : [...value, feature.key])}
-                          className={`flex min-h-12 items-center justify-between border px-3 py-2 text-left text-sm font-semibold ${active ? "border-[#167c73] bg-[#167c73]/7" : "border-[#d7d3c8] text-[#6f746e]"}`}
-                        >
-                          <span>{feature.name}</span>
-                          <span className={`grid size-6 place-items-center ${active ? "bg-[#167c73] text-white" : "bg-[#e7e4db]"}`}>
-                            {active && <Check size={15} />}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
+            <div className="mt-6">
+              <FeaturePlanToggles
+                features={available}
+                enabled={enabled}
+                garageAdmit={currentUser()?.tenant?.business_type === "garage"}
+                onChange={setEnabled}
+              />
             </div>
             <button onClick={save} disabled={loading} className={`${buttonClass} mt-6 w-full`}>
               {loading ? "Saving..." : "Save permissions"}
