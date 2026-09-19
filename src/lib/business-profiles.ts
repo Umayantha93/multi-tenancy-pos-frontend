@@ -144,7 +144,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/vehicles/admit", label: "New admission", feature: "admit_vehicle" },
       { href: "/parts-pos", label: "Instant bill", feature: "billing" },
       { href: "/warranties", label: "Warranties", feature: "warranties" },
-      { href: "/parts", label: "Find a part", feature: "parts_inventory" },
+      { href: "/parts", label: "Find inventory", feature: "parts_inventory" },
       { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
     ],
     defaultFeatures: [
@@ -157,10 +157,11 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { key: "admit_service", name: "Service jobs", group: "Service Intake" },
       { key: "job_board", name: "Job status board", group: "Service Intake" },
       { key: "owner_bill_sms", name: "Owner bill SMS", group: "Service Intake" },
+      { key: "job_photos", name: "Job photos", group: "Service Intake" },
       { key: "job_videos", name: "Job videos", group: "Service Intake" },
       { key: "job_bookings", name: "Bay calendar", group: "Service Intake" },
       { key: "warranties", name: "Warranties", group: "Service Intake" },
-      { key: "parts_inventory", name: "Parts inventory", group: "Inventory" },
+      { key: "parts_inventory", name: "Inventory", group: "Inventory" },
       { key: "suppliers", name: "Suppliers", group: "Inventory" },
       { key: "purchase_orders", name: "Purchase orders", group: "Inventory" },
       { key: "part_fitment", name: "Part fitment / substitutes", group: "Inventory" },
@@ -178,7 +179,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       warrantiesNav,
       { href: "/parts-pos", label: "Instant bill", icon: ShoppingBag, feature: "billing" },
       billProfitsNav,
-      { href: "/parts", label: "Parts", icon: Boxes, feature: "parts_inventory" },
+      { href: "/parts", label: "Inventory", icon: Boxes, feature: "parts_inventory" },
       suppliersNav,
       ...sharedNavTail,
     ],
@@ -697,7 +698,7 @@ export function optionalFeaturesFor(type?: string | null): FeatureKey[] {
   if (type === "mobile_shop") return ["purchase_orders", "part_fitment", "serial_inventory", "bill_whatsapp"];
   if (type === "garage") {
     return [
-      "owner_bill_sms", "service_ops_report", "job_videos",
+      "owner_bill_sms", "service_ops_report", "job_photos", "job_videos",
       "job_board", "job_bookings", "service_reminders",
       "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp",
     ];

@@ -10,6 +10,7 @@ import { billStatusClass, billStatusLabel } from "@/lib/bill-stamp";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 import { allowsServiceJobs } from "@/lib/business-profiles";
 import { ShopFilter } from "@/components/branch-chip";
+import { formatStockQty } from "@/lib/stock-unit";
 
 type EmployeeOption = { id: number; name: string; position?: string | null };
 type EmployeeJob = {
@@ -37,7 +38,7 @@ type Report = {
   stock: {
     on_hand_value: number;
     sku_count: number;
-    low_stock: Array<{ id: number; name: string; stock_qty: number }>;
+    low_stock: Array<{ id: number; name: string; stock_qty: number; stock_unit?: string | null }>;
   };
   receivables: Array<{
     id: number;
@@ -392,7 +393,7 @@ export default function ReportsPage() {
                     {report.stock.low_stock.map((item) => (
                       <tr key={`${item.id}-${item.name}`} className="border-t border-[#e2ded4]">
                         <td className="px-5 py-3 font-semibold">{item.name}</td>
-                        <td className="pr-5 text-right">{item.stock_qty}{isPaint ? " ml" : ""}</td>
+                        <td className="pr-5 text-right">{formatStockQty(item.stock_qty, item.stock_unit, isPaint)}</td>
                       </tr>
                     ))}
                   </tbody>
