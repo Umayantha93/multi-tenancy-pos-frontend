@@ -15,11 +15,13 @@ import { BillStatusSeal } from "@/components/bill-status-seal";
 import { BillWatermark } from "@/components/bill-watermark";
 import { BillingBranchBanner } from "@/components/branch-chip";
 import { WarrantyFields, warrantyFromForm } from "@/components/warranty-fields";
+import { JobPhotos } from "@/components/job-photos";
 import { JobVideos } from "@/components/job-videos";
 import { useLocale, useT } from "@/lib/locale";
+import { formatStockQty, stockUnitLabel } from "@/lib/stock-unit";
 import { billShareUrl, whatsappHref } from "@/lib/whatsapp";
 
-type Part = { id: number; name: string; price: string; stock_qty: number; sku?: string | null; barcode?: string | null; brand?: string; serialized?: boolean };
+type Part = { id: number; name: string; price: string; stock_qty: number; stock_unit?: string | null; sku?: string | null; barcode?: string | null; brand?: string; serialized?: boolean };
 type ComposerLabor = { key: string; laborItemId: string; name: string; hours: string; rate: number };
 type ComposerMaterial = { key: string; partId: number; name: string; qty: string; unitPrice: number; stock: number };
 type ServiceAddon = {
@@ -72,6 +74,7 @@ type Bill = {
     unit_price: string;
     line_total: string;
     part_id?: number | null;
+    part?: { id?: number; stock_unit?: string | null } | null;
     panel_group_id?: string | null;
     panel_name?: string | null;
     warranty_months?: number | null;
@@ -200,6 +203,7 @@ export default function BillDetailPage() {
   const canWhatsapp = features.includes("bill_whatsapp");
   const canOwnerSms = features.includes("owner_bill_sms");
   const canJobVideos = features.includes("job_videos");
+  const canJobPhotos = features.includes("job_photos");
   const canJobBoard = features.includes("job_board");
   const canReminders = features.includes("service_reminders");
   const canAssignEmployees = features.includes("employees_management") || features.includes("attendance");
@@ -214,11 +218,13 @@ export default function BillDetailPage() {
   const profile = profileFor(tenant?.business_type);
   const isPaint = profile.type === "paint";
   const isGarage = profile.type === "garage";
+  const isGarageInstant = isGarage && bill?.job_kind === "parts_sale";
   const isStore = usesStoreCounter(profile.type);
   const itemTypes = profile.billItemTypes.filter((option) => {
     if (option.value === "charge") return isStore && bill?.job_kind !== "repair";
     if (isPaint && option.value === "part" && bill?.job_kind !== "parts_sale") return false;
     if (isStore && option.value === "labor" && bill?.job_kind !== "repair") return false;
+    if (isGarage && bill?.job_kind === "parts_sale") return option.value === "part";
     return true;
   });
   const selectedType = itemTypes.find((option) => option.value === type) ?? itemTypes[0];
@@ -309,8 +315,8 @@ export default function BillDetailPage() {
   }, []);
 
   useEffect(() => {
-    setPrintThermal(isStore && bill?.job_kind === "parts_sale");
-  }, [isStore, bill?.job_kind]);
+    setPrintThermal((isStore || isGarage) && bill?.job_kind === "parts_sale");
+  }, [isStore, isGarage, bill?.job_kind]);
 
   useEffect(() => {
     if (!itemTypes.length) return;
@@ -547,6 +553,23 @@ export default function BillDetailPage() {
   const showCost = !isStockType || outsidePart;
   const useStockSearch = isStockType && !outsidePart && !customerPart;
 
+  async function addGarageStockLine(part: Part, quantity = 1) {
+    if (isLocked) return;
+    setError("");
+    try {
+      await api(`/bills/${id}/items`, {
+        method: "POST",
+        body: JSON.stringify({ type: "part", part_id: part.id, quantity }),
+      });
+      setSelectedPartId("");
+      setPartQuery("");
+      load();
+      api<{ data: Part[] }>("/parts?per_page=100").then((result) => setParts(result.data)).catch(() => undefined);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t("bill.err_item"));
+    }
+  }
+
   function findPartByCode(code: string, catalog: Part[] = parts) {
     const needle = code.trim().toLowerCase();
     if (!needle) return null;
@@ -562,6 +585,10 @@ export default function BillDetailPage() {
 
     const local = findPartByCode(trimmed);
     if (local) {
+      if (isGarageInstant) {
+        await addGarageStockLine(local);
+        return true;
+      }
       setSelectedPartId(String(local.id));
       setPartQuery(local.name);
       setError("");
@@ -572,6 +599,11 @@ export default function BillDetailPage() {
       const result = await api<{ data: Part[] }>(`/parts?barcode=${encodeURIComponent(trimmed)}&per_page=5`);
       const match = result.data.find((part) => part.stock_qty > 0) ?? null;
       if (match) {
+        if (isGarageInstant) {
+          setParts((current) => (current.some((part) => part.id === match.id) ? current : [...current, match]));
+          await addGarageStockLine(match);
+          return true;
+        }
         setParts((current) => (current.some((part) => part.id === match.id) ? current : [...current, match]));
         setSelectedPartId(String(match.id));
         setPartQuery(match.name);
@@ -592,6 +624,10 @@ export default function BillDetailPage() {
           .includes(trimmed.toLowerCase()),
       );
     if (matches.length === 1) {
+      if (isGarageInstant) {
+        await addGarageStockLine(matches[0]);
+        return true;
+      }
       setSelectedPartId(String(matches[0].id));
       setPartQuery(matches[0].name);
       setError("");
@@ -1497,7 +1533,7 @@ export default function BillDetailPage() {
           <div className="flex w-full flex-col items-start text-left text-xs uppercase text-[#6f746e] sm:w-auto sm:shrink-0 sm:items-end sm:text-right">
             <p className="font-bold text-[#167c73]">
               {hidePrintMoney ? t("bill.repair_note") : t("bill.tax_invoice", { kind: t(`terms.${profile.billingSingular}`).toLowerCase() })}
-              {showJobKind && !hidePrintMoney ? ` · ${jobKindLabel}` : ""}
+              {showJobKind && !hidePrintMoney ? <span className="bill-print-kind">{` · ${jobKindLabel}`}</span> : ""}
             </p>
             <p className="mt-1 normal-case">{new Date().toLocaleString(locale === "si" ? "si-LK" : "en-LK")}</p>
             <BillStatusSeal stamp={stamp} paymentDate={paymentDate} />
@@ -1507,9 +1543,9 @@ export default function BillDetailPage() {
 
       <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[1.55fr_0.75fr] print:block print:space-y-2">
         <div className={`min-w-0 space-y-5 print:space-y-2 ${!isClosed && floorPane !== "work" ? "hidden" : "block"} xl:block`}>
-          <Panel>
+          <Panel className={isGarageInstant ? "bill-instant-meta" : undefined}>
             <div className="bill-meta grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
-              <div>
+              <div className="bill-customer">
                 <p className="text-[10px] font-bold uppercase text-[#6f746e]">{t("common.customer")}</p>
                 <p className="mt-1 font-semibold">{bill.customer?.name ?? t("common.walk_in")}</p>
                 {bill.customer?.phone && (
@@ -1594,7 +1630,7 @@ export default function BillDetailPage() {
                   </div>
                 </>
               ) : (
-                <div className="sm:col-span-2">
+                <div className="bill-instant-kind sm:col-span-2">
                   <p className="text-[10px] font-bold uppercase text-[#6f746e]">
                     {isStore ? (bill.job_kind === "repair" ? t("bill.repair") : t("bill.sale")) : bill.job_kind === "parts_sale" ? t("bill.instant_bill") : t("common.type")}
                   </p>
@@ -1616,7 +1652,7 @@ export default function BillDetailPage() {
             </div>
           </Panel>
 
-          {canWarranty && usesVehicleJobs(profile.type) && (
+          {canWarranty && usesVehicleJobs(profile.type) && !isGarageInstant && (
             <Panel className="no-print">
               <div className="border-b border-[#d7d3c8] px-5 py-3">
                 <h2 className="font-display text-xl font-semibold uppercase">{t("warranty.job_title")}</h2>
@@ -1640,6 +1676,7 @@ export default function BillDetailPage() {
             </Panel>
           )}
 
+          {!isGarageInstant && (
           <Panel className="staff-only no-print">
             <div className="border-b border-[#d7d3c8] px-5 py-3">
               <h2 className="font-display text-xl font-semibold uppercase">{t("bill.staff_only")}</h2>
@@ -1728,12 +1765,16 @@ export default function BillDetailPage() {
               )}
             </div>
           </Panel>
+          )}
 
           {error && <div className="no-print"><ErrorMessage message={error} /></div>}
           {smsNotice && (
             <div className="no-print border border-[#167c73]/20 bg-[#167c73]/10 px-4 py-3 text-sm text-[#167c73]">
               {smsNotice}
             </div>
+          )}
+          {canJobPhotos && isGarage && bill.job_kind !== "parts_sale" && (
+            <JobPhotos billId={bill.id} readOnly={isClosed} />
           )}
           {canJobVideos && isGarage && bill.job_kind !== "parts_sale" && (
             <JobVideos billId={bill.id} readOnly={isClosed} />
@@ -1762,20 +1803,20 @@ export default function BillDetailPage() {
             <div className="bill-items-scroll print:overflow-visible">
               <table className="bill-items-table w-full min-w-[36rem] text-left text-sm print:min-w-0">
                 <colgroup>
-                  <col className="w-[36%]" />
-                  <col className="w-[14%]" />
-                  <col className="w-[10%]" />
-                  <col className="w-[18%]" />
-                  <col className="w-[18%]" />
+                  <col className="bill-col-desc w-[36%]" />
+                  <col className="bill-col-type w-[14%]" />
+                  <col className="bill-col-qty w-[10%]" />
+                  <col className="bill-col-rate w-[18%]" />
+                  <col className="bill-col-total w-[18%]" />
                   {!isLocked && <col className="no-print w-10" />}
                 </colgroup>
                 <thead className="bg-[#eeece5] text-[10px] uppercase text-[#6f746e]">
                   <tr>
-                    <th className="px-4 py-3">{t("common.description")}</th>
-                    <th className="px-3 py-3">{t("common.type")}</th>
-                    <th className="px-3 py-3 text-right">{t("common.qty")}</th>
-                    <th className="px-3 py-3 text-right">{t("bill.rate")}</th>
-                    <th className="px-4 py-3 text-right">{t("common.total")}</th>
+                    <th className="bill-col-desc px-4 py-3">{t("common.description")}</th>
+                    <th className="bill-col-type px-3 py-3">{t("common.type")}</th>
+                    <th className="bill-col-qty px-3 py-3 text-right">{t("common.qty")}</th>
+                    <th className="bill-col-rate px-3 py-3 text-right">{t("bill.rate")}</th>
+                    <th className="bill-col-total px-4 py-3 text-right">{t("common.total")}</th>
                     {!isLocked && <th className="no-print px-2 py-3" />}
                   </tr>
                 </thead>
@@ -1786,7 +1827,7 @@ export default function BillDetailPage() {
                       return (
                         <Fragment key={row.groupId}>
                           <tr className="border-t border-[#e2ded4] align-top">
-                            <td className="px-4 py-3 break-words">
+                            <td className="bill-col-desc px-4 py-3 break-words">
                               <button
                                 type="button"
                                 onClick={() => setExpandedPanels((current) => ({ ...current, [row.groupId]: !open }))}
@@ -1798,10 +1839,10 @@ export default function BillDetailPage() {
                               </button>
                               <span className="font-semibold">{row.name}</span>
                             </td>
-                            <td className="px-3 py-3 whitespace-nowrap text-[#6f746e]">{t("bill.panel")}</td>
-                            <td className="px-3 py-3 whitespace-nowrap text-right tabular-nums">—</td>
-                            <td className="px-3 py-3 whitespace-nowrap text-right tabular-nums">—</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-right tabular-nums">
+                            <td className="bill-col-type px-3 py-3 whitespace-nowrap text-[#6f746e]">{t("bill.panel")}</td>
+                            <td className="bill-col-qty px-3 py-3 whitespace-nowrap text-right tabular-nums">—</td>
+                            <td className="bill-col-rate px-3 py-3 whitespace-nowrap text-right tabular-nums">—</td>
+                            <td className="bill-col-total px-4 py-3 whitespace-nowrap text-right tabular-nums">
                               <span className={hidePrintMoney ? "print:hidden" : ""}>{money(row.total)}</span>
                               {hidePrintMoney && <span className="hidden print:inline">—</span>}
                             </td>
@@ -1859,18 +1900,18 @@ export default function BillDetailPage() {
                     </tr>
                     {discountItems.map((item) => (
                       <tr key={item.id} className="bill-discount-row border-t border-[#167c73]/20 bg-[#e7f4f2] align-top text-[#167c73]">
-                        <td className="px-4 py-3 font-semibold break-words">{item.description}</td>
-                        <td className="px-3 py-3 whitespace-nowrap">
+                        <td className="bill-col-desc px-4 py-3 font-semibold break-words">{item.description}</td>
+                        <td className="bill-col-type px-3 py-3 whitespace-nowrap">
                           {billItemLabel(item.type, profile, t)}
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap text-right tabular-nums">
+                        <td className="bill-col-qty px-3 py-3 whitespace-nowrap text-right tabular-nums">
                           {Number(item.quantity) > 1 ? Number(item.quantity) : "—"}
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap text-right tabular-nums">
+                        <td className="bill-col-rate px-3 py-3 whitespace-nowrap text-right tabular-nums">
                           <span className={hidePrintMoney ? "print:hidden" : ""}>{money(item.unit_price)}</span>
                           {hidePrintMoney && <span className="hidden print:inline">—</span>}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-right font-semibold tabular-nums">
+                        <td className="bill-col-total px-4 py-3 whitespace-nowrap text-right font-semibold tabular-nums">
                           <span className={hidePrintMoney ? "print:hidden" : ""}>-{money(item.line_total)}</span>
                           {hidePrintMoney && <span className="hidden print:inline">—</span>}
                         </td>
@@ -2065,7 +2106,8 @@ export default function BillDetailPage() {
                     paint={isPaint}
                   />
                 )}
-                {!isServiceJob && (
+                {isGarageInstant && <input type="hidden" name="type" value="part" />}
+                {!isServiceJob && !isGarageInstant && (
                 <div>
                   <p className="mb-2 text-xs font-bold uppercase">{t("common.type")}</p>
                   <div className="flex gap-1">
@@ -2100,7 +2142,7 @@ export default function BillDetailPage() {
 
                 {isStockType ? (
                   <>
-                    {(!isStore || bill?.job_kind === "repair") ? (
+                    {(!isStore || bill?.job_kind === "repair") && !isGarageInstant ? (
                     <div className="grid gap-1.5 sm:grid-cols-2">
                       <label className="flex cursor-pointer items-center gap-2 border border-[#d7d3c8] bg-[#fbfaf6] px-2.5 py-2">
                         <input
@@ -2176,7 +2218,6 @@ export default function BillDetailPage() {
                                 key={part.id}
                                 onClick={() => {
                                   setSelectedPartId(String(part.id));
-                                  setPartQuery(part.name || "");
                                   setError("");
                                 }}
                                 className={`flex w-full items-center justify-between border-b border-[#eeeae1] px-3 py-2 text-left text-sm ${selectedPartId === String(part.id) ? "bg-[#167c73]/10" : "hover:bg-[#f7f5ef]"}`}
@@ -2187,7 +2228,7 @@ export default function BillDetailPage() {
                                     <span className="mt-0.5 block text-[10px] text-[#6f746e]">{t("common.barcode", { code: part.barcode })}</span>
                                   )}
                                 </span>
-                                <span className="text-xs text-[#6f746e]">{part.stock_qty} · {money(part.price)}</span>
+                                <span className="text-xs text-[#6f746e]">{formatStockQty(part.stock_qty, part.stock_unit, isPaint)} · {money(part.price)}</span>
                               </button>
                             ))
                           )}
@@ -2487,7 +2528,9 @@ export default function BillDetailPage() {
 
                 {isStockType && showQuantity && (selectedPartId || outsidePart || customerPart) && !(canSerial && selectedPart?.serialized && !outsidePart && !customerPart) && (
                   <label key={`qty-${outsidePart ? "outside" : customerPart ? "customer" : "stock"}`} className="block text-xs font-bold uppercase">
-                    {isPaint ? t("bill.qty_ml") : t("common.quantity")}
+                    {isPaint ? t("bill.qty_ml") : selectedPart?.stock_unit && selectedPart.stock_unit !== "qty"
+                      ? `${t("common.quantity")} (${stockUnitLabel(selectedPart.stock_unit)})`
+                      : t("common.quantity")}
                     <input
                       name="quantity"
                       type="number"
@@ -2513,7 +2556,7 @@ export default function BillDetailPage() {
                     />
                   </label>
                 )}
-                {canWarranty && !isPanelComposer && activeType !== "discount" && (
+                {canWarranty && !isGarageInstant && !isPanelComposer && activeType !== "discount" && (
                   <WarrantyFields
                     purchaseDate={bill?.admission_date}
                     hint={usesVehicleJobs(profile.type)
@@ -2663,6 +2706,7 @@ function ChargeItemRow({
     quantity: string;
     unit_price: string;
     line_total: string;
+    part?: { stock_unit?: string | null } | null;
     warranty_months?: number | null;
     warranty_starts_on?: string | null;
     warranty_until?: string | null;
@@ -2699,13 +2743,13 @@ function ChargeItemRow({
 
   return (
     <tr className={`border-t border-[#e2ded4] align-top ${hideOnPrint ? "no-print" : ""} ${hidden ? "hidden" : ""}`}>
-      <td className={`px-4 py-3 break-words ${nested ? "pl-8" : ""}`}>
+      <td className={`bill-col-desc px-4 py-3 break-words ${nested ? "pl-8" : ""}`}>
         <BillItemDescription item={item} />
       </td>
-      <td className="px-3 py-3 whitespace-nowrap text-[#6f746e]">
+      <td className="bill-col-type px-3 py-3 whitespace-nowrap text-[#6f746e]">
         {billItemLabel(item.type, profile, t)}
       </td>
-      <td className="px-3 py-3 whitespace-nowrap text-right tabular-nums">
+      <td className="bill-col-qty px-3 py-3 whitespace-nowrap text-right tabular-nums">
         {isLaborLine ? (
           <>
             {!isLocked ? (
@@ -2732,9 +2776,14 @@ function ChargeItemRow({
             )}
             <span className="hidden print:inline">—</span>
           </>
-        ) : showQty ? Number(item.quantity) : "—"}
+        ) : showQty ? (
+          <>
+            {Number(item.quantity)}
+            {item.part?.stock_unit && item.part.stock_unit !== "qty" ? ` ${stockUnitLabel(item.part.stock_unit, profile.type === "paint")}` : ""}
+          </>
+        ) : "—"}
       </td>
-      <td className="px-3 py-3 whitespace-nowrap text-right">
+      <td className="bill-col-rate px-3 py-3 whitespace-nowrap text-right">
         {fromCustomer ? (
           <span className="font-semibold text-[#167c73]">—</span>
         ) : isLaborLine ? (
@@ -2749,7 +2798,7 @@ function ChargeItemRow({
           </>
         )}
       </td>
-      <td className="px-4 py-3 whitespace-nowrap text-right">
+      <td className="bill-col-total px-4 py-3 whitespace-nowrap text-right">
         {fromCustomer ? (
           <span className="inline-block max-w-full font-semibold leading-snug text-[#167c73]">
             {t("bill.received_customer")}

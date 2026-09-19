@@ -64,7 +64,8 @@ export type FeatureKey =
   | "suppliers"
   | "owner_bill_sms"
   | "service_ops_report"
-  | "job_videos";
+  | "job_videos"
+  | "job_photos";
 
 export type BusinessType = "garage" | "tyre" | "device_repair" | "paint" | "photography" | "clothing" | "salon" | "cottage" | "store" | "mobile_shop";
 

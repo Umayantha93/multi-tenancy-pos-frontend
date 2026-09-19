@@ -49,6 +49,8 @@ type SharedBill = {
     warranty_until?: string | null;
   }>;
   payments: Array<{ id: number; amount: string; method: string; paid_at: string }>;
+  photos?: Array<{ id: number; original_name?: string | null; size_bytes?: number }>;
+  videos?: Array<{ id: number; original_name?: string | null; duration_seconds?: number; size_bytes?: number }>;
   tenant: Tenant | null;
   branch?: { id: number; name: string; address?: string | null } | null;
   show_shop?: boolean;
@@ -404,6 +406,42 @@ export default function SharedBillPage() {
             <p className="mt-2 whitespace-pre-wrap">{bill.additional_note}</p>
           </div>
         )}
+        {(bill.photos?.length || bill.videos?.length) ? (
+          <div className="print:hidden space-y-6 border-t border-[#e2ddd0] p-5">
+            {!!bill.photos?.length && (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-[#6f746e]">{t("print.photos")}</p>
+                <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {bill.photos.map((photo) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      key={photo.id}
+                      src={`${API_URL}/bills/shared/${encodeURIComponent(token)}/photos/${photo.id}/file`}
+                      alt={photo.original_name || ""}
+                      className="aspect-[4/3] w-full border border-[#e2ddd0] bg-[#f7f5ef] object-contain"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+            {!!bill.videos?.length && (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-[#6f746e]">{t("print.videos")}</p>
+                <div className="mt-3 space-y-3">
+                  {bill.videos.map((video) => (
+                    <video
+                      key={video.id}
+                      className="w-full max-w-lg bg-black"
+                      src={`${API_URL}/bills/shared/${encodeURIComponent(token)}/videos/${video.id}/file`}
+                      controls
+                      preload="metadata"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
       </div>
     </main>
   );

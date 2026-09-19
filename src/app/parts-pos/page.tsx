@@ -1,23 +1,291 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardCheck, Save } from "lucide-react";
+import { ClipboardCheck, Minus, Plus, Save, ScanBarcode, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { AddressField } from "@/components/address-field";
 import { EmployeePicker } from "@/components/employee-picker";
-import { buttonClass, ErrorMessage, inputClass, Panel } from "@/components/ui";
-import { api, currentFeatures } from "@/lib/api";
+import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
+import { api, currentFeatures, money } from "@/lib/api";
+import { BillingBranchBanner } from "@/components/branch-chip";
 import { useBusinessProfile } from "@/lib/use-business-profile";
+import { formatStockQty } from "@/lib/stock-unit";
 import { useT } from "@/lib/locale";
 
 type EmployeeOption = { id: number; name: string; position?: string | null };
+type StockItem = {
+  id: number;
+  name: string;
+  price: string;
+  stock_qty: number;
+  stock_unit?: string | null;
+  sku?: string | null;
+  barcode?: string | null;
+  brand?: string;
+};
+type CartLine = StockItem & { quantity: number };
 
 export default function InstantBillPage() {
-  const router = useRouter();
   const profile = useBusinessProfile();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  if (!mounted) {
+    return (
+      <AppShell title="Instant bill" eyebrow="Quick billing">
+        <PageState message="Loading..." />
+      </AppShell>
+    );
+  }
+
+  if (profile.type === "garage") {
+    return <GarageInstantTill />;
+  }
+
+  return <PaintCounterForm />;
+}
+
+function GarageInstantTill() {
+  const router = useRouter();
   const t = useT();
-  const isPaint = profile.type === "paint";
+  const scanRef = useRef<HTMLInputElement>(null);
+  const [items, setItems] = useState<StockItem[]>([]);
+  const [cart, setCart] = useState<CartLine[]>([]);
+  const [search, setSearch] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [payLater, setPayLater] = useState(false);
+  const [tendered, setTendered] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    const query = encodeURIComponent(search.trim());
+    if (items.length === 0) setLoading(true);
+    api<{ data: StockItem[] }>(`/parts?search=${query}&per_page=40`)
+      .then((result) => {
+        if (!cancelled) setItems(result.data);
+      })
+      .catch((caught) => {
+        if (!cancelled) setError(caught instanceof Error ? caught.message : t("pos.catalog_failed"));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [search]);
+
+  useEffect(() => {
+    scanRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  const subtotal = useMemo(
+    () => cart.reduce((sum, line) => sum + Number(line.price) * line.quantity, 0),
+    [cart],
+  );
+  const tenderedAmount = Number(tendered || 0);
+  const changeDue = !payLater && tenderedAmount > subtotal ? tenderedAmount - subtotal : 0;
+
+  function add(item: StockItem) {
+    if (item.stock_qty < 1) return;
+    setCart((lines) => {
+      const existing = lines.find((line) => line.id === item.id);
+      if (existing) {
+        if (existing.quantity >= item.stock_qty) return lines;
+        return lines.map((line) => (line.id === item.id ? { ...line, quantity: line.quantity + 1 } : line));
+      }
+      return [...lines, { ...item, quantity: 1 }];
+    });
+    setError("");
+    scanRef.current?.focus({ preventScroll: true });
+  }
+
+  function setQty(id: number, quantity: number, stock: number) {
+    const next = Math.max(1, Math.min(stock, quantity));
+    setCart((lines) => lines.map((line) => (line.id === id ? { ...line, quantity: next } : line)));
+  }
+
+  async function scanExact(needle: string): Promise<StockItem | null> {
+    try {
+      const exact = await api<{ data: StockItem[] }>(`/parts?barcode=${encodeURIComponent(needle)}&per_page=1`);
+      if (exact.data[0]) return exact.data[0];
+      const sku = await api<{ data: StockItem[] }>(`/parts?search=${encodeURIComponent(needle)}&per_page=5`);
+      return sku.data.find((part) =>
+        part.barcode?.toLowerCase() === needle.toLowerCase()
+        || part.sku?.toLowerCase() === needle.toLowerCase()
+        || part.name.toLowerCase() === needle.toLowerCase(),
+      ) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function onScanKey(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    const needle = search.trim();
+    if (!needle) return;
+    const scanned = await scanExact(needle);
+    const fallback = items.find((item) =>
+      item.barcode?.toLowerCase() === needle.toLowerCase()
+      || item.sku?.toLowerCase() === needle.toLowerCase()
+      || item.name.toLowerCase() === needle.toLowerCase(),
+    );
+    const match = scanned ?? fallback ?? items[0];
+    if (match) add(match);
+    setSearch("");
+    scanRef.current?.focus({ preventScroll: true });
+  }
+
+  async function checkout(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (cart.length === 0) return;
+    setSaving(true);
+    setError("");
+    const form = new FormData(event.currentTarget);
+    try {
+      const bill = await api<{ id: number }>("/bills/instant", {
+        method: "POST",
+        body: JSON.stringify({
+          customer_name: form.get("customer_name") || null,
+          customer_phone: form.get("customer_phone") || null,
+          payment_method: form.get("payment_method") || "cash",
+          payment_amount: payLater ? 0 : subtotal,
+          items: cart.map((line) => ({ part_id: line.id, quantity: line.quantity })),
+        }),
+      });
+      router.push(`/bills/${bill.id}`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t("instant.failed"));
+      setSaving(false);
+    }
+  }
+
+  return (
+    <AppShell title={t("instant.title")} eyebrow={t("instant.eyebrow")}>
+      <BillingBranchBanner />
+      <p className="mb-4 max-w-2xl text-sm text-[#6f746e]">{t("instant.hint")}</p>
+      <div className="flex flex-col gap-5 xl:grid xl:grid-cols-[1.25fr_0.75fr]">
+        <Panel className="p-4">
+          <label className="relative block">
+            <ScanBarcode className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f746e]" size={16} />
+            <input
+              ref={scanRef}
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={onScanKey}
+              className={`${inputClass} pl-10`}
+              placeholder={t("bill.scan_placeholder")}
+            />
+          </label>
+          {error && !saving && <div className="mt-3"><ErrorMessage message={error} /></div>}
+          {loading && items.length === 0 ? <PageState message={t("pos.loading")} /> : (
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              {items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => add(item)}
+                  disabled={item.stock_qty < 1}
+                  className="border border-[#d7d3c8] bg-[#fbfaf6] p-3 text-left hover:border-[#167c73] disabled:opacity-40"
+                >
+                  <p className="font-semibold">{item.name}</p>
+                  <p className="text-xs text-[#6f746e]">
+                    {[item.barcode, item.sku, item.brand].filter(Boolean).join(" · ") || t("common.stock")}
+                  </p>
+                  <div className="mt-2 flex justify-between text-sm">
+                    <strong className="tabular-nums">{money(item.price)}</strong>
+                    <span className="text-[#6f746e]">{formatStockQty(item.stock_qty, item.stock_unit)}</span>
+                  </div>
+                </button>
+              ))}
+              {items.length === 0 && <p className="col-span-2 p-6 text-center text-sm text-[#6f746e]">{t("pos.no_stock")}</p>}
+            </div>
+          )}
+        </Panel>
+
+        <Panel className="p-5 xl:sticky xl:top-4">
+          <h2 className="font-display text-2xl font-semibold uppercase">{t("common.bill")}</h2>
+          <div className="mt-4 max-h-[40vh] space-y-3 overflow-y-auto">
+            {cart.map((line) => (
+              <div key={line.id} className="flex items-center justify-between gap-2 border-b border-[#e2ded4] pb-2 text-sm">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold">{line.name}</p>
+                  <p className="tabular-nums text-[#6f746e]">{money(line.price)} × {line.quantity}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button type="button" className="grid size-8 place-items-center border" onClick={() => setQty(line.id, line.quantity - 1, line.stock_qty)}><Minus size={14} /></button>
+                  <input
+                    type="number"
+                    min={1}
+                    max={line.stock_qty}
+                    value={line.quantity}
+                    onChange={(event) => setQty(line.id, Number(event.target.value), line.stock_qty)}
+                    className="h-8 w-12 border border-[#c9c5b9] bg-white text-center text-sm tabular-nums"
+                  />
+                  <button type="button" className="grid size-8 place-items-center border" onClick={() => setQty(line.id, line.quantity + 1, line.stock_qty)}><Plus size={14} /></button>
+                  <strong className="w-16 text-right tabular-nums">{money(Number(line.price) * line.quantity)}</strong>
+                  <button type="button" className="text-[#b84837]" onClick={() => setCart((rows) => rows.filter((row) => row.id !== line.id))}><Trash2 size={16} /></button>
+                </div>
+              </div>
+            ))}
+            {cart.length === 0 && <p className="text-sm text-[#6f746e]">{t("instant.empty_cart")}</p>}
+          </div>
+
+          <div className="mt-4 flex items-baseline justify-between gap-3">
+            <span className="text-[10px] font-bold uppercase text-[#6f746e]">{t("common.total")}</span>
+            <p className="font-display text-3xl font-semibold tabular-nums">{money(subtotal)}</p>
+          </div>
+
+          <form onSubmit={checkout} className="mt-4 space-y-3">
+            <input name="customer_name" placeholder={t("pos.customer_name")} className={inputClass} />
+            <input name="customer_phone" placeholder={t("pos.phone")} className={inputClass} />
+            <select name="payment_method" className={inputClass} disabled={payLater}>
+              <option value="cash">{t("method.cash")}</option>
+              <option value="card">{t("method.card")}</option>
+              <option value="bank_transfer">{t("method.bank_transfer")}</option>
+            </select>
+            {!payLater && (
+              <label className="block text-[10px] font-bold uppercase text-[#6f746e]">
+                {t("pos.cash_received")}
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={tendered}
+                  onChange={(event) => setTendered(event.target.value)}
+                  className={`${inputClass} mt-1`}
+                  placeholder={subtotal > 0 ? String(subtotal) : "0.00"}
+                />
+              </label>
+            )}
+            {changeDue > 0 && (
+              <div className="flex justify-between bg-[#167c73]/8 px-3 py-2 text-sm font-semibold text-[#167c73]">
+                <span>{t("pos.change")}</span>
+                <span className="tabular-nums">{money(changeDue)}</span>
+              </div>
+            )}
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={payLater} onChange={(event) => setPayLater(event.target.checked)} className="size-4 accent-[#167c73]" />
+              {t("pos.pay_later")}
+            </label>
+            {error && saving && <ErrorMessage message={error} />}
+            <button disabled={saving || cart.length === 0} className={`${buttonClass} h-12 w-full text-sm sm:h-8 sm:text-[11px]`}>
+              {saving ? t("pos.processing") : payLater ? t("pos.open_bill") : t("pos.complete_sale")}
+            </button>
+          </form>
+        </Panel>
+      </div>
+    </AppShell>
+  );
+}
+
+function PaintCounterForm() {
+  const router = useRouter();
+  const t = useT();
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
@@ -54,15 +322,13 @@ export default function InstantBillPage() {
   }
 
   return (
-    <AppShell title={isPaint ? t("instant.title_paint") : t("instant.title")} eyebrow={t("instant.eyebrow")}>
+    <AppShell title={t("instant.title_paint")} eyebrow={t("instant.eyebrow")}>
       <div className="mx-auto max-w-3xl space-y-5">
         <div className="flex items-start gap-4 border-l-4 border-[#f5c842] bg-[#fbfaf6] p-4">
           <ClipboardCheck className="shrink-0 text-[#167c73]" />
           <div>
-            <p className="font-semibold">{isPaint ? t("instant.heading_paint") : t("instant.heading")}</p>
-            <p className="text-sm text-[#6f746e]">
-              {isPaint ? t("instant.hint_paint") : t("instant.hint")}
-            </p>
+            <p className="font-semibold">{t("instant.heading_paint")}</p>
+            <p className="text-sm text-[#6f746e]">{t("instant.hint_paint")}</p>
           </div>
         </div>
 
