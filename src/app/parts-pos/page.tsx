@@ -2,11 +2,11 @@
 
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardCheck, Minus, Plus, Save, ScanBarcode, Trash2 } from "lucide-react";
+import { ClipboardCheck, Save, ScanBarcode, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { AddressField } from "@/components/address-field";
 import { EmployeePicker } from "@/components/employee-picker";
-import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
+import { buttonClass, ErrorMessage, inputClass, PageState, Panel, QtyStepper } from "@/components/ui";
 import { api, currentFeatures, money } from "@/lib/api";
 import { BillingBranchBanner } from "@/components/branch-chip";
 import { useBusinessProfile } from "@/lib/use-business-profile";
@@ -211,24 +211,15 @@ function GarageInstantTill() {
           <h2 className="font-display text-2xl font-semibold uppercase">{t("common.bill")}</h2>
           <div className="mt-4 max-h-[40vh] space-y-3 overflow-y-auto">
             {cart.map((line) => (
-              <div key={line.id} className="flex items-center justify-between gap-2 border-b border-[#e2ded4] pb-2 text-sm">
-                <div className="min-w-0">
+              <div key={line.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[#e2ded4] pb-2 text-sm">
+                <div className="min-w-0 flex-1 basis-40">
                   <p className="truncate font-semibold">{line.name}</p>
                   <p className="tabular-nums text-[#6f746e]">{money(line.price)} × {line.quantity}</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button type="button" className="grid size-8 place-items-center border" onClick={() => setQty(line.id, line.quantity - 1, line.stock_qty)}><Minus size={14} /></button>
-                  <input
-                    type="number"
-                    min={1}
-                    max={line.stock_qty}
-                    value={line.quantity}
-                    onChange={(event) => setQty(line.id, Number(event.target.value), line.stock_qty)}
-                    className="h-8 w-12 border border-[#c9c5b9] bg-white text-center text-sm tabular-nums"
-                  />
-                  <button type="button" className="grid size-8 place-items-center border" onClick={() => setQty(line.id, line.quantity + 1, line.stock_qty)}><Plus size={14} /></button>
-                  <strong className="w-16 text-right tabular-nums">{money(Number(line.price) * line.quantity)}</strong>
-                  <button type="button" className="text-[#b84837]" onClick={() => setCart((rows) => rows.filter((row) => row.id !== line.id))}><Trash2 size={16} /></button>
+                <div className="ml-auto flex shrink-0 items-center gap-2">
+                  <QtyStepper value={line.quantity} max={line.stock_qty} onChange={(qty) => setQty(line.id, qty, line.stock_qty)} />
+                  <strong className="shrink-0 whitespace-nowrap text-right text-sm tabular-nums">{money(Number(line.price) * line.quantity)}</strong>
+                  <button type="button" className="grid size-7 shrink-0 place-items-center text-[#b84837]" onClick={() => setCart((rows) => rows.filter((row) => row.id !== line.id))} aria-label={t("common.remove")}><Trash2 size={14} /></button>
                 </div>
               </div>
             ))}

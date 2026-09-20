@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { CSSProperties, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api, Branch, currentBranch, currentBranches, currentUser, isMultiBranch, setCurrentBranchId, storeSession } from "@/lib/api";
 import { ConfirmModal } from "@/components/ui";
 import { useT } from "@/lib/locale";
@@ -12,6 +13,8 @@ export function BranchChip() {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<Branch | null>(null);
   const [busy, setBusy] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
+  const [mounted, setMounted] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const user = currentUser();
   const canSwitch = user?.role === "business_owner";
@@ -23,24 +26,52 @@ export function BranchChip() {
   }
 
   useEffect(() => {
+    setMounted(true);
     refresh();
     const onChange = () => refresh();
     window.addEventListener("garage-branch-changed", onChange);
     return () => window.removeEventListener("garage-branch-changed", onChange);
   }, []);
 
+  useLayoutEffect(() => {
+    if (!open) return;
+    function place() {
+      const el = rootRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const gutter = 12;
+      const width = Math.min(Math.max(280, r.width), window.innerWidth - gutter * 2);
+      const left = Math.min(Math.max(gutter, r.left), window.innerWidth - width - gutter);
+      const top = Math.min(r.bottom + 8, window.innerHeight - 180);
+      const maxHeight = Math.max(160, window.innerHeight - top - gutter);
+      setMenuStyle({
+        position: "fixed",
+        top,
+        left: window.innerWidth < 640 ? gutter : left,
+        width: window.innerWidth < 640 ? window.innerWidth - gutter * 2 : width,
+        maxHeight,
+        zIndex: 80,
+      });
+    }
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
-    function onPointerDown(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    }
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") setOpen(false);
     }
-    document.addEventListener("mousedown", onPointerDown);
     document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("mousedown", onPointerDown);
+      document.body.style.overflow = previous;
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
@@ -67,14 +98,14 @@ export function BranchChip() {
   }
 
   return (
-    <div className="relative z-50" ref={rootRef}>
+    <div className="relative" ref={rootRef}>
       {canSwitch ? (
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
           aria-expanded={open}
           aria-haspopup="listbox"
-          className="inline-flex h-8 items-center gap-2 border border-[#20221f] bg-white px-2.5 text-[11px] font-bold uppercase tracking-wide"
+          className="inline-flex h-8 max-w-full items-center gap-2 border border-[#20221f] bg-white px-2.5 text-[11px] font-bold uppercase tracking-wide"
         >
           <span className="size-2 shrink-0 rounded-full bg-[#167c73]" />
           <span className="max-w-36 truncate">{branch.name}</span>
@@ -86,28 +117,39 @@ export function BranchChip() {
           {branch.name} · {t("common.locked")}
         </span>
       )}
-      {open && canSwitch && (
-        <div
-          role="listbox"
-          className="absolute right-0 top-full z-[60] mt-2 w-56 border border-[#20221f] bg-white p-2 shadow-[0_12px_28px_rgba(32,34,31,0.18)]"
-        >
-          {branches.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="option"
-              aria-selected={item.id === branch.id}
-              onClick={() => {
-                setOpen(false);
-                if (item.id !== branch.id) setPending(item);
-              }}
-              className={`mb-1 flex w-full items-center justify-between px-3 py-2 text-left text-sm last:mb-0 ${item.id === branch.id ? "bg-[#167c73]/10 font-semibold" : "hover:bg-[#f3f0e8]"}`}
-            >
-              <span>{item.name}</span>
-              {item.is_default ? <span className="text-[10px] uppercase text-[#6f746e]">{t("common.main")}</span> : null}
-            </button>
-          ))}
-        </div>
+      {mounted && open && canSwitch && createPortal(
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-[70] bg-black/45"
+            aria-label={t("common.close")}
+            onClick={() => setOpen(false)}
+          />
+          <div
+            role="listbox"
+            style={menuStyle}
+            className="overflow-y-auto border border-[#20221f] bg-white p-2 shadow-[0_16px_40px_rgba(32,34,31,0.28)]"
+          >
+            <p className="px-3 pb-2 pt-1 text-[10px] font-bold uppercase tracking-wide text-[#6f746e]">{t("common.shop")}</p>
+            {branches.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="option"
+                aria-selected={item.id === branch.id}
+                onClick={() => {
+                  setOpen(false);
+                  if (item.id !== branch.id) setPending(item);
+                }}
+                className={`mb-1 flex min-h-11 w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm last:mb-0 ${item.id === branch.id ? "bg-[#167c73]/10 font-semibold" : "hover:bg-[#f3f0e8]"}`}
+              >
+                <span className="min-w-0 break-words">{item.name}</span>
+                {item.is_default ? <span className="shrink-0 text-[10px] uppercase text-[#6f746e]">{t("common.main")}</span> : null}
+              </button>
+            ))}
+          </div>
+        </>,
+        document.body,
       )}
       <ConfirmModal
         open={Boolean(pending)}

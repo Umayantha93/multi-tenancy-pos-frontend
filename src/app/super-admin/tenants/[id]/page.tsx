@@ -8,7 +8,7 @@ import { PlatformShell } from "@/components/platform-shell";
 import { AddressField } from "@/components/address-field";
 import { ConfirmModal, ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
 import { api, Branch, mediaUrl, PhoneEntry, Tenant } from "@/lib/api";
-import { PAYMENT_PLAN_OPTIONS, PLAN_OPTIONS, optionalFeaturesFor, profileFor } from "@/lib/business-profiles";
+import { BUSINESS_TYPE_OPTIONS, PAYMENT_PLAN_OPTIONS, PLAN_OPTIONS, optionalFeaturesFor, profileFor } from "@/lib/business-profiles";
 import { FeaturePlanToggles } from "@/components/feature-plan-toggles";
 
 type Feature = { id: number; key: string; name: string; group?: string | null; parent?: string | null };
@@ -498,6 +498,9 @@ export default function TenantDetailPage() {
       setNotice("Tenant details saved.");
       const logoInput = form.querySelector<HTMLInputElement>('input[name="logo"]');
       if (logoInput) logoInput.value = "";
+      const features = await api<FeatureResponse>(`/super-admin/tenants/${id}/features`);
+      setFeatureData(features);
+      setEnabled(features.enabled);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to save tenant details.");
     } finally {
@@ -929,6 +932,17 @@ export default function TenantDetailPage() {
                   <input name="business_name" required defaultValue={tenant.business_name} className={`${inputClass} mt-2`} />
                 </label>
                 <label className="block text-xs font-bold uppercase">
+                  Business type
+                  <select name="business_type" defaultValue={tenant.business_type} className={`${inputClass} mt-2`}>
+                    {BUSINESS_TYPE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <p className="text-sm text-[#6f746e]">
+                  Plan (Store Pro / Mobile Pro) is only the billing label. Business type is what changes the screens, sidebar, and modules. After a type change, the owner should refresh or sign in again.
+                </p>
+                <label className="block text-xs font-bold uppercase">
                   Owner name
                   <input name="owner_name" required defaultValue={tenant.owner_name} className={`${inputClass} mt-2`} />
                 </label>
@@ -1007,6 +1021,7 @@ export default function TenantDetailPage() {
                         <option key={option.value} value={option.value}>{option.label}</option>
                       ))}
                     </select>
+                    <span className="mt-1 block font-normal normal-case text-[#6f746e]">Does not switch Store vs Mobile shop.</span>
                   </label>
                   <label className="block text-xs font-bold uppercase">
                     Payment plan

@@ -2,9 +2,9 @@
 
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Minus, Plus, ScanBarcode, Trash2 } from "lucide-react";
+import { ScanBarcode, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
+import { ErrorMessage, PageState, Panel, QtyStepper, buttonClass, inputClass } from "@/components/ui";
 import { api, currentFeatures, money } from "@/lib/api";
 import { usesStoreCounter } from "@/lib/business-profiles";
 import { useBusinessProfile } from "@/lib/use-business-profile";
@@ -277,29 +277,18 @@ export default function PosPage() {
           <div className="mt-4 max-h-[40vh] space-y-3 overflow-y-auto">
             {cart.map((line) => (
               <div key={line.id} className="border-b border-[#e2ded4] pb-2 text-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <div className="min-w-0 flex-1 basis-40">
                     <p className="truncate font-semibold">{line.name}</p>
                     <p className="tabular-nums text-[#6f746e]">{money(line.price)} × {line.quantity}</p>
                     {line.serials?.length ? <p className="mt-1 truncate text-[11px] text-[#6f746e]">{line.serials.join(" · ")}</p> : null}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="ml-auto flex shrink-0 items-center gap-2">
                     {!line.serials?.length && (
-                      <>
-                    <button type="button" className="grid size-8 place-items-center border" onClick={() => setQty(line.id, line.quantity - 1, line.stock)}><Minus size={14} /></button>
-                    <input
-                      type="number"
-                      min={1}
-                      max={line.stock}
-                      value={line.quantity}
-                      onChange={(event) => setQty(line.id, Number(event.target.value), line.stock)}
-                      className="h-8 w-12 border border-[#c9c5b9] bg-white text-center text-sm tabular-nums"
-                    />
-                    <button type="button" className="grid size-8 place-items-center border" onClick={() => setQty(line.id, line.quantity + 1, line.stock)}><Plus size={14} /></button>
-                      </>
+                      <QtyStepper value={line.quantity} max={line.stock} onChange={(qty) => setQty(line.id, qty, line.stock)} />
                     )}
-                    <strong className="w-16 text-right tabular-nums">{money(line.price * line.quantity)}</strong>
-                    <button type="button" className="text-[#b84837]" onClick={() => setCart((rows) => rows.filter((row) => row.id !== line.id))}><Trash2 size={16} /></button>
+                    <strong className="shrink-0 whitespace-nowrap text-right text-sm tabular-nums">{money(line.price * line.quantity)}</strong>
+                    <button type="button" className="grid size-7 shrink-0 place-items-center text-[#b84837]" onClick={() => setCart((rows) => rows.filter((row) => row.id !== line.id))} aria-label={t("common.remove")}><Trash2 size={14} /></button>
                   </div>
                 </div>
                 {canWarranty && (
