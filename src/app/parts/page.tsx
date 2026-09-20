@@ -8,6 +8,7 @@ import { API_URL, api, currentFeatures, currentUser, mediaUrl, money } from "@/l
 import { useBusinessProfile } from "@/lib/use-business-profile";
 import { usesStoreCounter } from "@/lib/business-profiles";
 import { StickerPrintButton } from "@/components/sticker-print";
+import { formatStockQty, normalizeStockUnit, stockUnitLabel, type StockUnit } from "@/lib/stock-unit";
 
 type Part = {
   id: number;
@@ -21,9 +22,11 @@ type Part = {
   price: string;
   cost_price: string;
   stock_qty: number;
+  stock_unit?: string | null;
   description?: string;
   images?: string[];
   image_urls?: string[];
+  serialized?: boolean;
 };
 
 type Mode = "add" | "edit" | "restock" | null;
@@ -56,12 +59,13 @@ export default function PartsPage() {
   const [importPayment, setImportPayment] = useState("paid");
   const [importDue, setImportDue] = useState("");
   const [importSupplierId, setImportSupplierId] = useState("");
+  const [canSerial, setCanSerial] = useState(false);
+  const [stockUnit, setStockUnit] = useState<StockUnit>("qty");
   const importInputRef = useRef<HTMLInputElement>(null);
   const profile = useBusinessProfile();
   const isPaint = profile.type === "paint";
   const isStore = usesStoreCounter(profile.type);
   const isGarage = profile.type === "garage";
-  const stockUnit = isPaint ? "ml" : "units";
   const lowStockAt = isPaint ? 250 : 5;
   const itemNoun = isPaint ? "colour" : isStore ? "item" : "part";
 
@@ -75,6 +79,7 @@ export default function PartsPage() {
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       setAdmin(currentUser()?.role === "business_owner");
+      setCanSerial(currentFeatures().includes("serial_inventory"));
       load("");
       if (currentFeatures().includes("suppliers")) {
         api<{ data: Supplier[] }>("/suppliers?per_page=100")
@@ -108,6 +113,7 @@ export default function PartsPage() {
 
   function openAdd() {
     setSelected(null);
+    setStockUnit(isPaint ? "ml" : "qty");
     setMode("add");
     setError("");
     setNotice("");
@@ -116,6 +122,7 @@ export default function PartsPage() {
   function openEdit(part: Part) {
     if (!admin) return;
     setSelected(part);
+    setStockUnit(normalizeStockUnit(part.stock_unit, isPaint));
     setMode("edit");
     setError("");
     setNotice("");
@@ -123,6 +130,7 @@ export default function PartsPage() {
 
   function openRestock(part: Part) {
     setSelected(part);
+    setStockUnit(normalizeStockUnit(part.stock_unit, isPaint));
     setMode("restock");
     setError("");
     setNotice("");
@@ -213,8 +221,10 @@ export default function PartsPage() {
     setNotice("");
     try {
       if (mode === "edit" && selected) {
+        formData.set("serialized", form.querySelector<HTMLInputElement>('input[name="serialized"]')?.checked ? "1" : "0");
         await api(`/parts/${selected.id}`, { method: "POST", body: formData });
       } else {
+        formData.set("serialized", form.querySelector<HTMLInputElement>('input[name="serialized"]')?.checked ? "1" : "0");
         await api("/parts", { method: "POST", body: formData });
       }
       form.reset();
@@ -232,7 +242,15 @@ export default function PartsPage() {
     event.preventDefault();
     if (!selected) return;
     const form = event.currentTarget;
-    const payload = Object.fromEntries(new FormData(form));
+    const payload = Object.fromEntries(new FormData(form)) as Record<string, string>;
+    const serials = String(payload.serials || "")
+      .split(/[\n,;]+/)
+      .map((code) => code.trim())
+      .filter(Boolean);
+    delete payload.serials;
+    if (serials.length) {
+      payload.quantity = String(serials.length);
+    }
     if (!payload.due_date || payload.payment_status !== "credit") {
       delete payload.due_date;
     }
@@ -249,7 +267,7 @@ export default function PartsPage() {
     try {
       await api(`/parts/${selected.id}/restock`, {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: JSON.stringify(serials.length ? { ...payload, serials } : payload),
       });
       form.reset();
       setMode(null);
@@ -290,7 +308,7 @@ export default function PartsPage() {
 
   return (
     <AppShell
-      title={isPaint ? "Color stock" : isStore ? "Stock" : "Parts inventory"}
+      title={isPaint ? "Color stock" : isStore ? "Stock" : "Inventory"}
       eyebrow={`${parts.length} catalog items${isPaint ? " · millilitres" : ""}`}
       action={admin ? (
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -321,7 +339,7 @@ export default function PartsPage() {
             }}
           />
           <button onClick={openAdd} className="flex h-8 items-center gap-2 bg-[#f5c842] px-2.5 text-[11px] font-semibold">
-            <Plus size={18} /><span className="hidden sm:inline">{isPaint ? "Add colour" : isStore ? "Add item" : "Add part"}</span>
+            <Plus size={18} /><span className="hidden sm:inline">{isPaint ? "Add colour" : isStore ? "Add item" : "Add item"}</span>
           </button>
         </div>
       ) : undefined}
@@ -344,7 +362,7 @@ export default function PartsPage() {
       {notice && <div className="mb-5"><SuccessMessage message={notice} /></div>}
 
       {parts.length === 0 && !error ? (
-        <PageState message={isStore ? "No stock in the catalog yet." : "No parts in the catalog yet."} />
+        <PageState message={isStore ? "No stock in the catalog yet." : isPaint ? "No parts in the catalog yet." : "No inventory in the catalog yet."} />
       ) : (
         <div className="grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {parts.map((part) => {
@@ -383,9 +401,10 @@ export default function PartsPage() {
                         <h2 className="mt-1 truncate font-display text-lg font-semibold uppercase leading-none">{part.name}</h2>
                       </div>
                       <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-bold ${part.stock_qty <= lowStockAt ? "bg-[#b84837]/10 text-[#b84837]" : "bg-[#167c73]/10 text-[#167c73]"}`}>
-                        {part.stock_qty} {isPaint ? "ml" : "in stock"}
+                        {formatStockQty(part.stock_qty, part.stock_unit, isPaint)}
                       </span>
                     </div>
+                    {part.serialized ? <p className="mt-1 text-[10px] font-bold uppercase text-[#167c73]">IMEI</p> : null}
                     <p className="mt-2 truncate text-xs text-[#6f746e]">{part.model || "Universal"} {part.year || ""}</p>
                     {(part.barcode || part.sku) && (
                       <p className="mt-1 truncate text-xs text-[#6f746e]">
@@ -474,21 +493,47 @@ export default function PartsPage() {
                 </datalist>
               )}
               {mode === "add" && (
-                <label className="text-xs font-bold uppercase">
-                  {isPaint ? "Opening stock (ml)" : "Opening stock"}
-                  <input name="stock_qty" type="number" min="0" defaultValue="0" required className={`${inputClass} mt-2`} />
-                </label>
+                <>
+                  <label className="text-xs font-bold uppercase">
+                    {isPaint ? "Opening stock (ml)" : "Opening stock"}
+                    <input name="stock_qty" type="number" min="0" defaultValue="0" required className={`${inputClass} mt-2`} />
+                  </label>
+                  {isGarage && (
+                    <label className="text-xs font-bold uppercase">
+                      Unit
+                      <select
+                        name="stock_unit"
+                        value={stockUnit}
+                        onChange={(event) => setStockUnit(normalizeStockUnit(event.target.value))}
+                        className={`${inputClass} mt-2`}
+                      >
+                        <option value="qty">Qty</option>
+                        <option value="ml">ml</option>
+                        <option value="l">L</option>
+                      </select>
+                    </label>
+                  )}
+                  {isPaint && <input type="hidden" name="stock_unit" value="ml" />}
+                </>
               )}
               {mode === "edit" && selected && (
                 <div className="text-xs font-bold uppercase">
                   Current stock
-                  <p className="mt-2 border border-[#c9c5b9] bg-white px-3 py-3 text-sm font-semibold normal-case">{selected.stock_qty} {stockUnit} — use Restock to add stock and record expense</p>
+                  <p className="mt-2 border border-[#c9c5b9] bg-white px-3 py-3 text-sm font-semibold normal-case">
+                    {formatStockQty(selected.stock_qty, selected.stock_unit, isPaint)} — use Restock to add stock and record expense
+                  </p>
                 </div>
               )}
               <label className="text-xs font-bold uppercase sm:col-span-2">
                 Description
                 <textarea name="description" defaultValue={selected?.description ?? ""} rows={3} className={`${inputClass} mt-2`} />
               </label>
+              {canSerial && (
+                <label className="flex items-center gap-2 text-xs font-bold uppercase sm:col-span-2">
+                  <input type="checkbox" name="serialized" defaultChecked={Boolean(selected?.serialized)} className="size-4 accent-[#167c73]" />
+                  Track by IMEI / serial
+                </label>
+              )}
               <label className="text-xs font-bold uppercase sm:col-span-2">
                 Images
                 <input name="images" type="file" accept="image/*" multiple className="mt-2 block w-full border border-[#c9c5b9] bg-white p-3 text-sm" />
@@ -547,13 +592,34 @@ export default function PartsPage() {
             </div>
             <div className="space-y-4 p-5">
               <p className="text-sm text-[#6f746e]">
-                Adding stock for <strong>{selected.name}</strong> (now {selected.stock_qty} @ cost {selected.cost_price || "0"}).
+                Adding stock for <strong>{selected.name}</strong> (now {formatStockQty(selected.stock_qty, selected.stock_unit, isPaint)} @ cost {selected.cost_price || "0"}).
                 New unit cost is blended as a weighted average with existing stock. The purchase expense still uses this restock’s unit cost × qty. Paid hits finance now; credit stays as a payable until settled.
               </p>
               <label className="block text-xs font-bold uppercase">
-                Quantity to add{isPaint ? " (ml)" : ""}
-                <input name="quantity" type="number" min="1" step="1" required className={`${inputClass} mt-2`} />
+                Quantity to add{isPaint ? " (ml)" : isGarage ? ` (${stockUnitLabel(stockUnit)})` : ""}
+                <input name="quantity" type="number" min="1" step="1" required={!canSerial || !selected.serialized} className={`${inputClass} mt-2`} />
               </label>
+              {isGarage && (
+                <label className="block text-xs font-bold uppercase">
+                  Unit
+                  <select
+                    name="stock_unit"
+                    value={stockUnit}
+                    onChange={(event) => setStockUnit(normalizeStockUnit(event.target.value))}
+                    className={`${inputClass} mt-2`}
+                  >
+                    <option value="qty">Qty</option>
+                    <option value="ml">ml</option>
+                    <option value="l">L</option>
+                  </select>
+                </label>
+              )}
+              {canSerial && (
+                <label className="block text-xs font-bold uppercase">
+                  IMEIs / serials (one per line)
+                  <textarea name="serials" rows={4} required={Boolean(selected.serialized)} placeholder="356938035643809" className={`${inputClass} mt-2`} />
+                </label>
+              )}
               <label className="block text-xs font-bold uppercase">
                 Unit cost
                 <input name="unit_cost" type="number" min="0" step="0.01" defaultValue={selected.cost_price || ""} className={`${inputClass} mt-2`} />

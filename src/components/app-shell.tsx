@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ReactNode, useEffect, useMemo, useState } from "react";
+import { ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { LogOut, Menu, Store, X } from "lucide-react";
 import { api, clearSession, currentFeatures, currentUser, mediaUrl, money, SessionPayload, storeSession, User } from "@/lib/api";
 import { profileFor } from "@/lib/business-profiles";
@@ -10,13 +10,18 @@ import { BranchChip } from "@/components/branch-chip";
 import { LanguageToggle } from "@/components/language-toggle";
 import { useLocale, useT } from "@/lib/locale";
 
+let cachedUser: User | null = null;
+let cachedFeatures: string[] = [];
+let sidebarScrollTop = 0;
+
 export function AppShell({ children, title, eyebrow, action }: { children: ReactNode; title: string; eyebrow?: string; action?: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const t = useT();
   const { setLocale } = useLocale();
-  const [user, setUser] = useState<User | null>(null);
-  const [features, setFeatures] = useState<string[]>([]);
+  const navRef = useRef<HTMLElement>(null);
+  const [user, setUser] = useState<User | null>(cachedUser);
+  const [features, setFeatures] = useState<string[]>(cachedFeatures);
   const [open, setOpen] = useState(false);
   const [dueCheques, setDueCheques] = useState<{ count: number; firstExpenseId?: number } | null>(null);
 
@@ -35,8 +40,11 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
       router.replace("/super-admin/dashboard");
       return;
     }
+    const sessionFeatures = currentFeatures();
+    cachedUser = sessionUser;
+    cachedFeatures = sessionFeatures;
     setUser(sessionUser);
-    setFeatures(currentFeatures());
+    setFeatures(sessionFeatures);
 
     api<SessionPayload>("/user")
       .then((result) => {
@@ -45,6 +53,8 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
           branches: result.branches,
           active_branch: result.active_branch,
         });
+        cachedUser = result.user;
+        cachedFeatures = result.features;
         setUser(result.user);
         setFeatures(result.features);
         if (result.user.locale === "si" || result.user.locale === "en") {
@@ -73,6 +83,15 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
   }, [router, setLocale]);
 
   useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [open]);
+
+  useEffect(() => {
     if (!user) return;
     const required = navigation.find((item) => {
       if (item.href === "/dashboard" || !pathname.startsWith(item.href)) return false;
@@ -87,7 +106,11 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
 
   async function logout() {
     try { await api("/auth/logout", { method: "POST" }); } catch { /* Clear local access even if the server is unavailable. */ }
-    clearSession(); router.replace("/login");
+    cachedUser = null;
+    cachedFeatures = [];
+    sidebarScrollTop = 0;
+    clearSession();
+    router.replace("/login");
   }
 
   const links = navigation.filter((item) => {
@@ -97,13 +120,33 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
     if (item.feature && !features.includes(item.feature)) return false;
     return true;
   });
+
+  useLayoutEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const restore = () => {
+      el.scrollTop = sidebarScrollTop;
+    };
+    restore();
+    const frame = requestAnimationFrame(restore);
+    const onScroll = () => {
+      sidebarScrollTop = el.scrollTop;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      sidebarScrollTop = el.scrollTop;
+      el.removeEventListener("scroll", onScroll);
+    };
+  }, [links.length, pathname]);
+
   const logoUrl = mediaUrl(user?.tenant?.logo_url || user?.tenant?.logo);
   const roleLabel = user?.role ? t(`roles.${user.role}`) : t("shell.account");
   const amountLabel = paymentAmount != null ? money(paymentAmount) : t("shell.plan_amount");
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[240px_1fr]">
-      <aside className={`no-print fixed inset-y-0 left-0 z-40 flex w-[240px] flex-col bg-[#242723] text-white transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>
+      <aside className={`no-print fixed inset-y-0 left-0 z-50 flex w-[240px] flex-col bg-[#242723] text-white transition-transform lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="flex h-20 items-center justify-between border-b border-white/10 px-5">
           <Link href="/dashboard" className="flex min-w-0 items-center gap-3">
             {logoUrl ? (
@@ -119,14 +162,17 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
           </Link>
           <button onClick={() => setOpen(false)} className="lg:hidden" aria-label={t("shell.close_nav")}><X /></button>
         </div>
-        <nav className="sidebar-scroll flex-1 space-y-1 overflow-y-auto overscroll-contain px-3 py-6">
+        <nav ref={navRef} className="sidebar-scroll flex-1 space-y-1 overflow-y-auto overscroll-contain px-3 py-6">
           {links.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
             return (
               <Link
                 key={href}
                 href={href}
-                onClick={() => setOpen(false)}
+                onClick={() => {
+                  if (navRef.current) sidebarScrollTop = navRef.current.scrollTop;
+                  setOpen(false);
+                }}
                 className={`flex h-11 items-center gap-3 px-3 text-sm transition ${active ? "bg-[#f5c842] font-semibold text-[#20221f]" : "text-white/65 hover:bg-white/8 hover:text-white"}`}
               >
                 <Icon size={18} />{t(`nav.${label}`)}
@@ -148,7 +194,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
           </button>
         </div>
       </aside>
-      {open && <button aria-label={t("shell.close_overlay")} onClick={() => setOpen(false)} className="no-print fixed inset-0 z-30 bg-black/45 lg:hidden" />}
+      {open && <button aria-label={t("shell.close_overlay")} onClick={() => setOpen(false)} className="no-print fixed inset-0 z-40 bg-black/45 lg:hidden" />}
       <main className="min-w-0">
         {showPaymentReminder && (
           <div className="no-print flex min-h-20 items-center justify-center bg-[#6b1e2a] px-4 py-5 text-center sm:min-h-24 sm:px-7 sm:py-6">
@@ -169,7 +215,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
             </Link>
           </div>
         )}
-        <header className="no-print relative z-40 border-b border-[#d7d3c8] bg-[#f3f0e8]/95 px-4 backdrop-blur sm:px-7">
+        <header className="no-print relative z-30 overflow-visible border-b border-[#d7d3c8] bg-[#f3f0e8] px-4 sm:px-7">
           <div className="flex min-h-20 flex-col gap-3 py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
             <div className="flex min-w-0 items-center gap-3">
               <button onClick={() => setOpen(true)} className="grid size-8 shrink-0 place-items-center border border-[#d7d3c8] lg:hidden" aria-label={t("shell.open_nav")}><Menu size={16} /></button>
@@ -178,7 +224,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
                 <h1 className="break-words font-display text-2xl font-semibold uppercase leading-tight sm:text-4xl sm:leading-none">{title}</h1>
               </div>
             </div>
-            <div className="relative z-50 flex min-w-0 flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end">
+            <div className="relative z-30 flex min-w-0 flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end">
               <BranchChip />
               {action}
             </div>

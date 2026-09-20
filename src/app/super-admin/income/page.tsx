@@ -19,10 +19,21 @@ type IncomeReport = {
   outstanding_month: number | null;
   outstanding_total: number;
   outstanding: Array<{ tenant_id: number; business_name: string; plan_amount: number }>;
+  setup_outstanding_total?: number;
+  setup_outstanding?: Array<{
+    tenant_id: number;
+    business_name: string;
+    setup_fee_amount: number;
+    setup_fee_paid: number;
+    setup_fee_balance: number;
+  }>;
+  fee_collected?: number;
+  setup_collected?: number;
   months: Array<{ month: number; period: string; label: string; collected: number; count: number }>;
   tenants: Array<{ tenant_id: number; business_name: string; collected: number; count: number }>;
   payments: Array<{
     id: number;
+    kind?: "monthly_fee" | "setup_fee";
     tenant_id: number;
     business_name: string;
     period: string;
@@ -58,7 +69,7 @@ export default function SuperAdminIncomePage() {
   }, []);
 
   return (
-    <PlatformShell title="Income" eyebrow="Tenant subscription fees">
+    <PlatformShell title="Income" eyebrow="Monthly fees and one-time settlements">
       <div className="mb-5 flex flex-wrap items-end gap-3">
         <label className="text-xs font-bold uppercase">
           Year
@@ -96,11 +107,13 @@ export default function SuperAdminIncomePage() {
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
       {!data && !error ? <PageState message="Loading income..." /> : data && (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <Panel className="p-5">
               <p className="text-xs font-bold uppercase text-[#6f746e]">Collected</p>
               <p className="mt-3 font-display text-3xl font-semibold">{money(data.collected)}</p>
-              <p className="mt-2 text-xs text-[#6f746e]">{data.payment_count} fee payment{data.payment_count === 1 ? "" : "s"}</p>
+              <p className="mt-2 text-xs text-[#6f746e]">
+                Monthly {money(data.fee_collected ?? 0)} · One-time {money(data.setup_collected ?? 0)}
+              </p>
             </Panel>
             <Panel className="p-5">
               <p className="text-xs font-bold uppercase text-[#6f746e]">Expected / month</p>
@@ -112,6 +125,13 @@ export default function SuperAdminIncomePage() {
               <p className="mt-3 font-display text-3xl font-semibold">{money(data.outstanding_total)}</p>
               <p className="mt-2 text-xs text-[#6f746e]">
                 {data.outstanding_month ? `${data.outstanding.length} shops this month` : "Select a month"}
+              </p>
+            </Panel>
+            <Panel className="p-5">
+              <p className="text-xs font-bold uppercase text-[#6f746e]">One-time still due</p>
+              <p className="mt-3 font-display text-3xl font-semibold">{money(data.setup_outstanding_total ?? 0)}</p>
+              <p className="mt-2 text-xs text-[#6f746e]">
+                {(data.setup_outstanding ?? []).length} shop{(data.setup_outstanding ?? []).length === 1 ? "" : "s"} unsettled
               </p>
             </Panel>
             <Panel className="p-5">
@@ -152,6 +172,25 @@ export default function SuperAdminIncomePage() {
             </Panel>
           )}
 
+          {(data.setup_outstanding ?? []).length > 0 && (
+            <Panel className="mt-5">
+              <div className="border-b border-[#d7d3c8] px-5 py-4">
+                <h2 className="font-display text-2xl font-semibold uppercase">One-time still due</h2>
+              </div>
+              <div className="divide-y divide-[#e2ded4]">
+                {(data.setup_outstanding ?? []).map((row) => (
+                  <div key={row.tenant_id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
+                    <div>
+                      <span className="font-semibold">{row.business_name}</span>
+                      <p className="text-xs text-[#6f746e]">Received {money(row.setup_fee_paid)} of {money(row.setup_fee_amount)}</p>
+                    </div>
+                    <span className="tabular-nums">{money(row.setup_fee_balance)}</span>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          )}
+
           <Panel className="mt-5">
             <div className="border-b border-[#d7d3c8] px-5 py-4">
               <h2 className="font-display text-2xl font-semibold uppercase">Collected fees</h2>
@@ -164,6 +203,7 @@ export default function SuperAdminIncomePage() {
                   <thead className="bg-[#eeece5] text-[10px] uppercase text-[#6f746e]">
                     <tr>
                       <th className="px-5 py-3">Business</th>
+                      <th>Type</th>
                       <th>Period</th>
                       <th>Paid on</th>
                       <th className="pr-5 text-right">Amount</th>
@@ -171,8 +211,9 @@ export default function SuperAdminIncomePage() {
                   </thead>
                   <tbody>
                     {data.payments.map((row) => (
-                      <tr key={row.id} className="border-t border-[#e2ded4]">
+                      <tr key={`${row.kind ?? "monthly_fee"}-${row.id}`} className="border-t border-[#e2ded4]">
                         <td className="px-5 py-3 font-semibold">{row.business_name}</td>
+                        <td>{row.kind === "setup_fee" ? "One-time" : "Monthly"}</td>
                         <td>{row.period}</td>
                         <td>{formatDate(row.paid_at)}</td>
                         <td className="pr-5 text-right tabular-nums">{money(row.amount)}</td>

@@ -5,8 +5,8 @@ import { FormEvent, useEffect, useState } from "react";
 import { ArrowRight, ClipboardPlus, Hammer, Search, Wrench, X, Zap } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
-import { api, currentUser, formatDate, money } from "@/lib/api";
-import { usesLaborCatalog, usesServiceAddonWorkspace, usesStoreCounter } from "@/lib/business-profiles";
+import { api, currentFeatures, currentUser, formatDate, money } from "@/lib/api";
+import { allowsServiceJobs, usesLaborCatalog, usesServiceAddonWorkspace, usesStoreCounter } from "@/lib/business-profiles";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 import { billListStatus, billStatusClass, billStatusLabel, isOweInUrgent } from "@/lib/bill-stamp";
 import { BillingBranchBanner } from "@/components/branch-chip";
@@ -30,6 +30,17 @@ type Bill = {
   customer: { name: string; phone: string } | null;
   vehicle: { number_plate: string; make?: string; model?: string } | null;
 };
+
+function billJobKindLabel(bill: Bill, type: string, t: ReturnType<typeof useT>): string | null {
+  if (!(type === "garage" || type === "paint" || usesStoreCounter(type))) return null;
+  if (usesStoreCounter(type)) {
+    return bill.bill_number.startsWith("QCK-") ? t("bills.quick") : t("bills.sale");
+  }
+  if (bill.job_kind === "service") return type === "paint" ? t("bills.package") : t("bills.service");
+  if (bill.job_kind === "parts_sale") return type === "paint" ? t("bills.counter") : t("bills.instant");
+  if (bill.job_kind === "repair" || !bill.job_kind) return type === "paint" ? t("bills.panel") : t("bills.repair");
+  return bill.job_kind;
+}
 
 export default function BillsPage() {
   const [bills, setBills] = useState<Bill[]>([]);
@@ -127,7 +138,7 @@ export default function BillsPage() {
                 <Hammer size={14} /><span className="hidden sm:inline">{profile.type === "paint" ? t("bills.paint_labor") : t("bills.repair_addons")}</span>
               </Link>
               )}
-              {usesServiceAddonWorkspace(profile.type) && (
+              {usesServiceAddonWorkspace(profile.type) && allowsServiceJobs(profile.type, currentFeatures()) && (
               <Link
                 href="/service-addons"
                 className="flex h-8 items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-[11px] font-semibold hover:border-[#167c73]"
@@ -200,7 +211,35 @@ export default function BillsPage() {
       {error ? <ErrorMessage message={error} /> : loading ? (
         <PageState message={t("bills.loading", { kind: t(`terms.${profile.billingLabel}`).toLowerCase() })} />
       ) : (
-        <Panel>
+        <>
+        <div className="space-y-3 md:hidden">
+          {bills.map((bill) => {
+            const urgent = bill.status === "owe_in" && isOweInUrgent(bill.owe_in_due_date);
+            const kind = billJobKindLabel(bill, profile.type, t);
+            return (
+              <Link key={bill.id} href={`/bills/${bill.id}`}>
+                <Panel className={`p-4 ${urgent ? "border-[#b84837]" : ""}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">{bill.bill_number}</p>
+                      <p className="text-sm text-[#6f746e]">{bill.customer?.name ?? t("common.walk_in")}</p>
+                      <p className="mt-1 text-xs text-[#6f746e]">{usesStoreCounter(profile.type) ? (bill.notes || "—") : (bill.vehicle?.number_plate ?? "—")} · {formatDate(bill.admission_date)}</p>
+                    </div>
+                    <span className={`px-2 py-1 text-[10px] font-bold uppercase ${billStatusClass(billListStatus(bill), bill.owe_in_due_date)}`}>{billStatusLabel(billListStatus(bill), t)}</span>
+                  </div>
+                  <div className="mt-3 flex items-end justify-between gap-3">
+                    {kind ? (
+                      <span className="bg-[#eeece5] px-2 py-1 text-[10px] font-bold uppercase text-[#6f746e]">{kind}</span>
+                    ) : <span />}
+                    <p className={`text-right text-lg font-semibold ${urgent ? "text-[#b84837]" : ""}`}>{money(bill.balance_due)}</p>
+                  </div>
+                </Panel>
+              </Link>
+            );
+          })}
+          {bills.length === 0 && <PageState message={t("bills.empty", { kind: t(`terms.${profile.billingLabel}`).toLowerCase() })} />}
+        </div>
+        <Panel className="hidden md:block">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-left text-sm">
               <thead className="bg-[#eeece5] text-[10px] uppercase text-[#6f746e]">
@@ -218,22 +257,15 @@ export default function BillsPage() {
               <tbody>
                 {bills.map((bill) => {
                   const urgent = bill.status === "owe_in" && isOweInUrgent(bill.owe_in_due_date);
+                  const kind = billJobKindLabel(bill, profile.type, t);
                   return (
                   <tr key={bill.id} className={`border-t border-[#e2ded4] ${urgent ? "bg-[#b84837]/8" : ""}`}>
                     <td className="px-5 py-4 font-semibold">{bill.bill_number}</td>
                     <td>{formatDate(bill.admission_date)}</td>
                     <td>
-                      {profile.type === "garage" || profile.type === "paint" || usesStoreCounter(profile.type) ? (
+                      {kind ? (
                         <span className="px-2 py-1 text-[10px] font-bold uppercase bg-[#eeece5] text-[#6f746e]">
-                          {usesStoreCounter(profile.type)
-                            ? (bill.bill_number.startsWith("QCK-") ? t("bills.quick") : t("bills.sale"))
-                            : bill.job_kind === "service"
-                              ? (profile.type === "paint" ? t("bills.package") : t("bills.service"))
-                              : bill.job_kind === "parts_sale"
-                                ? (profile.type === "paint" ? t("bills.counter") : t("bills.instant"))
-                                : bill.job_kind === "repair" || !bill.job_kind
-                                  ? (profile.type === "paint" ? t("bills.panel") : t("bills.repair"))
-                                  : bill.job_kind}
+                          {kind}
                         </span>
                       ) : "—"}
                     </td>
@@ -284,6 +316,7 @@ export default function BillsPage() {
             )}
           </div>
         </Panel>
+        </>
       )}
       {quickOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4" onClick={() => !quickSaving && setQuickOpen(false)}>

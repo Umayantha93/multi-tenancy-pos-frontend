@@ -1,7 +1,7 @@
 "use client";
 
 import { InputHTMLAttributes, ReactNode, useEffect, useState } from "react";
-import { Eye, EyeOff, X } from "lucide-react";
+import { Eye, EyeOff, Minus, Plus, X } from "lucide-react";
 import { useT } from "@/lib/locale";
 
 export function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
@@ -144,6 +144,51 @@ export function ConfirmModal({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+export function QtyStepper({
+  value,
+  min = 1,
+  max,
+  onChange,
+}: {
+  value: number;
+  min?: number;
+  max: number;
+  onChange: (value: number) => void;
+}) {
+  const t = useT();
+  return (
+    <div className="inline-flex h-7 shrink-0 items-stretch overflow-hidden border border-[#c9c5b9] bg-white">
+      <button
+        type="button"
+        disabled={value <= min}
+        onClick={() => onChange(value - 1)}
+        className="grid w-7 place-items-center text-[#6f746e] hover:bg-[#eeece5] disabled:opacity-30"
+        aria-label={`− ${t("common.qty")}`}
+      >
+        <Minus size={12} strokeWidth={2.25} />
+      </button>
+      <input
+        type="number"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="w-8 border-x border-[#c9c5b9] bg-white text-center text-xs tabular-nums outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        aria-label={t("common.quantity")}
+      />
+      <button
+        type="button"
+        disabled={value >= max}
+        onClick={() => onChange(value + 1)}
+        className="grid w-7 place-items-center text-[#6f746e] hover:bg-[#eeece5] disabled:opacity-30"
+        aria-label={`+ ${t("common.qty")}`}
+      >
+        <Plus size={12} strokeWidth={2.25} />
+      </button>
     </div>
   );
 }

@@ -123,7 +123,7 @@ export default function TenantsPage() {
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] text-left text-sm">
+              <table className="w-full min-w-[1080px] text-left text-sm">
                 <thead className="bg-[#e7e4db] text-[10px] uppercase text-[#6f746e]">
                   <tr>
                     <th className="px-5 py-3">Business</th>
@@ -131,6 +131,7 @@ export default function TenantsPage() {
                     <th>Plan</th>
                     <th>Amount</th>
                     <th>Fee</th>
+                    <th>Setup</th>
                     <th>Users</th>
                     <th>Modules</th>
                     <th>Status</th>
@@ -174,6 +175,18 @@ export default function TenantsPage() {
                           </button>
                         ) : (
                           <span className="text-xs text-[#6f746e]">N/A</span>
+                        )}
+                      </td>
+                      <td>
+                        {Number(tenant.setup_fee_amount || 0) > 0 ? (
+                          <>
+                            <span className="block">{money(tenant.setup_fee_amount)}</span>
+                            <span className={`text-[10px] font-bold uppercase ${tenant.setup_fee_settled ? "text-[#167c73]" : "text-[#b84837]"}`}>
+                              {tenant.setup_fee_settled ? "Settled" : `Due ${money(tenant.setup_fee_balance)}`}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-xs text-[#6f746e]">—</span>
                         )}
                       </td>
                       <td>{tenant.users_count}</td>
