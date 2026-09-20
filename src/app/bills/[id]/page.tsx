@@ -1491,8 +1491,28 @@ export default function BillDetailPage() {
       <BillingBranchBanner />
       {!isClosed && (
         <div className="no-print mb-4 grid grid-cols-2 xl:hidden">
-          <button type="button" onClick={() => setFloorPane("work")} className={`h-11 text-sm font-semibold ${floorPane === "work" ? "bg-[#20221f] text-white" : "border border-[#d7d3c8] bg-white"}`}>Items</button>
-          <button type="button" onClick={() => { setFloorPane("pay"); setMode("payment"); }} className={`h-11 text-sm font-semibold ${floorPane === "pay" ? "bg-[#167c73] text-white" : "border border-[#d7d3c8] bg-white"}`}>Pay {money(bill.balance_due)}</button>
+          <button
+            type="button"
+            onClick={() => setFloorPane("work")}
+            className={`h-11 text-sm font-semibold ${floorPane === "work" ? "bg-[#20221f] text-white" : "border border-[#d7d3c8] bg-white"}`}
+          >
+            {t("bill.bill_items")}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setFloorPane("pay");
+              setMode(isOweIn ? "payment" : "item");
+            }}
+            className={`inline-flex h-11 items-center justify-center gap-1 text-sm font-semibold ${floorPane === "pay" && (isOweIn || mode === "item") ? "bg-[#20221f] text-white" : "border border-[#d7d3c8] bg-white"}`}
+          >
+            {isOweIn ? t("bill.payment") : (
+              <>
+                <Plus size={16} />
+                {t("bill.add_item")}
+              </>
+            )}
+          </button>
         </div>
       )}
       <div className={`bill-print-sheet min-w-0 max-w-full ${!isClosed && Number(bill.balance_due) > 0 ? "pb-12 xl:pb-0" : ""}`}>
@@ -2028,7 +2048,8 @@ export default function BillDetailPage() {
           {!isClosed && (
           <Panel className="no-print xl:sticky xl:top-4">
             {!isOweIn && (
-            <div className="grid grid-cols-2 border-b border-[#d7d3c8]">
+            <>
+            <div className="hidden grid-cols-2 border-b border-[#d7d3c8] xl:grid">
               <button onClick={() => setMode("item")} className={`h-8 text-[11px] font-semibold ${mode === "item" ? "bg-[#20221f] text-white" : ""}`}>
                 <Plus className="inline" size={16} /> {t("bill.add_item")}
               </button>
@@ -2036,6 +2057,13 @@ export default function BillDetailPage() {
                 <CreditCard className="inline" size={16} /> {t("bill.payment")}
               </button>
             </div>
+            {mode === "payment" && (
+              <div className="flex h-11 items-center justify-center gap-2 bg-[#167c73] text-sm font-semibold text-white xl:hidden">
+                <CreditCard size={16} />
+                {t("bill.payment")}
+              </div>
+            )}
+            </>
             )}
             {isOweIn && (
               <div className="border-b border-[#d7d3c8] px-5 py-3">
