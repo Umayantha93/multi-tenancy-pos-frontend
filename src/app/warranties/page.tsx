@@ -6,6 +6,8 @@ import { Search } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { api, formatDate } from "@/lib/api";
+import { usesVehicleJobs } from "@/lib/business-profiles";
+import { useBusinessProfile } from "@/lib/use-business-profile";
 import { warrantyLabel } from "@/lib/warranty";
 import { useT } from "@/lib/locale";
 
@@ -21,6 +23,8 @@ type WarrantyRow = {
 
 export default function WarrantiesPage() {
   const t = useT();
+  const profile = useBusinessProfile();
+  const vehicleJobs = usesVehicleJobs(profile.type);
   const [search, setSearch] = useState("");
   const [includeExpired, setIncludeExpired] = useState(false);
   const [rows, setRows] = useState<WarrantyRow[]>([]);
@@ -46,7 +50,7 @@ export default function WarrantiesPage() {
   return (
     <AppShell title={t("warranties.title")} eyebrow={t("warranties.eyebrow")}>
       <p className="mb-5 max-w-2xl text-sm text-[#6f746e]">
-        {t("warranties.intro")}
+        {t(vehicleJobs ? "warranties.intro" : "warranties.intro_sale")}
       </p>
       <div className="mb-5 flex flex-wrap items-end gap-2">
         <label className="relative min-w-56 flex-1">
@@ -55,7 +59,7 @@ export default function WarrantiesPage() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className={`${inputClass} pl-10`}
-            placeholder={t("warranties.search_placeholder")}
+            placeholder={t(vehicleJobs ? "warranties.search_placeholder" : "warranties.search_placeholder_sale")}
           />
         </label>
         <button type="button" onClick={() => load(search, includeExpired)} className={buttonClass}>{t("warranties.look_up")}</button>
@@ -103,7 +107,7 @@ export default function WarrantiesPage() {
             </table>
           </div>
           {rows.length === 0 && (
-            <p className="p-8 text-center text-sm text-[#6f746e]">{t("warranties.empty")}</p>
+            <p className="p-8 text-center text-sm text-[#6f746e]">{t(vehicleJobs ? "warranties.empty" : "warranties.empty_sale")}</p>
           )}
         </Panel>
       )}

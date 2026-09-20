@@ -215,7 +215,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
             </Link>
           </div>
         )}
-        <header className="no-print relative z-20 border-b border-[#d7d3c8] bg-[#f3f0e8]/95 px-4 backdrop-blur sm:px-7">
+        <header className="no-print relative z-30 overflow-visible border-b border-[#d7d3c8] bg-[#f3f0e8] px-4 sm:px-7">
           <div className="flex min-h-20 flex-col gap-3 py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
             <div className="flex min-w-0 items-center gap-3">
               <button onClick={() => setOpen(true)} className="grid size-8 shrink-0 place-items-center border border-[#d7d3c8] lg:hidden" aria-label={t("shell.open_nav")}><Menu size={16} /></button>
@@ -224,7 +224,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
                 <h1 className="break-words font-display text-2xl font-semibold uppercase leading-tight sm:text-4xl sm:leading-none">{title}</h1>
               </div>
             </div>
-            <div className="relative z-20 flex min-w-0 flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end">
+            <div className="relative z-30 flex min-w-0 flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end">
               <BranchChip />
               {action}
             </div>
