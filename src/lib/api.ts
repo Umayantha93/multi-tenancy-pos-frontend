@@ -1,4 +1,21 @@
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+function resolveApiUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+  if (typeof window === "undefined") return configured;
+  try {
+    const api = new URL(configured, window.location.origin);
+    const pageHost = window.location.hostname;
+    const apiIsLoopback = api.hostname === "localhost" || api.hostname === "127.0.0.1";
+    const pageIsLoopback = pageHost === "localhost" || pageHost === "127.0.0.1";
+    if (apiIsLoopback && !pageIsLoopback) {
+      api.hostname = pageHost;
+    }
+    return api.toString().replace(/\/$/, "");
+  } catch {
+    return configured;
+  }
+}
+
+export const API_URL = resolveApiUrl();
 export const APP_ORIGIN = API_URL.replace(/\/api\/?$/, "");
 
 type ApiOptions = RequestInit & { authenticated?: boolean };
@@ -12,6 +29,7 @@ export function currentLocale(): "en" | "si" {
 export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const token = typeof window === "undefined" ? null : localStorage.getItem("garage_token");
   const headers = new Headers(options.headers);
+  headers.set("Accept", "application/json");
   if (!(options.body instanceof FormData)) headers.set("Content-Type", "application/json");
   if (options.authenticated !== false && token) headers.set("Authorization", `Bearer ${token}`);
   const branchId = typeof window === "undefined" ? null : currentBranchId();

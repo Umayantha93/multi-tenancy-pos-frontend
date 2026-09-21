@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { API_URL, api, currentBranchId } from "@/lib/api";
 import { useT } from "@/lib/locale";
 
@@ -24,6 +24,7 @@ function authHeaders(): HeadersInit {
 
 export function JobVideos({ billId, readOnly = false }: { billId: number; readOnly?: boolean }) {
   const t = useT();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [videos, setVideos] = useState<JobVideo[]>([]);
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -44,6 +45,10 @@ export function JobVideos({ billId, readOnly = false }: { billId: number; readOn
 
   async function upload(file: File) {
     setError("");
+    if (file.size > 40 * 1024 * 1024) {
+      setError("Use a clip under 40 MB, or 90 seconds or less.");
+      return;
+    }
     setUploading(true);
     const body = new FormData();
     body.append("video", file);
@@ -90,20 +95,38 @@ export function JobVideos({ billId, readOnly = false }: { billId: number; readOn
           <p className="text-xs text-[#6f746e]">{t("videos.hint", { count: videos.length })}</p>
         </div>
         {!readOnly && (
-          <label className="inline-flex h-8 cursor-pointer items-center bg-[#20221f] px-3 text-xs font-bold uppercase text-white">
-            {uploading ? t("videos.converting") : t("videos.add", { left })}
-            <input
-              type="file"
-              accept="video/mp4,video/quicktime,video/webm,video/3gpp"
-              className="hidden"
+          <span className="relative inline-flex">
+            <button
+              type="button"
               disabled={uploading || left <= 0}
+              onClick={() => inputRef.current?.click()}
+              className="inline-flex h-8 cursor-pointer items-center bg-[#20221f] px-3 text-xs font-bold uppercase text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {uploading ? t("videos.converting") : t("videos.add", { left })}
+            </button>
+            <input
+              ref={inputRef}
+              type="file"
+              accept="video/*"
+              className="sr-only"
+              tabIndex={-1}
               onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                if (file) void upload(file);
+                const input = event.target;
+                const file = input.files?.[0];
+                if (!file) {
+                  input.value = "";
+                  return;
+                }
+                void file.arrayBuffer().then((buffer) => {
+                  input.value = "";
+                  void upload(new File([buffer], file.name, { type: file.type, lastModified: file.lastModified }));
+                }).catch(() => {
+                  input.value = "";
+                  setError("This video could not be read. Try another clip.");
+                });
               }}
             />
-          </label>
+          </span>
         )}
       </div>
       {error && <p className="mt-3 text-sm text-[#b84837]">{error}</p>}
