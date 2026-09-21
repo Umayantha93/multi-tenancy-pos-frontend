@@ -2562,8 +2562,8 @@ export default function BillDetailPage() {
                     <input
                       name="quantity"
                       type="number"
-                      min="1"
-                      step="1"
+                      min={selectedPart?.stock_unit && selectedPart.stock_unit !== "qty" ? "0.001" : "1"}
+                      step={selectedPart?.stock_unit && selectedPart.stock_unit !== "qty" ? "0.001" : "1"}
                       value={itemQty}
                       onChange={(event) => setItemQty(event.target.value)}
                       required
