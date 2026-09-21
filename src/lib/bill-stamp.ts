@@ -66,3 +66,10 @@ export function billListStatus(bill: {
   if (bill.has_pending_cheque) return "cheque";
   return bill.status;
 }
+
+export function garageBillPdfTitle(businessName?: string | null, vehiclePlate?: string | null): string {
+  const name = (businessName || "Garage").trim();
+  const plate = vehiclePlate?.trim();
+  const title = plate ? `${name} bill for ${plate}` : `${name} bill`;
+  return title.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim();
+}

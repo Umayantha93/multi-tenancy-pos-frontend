@@ -6,7 +6,7 @@ import { Download } from "lucide-react";
 import { API_URL, formatDate, mediaUrl, money, PhoneEntry, Tenant } from "@/lib/api";
 import { billLinePresentation, sortBillItems } from "@/lib/business-profiles";
 import { warrantyLabel } from "@/lib/warranty";
-import { billStamp, billStampDateLabel, latestPaymentAt } from "@/lib/bill-stamp";
+import { billStamp, billStampDateLabel, garageBillPdfTitle, latestPaymentAt } from "@/lib/bill-stamp";
 import { BillStatusSeal } from "@/components/bill-status-seal";
 import { BillWatermark } from "@/components/bill-watermark";
 import { useT } from "@/lib/locale";
@@ -130,7 +130,9 @@ export default function SharedBillPage() {
     const stamp = billStamp(bill);
     const label = documentCopy(stamp, t).title;
     const business = bill.tenant?.business_name ?? t("bill.business");
-    document.title = `${label} ${bill.bill_number} · ${business}`;
+    document.title = bill.tenant?.business_type === "garage"
+      ? garageBillPdfTitle(business, bill.vehicle?.number_plate)
+      : `${label} ${bill.bill_number} · ${business}`;
   }, [bill, t]);
 
   if (error) {

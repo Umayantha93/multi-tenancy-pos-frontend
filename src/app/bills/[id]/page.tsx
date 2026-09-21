@@ -10,7 +10,7 @@ import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel }
 import { api, formatDate, isMultiBranch, mediaUrl, money, SessionPayload, storeSession, Tenant } from "@/lib/api";
 import { billItemLabel, billLinePresentation, PAINT_PANEL_NAMES, profileFor, sortBillItems, usesLaborCatalog, usesServiceAddonWorkspace, usesStoreCounter, usesVehicleJobs } from "@/lib/business-profiles";
 import { warrantyLabel } from "@/lib/warranty";
-import { billStamp, billStampDateLabel, billStatusLabel, latestPaymentAt } from "@/lib/bill-stamp";
+import { billStamp, billStampDateLabel, billStatusLabel, garageBillPdfTitle, latestPaymentAt } from "@/lib/bill-stamp";
 import { BillStatusSeal } from "@/components/bill-status-seal";
 import { BillWatermark } from "@/components/bill-watermark";
 import { BillingBranchBanner } from "@/components/branch-chip";
@@ -319,6 +319,15 @@ export default function BillDetailPage() {
   }, [isStore, isGarage, bill?.job_kind]);
 
   useEffect(() => {
+    if (!isGarage || !bill) return;
+    const previous = document.title;
+    document.title = garageBillPdfTitle(tenant?.business_name, bill.vehicle?.number_plate);
+    return () => {
+      document.title = previous;
+    };
+  }, [isGarage, bill, tenant?.business_name]);
+
+  useEffect(() => {
     if (!itemTypes.length) return;
     if (!type || !itemTypes.some((option) => option.value === type)) {
       setType(itemTypes[0].value);
@@ -456,8 +465,15 @@ export default function BillDetailPage() {
   }
 
   function printBill() {
+    const previousTitle = document.title;
+    if (isGarage) {
+      document.title = garageBillPdfTitle(tenant?.business_name, bill?.vehicle?.number_plate);
+    }
     document.documentElement.classList.toggle("thermal-print", printThermal);
-    const cleanup = () => document.documentElement.classList.remove("thermal-print");
+    const cleanup = () => {
+      document.documentElement.classList.remove("thermal-print");
+      document.title = previousTitle;
+    };
     window.addEventListener("afterprint", cleanup, { once: true });
     window.print();
   }
@@ -1687,6 +1703,12 @@ export default function BillDetailPage() {
             </div>
           </Panel>
 
+          {smsNotice && (
+            <div className="no-print border border-[#167c73]/20 bg-[#167c73]/10 px-4 py-3 text-sm text-[#167c73]">
+              {smsNotice}
+            </div>
+          )}
+
           {canWarranty && usesVehicleJobs(profile.type) && !isGarageInstant && (
             <Panel className="no-print">
               <div className="border-b border-[#d7d3c8] px-5 py-3">
@@ -1803,11 +1825,6 @@ export default function BillDetailPage() {
           )}
 
           {error && <div className="no-print"><ErrorMessage message={error} /></div>}
-          {smsNotice && (
-            <div className="no-print border border-[#167c73]/20 bg-[#167c73]/10 px-4 py-3 text-sm text-[#167c73]">
-              {smsNotice}
-            </div>
-          )}
           {canJobPhotos && isGarage && bill.job_kind !== "parts_sale" && (
             <JobPhotos billId={bill.id} readOnly={isClosed} />
           )}
