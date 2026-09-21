@@ -8,7 +8,7 @@ import { API_URL, api, currentFeatures, currentUser, mediaUrl, money } from "@/l
 import { useBusinessProfile } from "@/lib/use-business-profile";
 import { usesStoreCounter } from "@/lib/business-profiles";
 import { StickerPrintButton } from "@/components/sticker-print";
-import { formatStockQty, normalizeStockUnit, stockUnitLabel, type StockUnit } from "@/lib/stock-unit";
+import { formatStockQty, formatStockNumber, normalizeStockUnit, stockAllowsDecimal, stockUnitLabel, type StockUnit } from "@/lib/stock-unit";
 
 type Part = {
   id: number;
@@ -495,8 +495,17 @@ export default function PartsPage() {
               {mode === "add" && (
                 <>
                   <label className="text-xs font-bold uppercase">
-                    {isPaint ? "Opening stock (ml)" : "Opening stock"}
-                    <input name="stock_qty" type="number" min="0" defaultValue="0" required className={`${inputClass} mt-2`} />
+                    {isPaint ? "Opening stock (ML)" : "Opening stock"}
+                    <input
+                      key={stockUnit}
+                      name="stock_qty"
+                      type="number"
+                      min="0"
+                      step={stockAllowsDecimal(stockUnit, isPaint) ? "0.001" : "1"}
+                      defaultValue="0"
+                      required
+                      className={`${inputClass} mt-2`}
+                    />
                   </label>
                   {isGarage && (
                     <label className="text-xs font-bold uppercase">
@@ -507,8 +516,8 @@ export default function PartsPage() {
                         onChange={(event) => setStockUnit(normalizeStockUnit(event.target.value))}
                         className={`${inputClass} mt-2`}
                       >
-                        <option value="qty">Qty</option>
-                        <option value="ml">ml</option>
+                        <option value="qty">ITEM</option>
+                        <option value="ml">ML</option>
                         <option value="l">L</option>
                       </select>
                     </label>
@@ -517,12 +526,26 @@ export default function PartsPage() {
                 </>
               )}
               {mode === "edit" && selected && (
-                <div className="text-xs font-bold uppercase">
-                  Current stock
-                  <p className="mt-2 border border-[#c9c5b9] bg-white px-3 py-3 text-sm font-semibold normal-case">
-                    {formatStockQty(selected.stock_qty, selected.stock_unit, isPaint)} — use Restock to add stock and record expense
-                  </p>
-                </div>
+                <>
+                  <label className="text-xs font-bold uppercase">
+                    Current stock
+                    <input
+                      type="number"
+                      readOnly
+                      value={formatStockNumber(selected.stock_qty, selected.stock_unit, isPaint)}
+                      className={`${inputClass} mt-2 bg-[#eeece5]`}
+                    />
+                  </label>
+                  {(isGarage || isPaint) && (
+                    <div className="text-xs font-bold uppercase">
+                      Unit
+                      <p className="mt-2 border border-[#c9c5b9] bg-[#eeece5] px-3 py-2 text-sm font-semibold normal-case">
+                        {stockUnitLabel(selected.stock_unit, isPaint)}
+                      </p>
+                    </div>
+                  )}
+                  <p className="text-xs text-[#6f746e] sm:col-span-2">Use Restock to add stock and record expense.</p>
+                </>
               )}
               <label className="text-xs font-bold uppercase sm:col-span-2">
                 Description
@@ -596,23 +619,23 @@ export default function PartsPage() {
                 New unit cost is blended as a weighted average with existing stock. The purchase expense still uses this restock’s unit cost × qty. Paid hits finance now; credit stays as a payable until settled.
               </p>
               <label className="block text-xs font-bold uppercase">
-                Quantity to add{isPaint ? " (ml)" : isGarage ? ` (${stockUnitLabel(stockUnit)})` : ""}
-                <input name="quantity" type="number" min="1" step="1" required={!canSerial || !selected.serialized} className={`${inputClass} mt-2`} />
+                Quantity to add{isPaint ? " (ML)" : isGarage ? ` (${stockUnitLabel(selected.stock_unit)})` : ""}
+                <input
+                  name="quantity"
+                  type="number"
+                  min={stockAllowsDecimal(selected.stock_unit, isPaint) ? "0.001" : "1"}
+                  step={stockAllowsDecimal(selected.stock_unit, isPaint) ? "0.001" : "1"}
+                  required={!canSerial || !selected.serialized}
+                  className={`${inputClass} mt-2`}
+                />
               </label>
-              {isGarage && (
-                <label className="block text-xs font-bold uppercase">
+              {(isGarage || isPaint) && (
+                <div className="text-xs font-bold uppercase">
                   Unit
-                  <select
-                    name="stock_unit"
-                    value={stockUnit}
-                    onChange={(event) => setStockUnit(normalizeStockUnit(event.target.value))}
-                    className={`${inputClass} mt-2`}
-                  >
-                    <option value="qty">Qty</option>
-                    <option value="ml">ml</option>
-                    <option value="l">L</option>
-                  </select>
-                </label>
+                  <p className="mt-2 border border-[#c9c5b9] bg-[#eeece5] px-3 py-2 text-sm font-semibold normal-case">
+                    {stockUnitLabel(selected.stock_unit, isPaint)}
+                  </p>
+                </div>
               )}
               {canSerial && (
                 <label className="block text-xs font-bold uppercase">
@@ -670,7 +693,7 @@ export default function PartsPage() {
           <div className="w-full max-w-md bg-[#f3f0e8] p-5" onClick={(event) => event.stopPropagation()}>
             <h2 className="font-display text-2xl font-semibold uppercase">Import parts</h2>
             <p className="mt-2 text-sm text-[#6f746e]">
-              Choose supplier and paid/credit for this file. Rows without payment_status in the sheet use these defaults. Credit also needs a due date.
+              Name is the only required column. After stock_qty add unit: ITEM, L, or ML. Qty is a number (decimals allowed, e.g. 1.5 L). Blank brand becomes Generic, blank category becomes General. Credit also needs a due date.
             </p>
             {suppliers.length > 0 && (
               <label className="mt-4 block text-xs font-bold uppercase">
