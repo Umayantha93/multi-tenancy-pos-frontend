@@ -490,11 +490,18 @@ export default function BillDetailPage() {
       .catch((caught) => setError(caught.message));
   }, [id]);
 
-  useEffect(() => {
-    load();
-    api<{ data: Part[] }>("/parts?per_page=100")
+  const loadParts = useCallback((term = "") => {
+    const params = new URLSearchParams({ per_page: "100" });
+    const q = term.trim();
+    if (q) params.set("search", q);
+    return api<{ data: Part[] }>(`/parts?${params}`)
       .then((result) => setParts(result.data))
       .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    load();
+    void loadParts("");
     api<SessionPayload>("/user")
       .then((result) => {
         setTenant(result.user.tenant ?? null);
@@ -506,7 +513,15 @@ export default function BillDetailPage() {
         });
       })
       .catch(() => undefined);
-  }, [load]);
+  }, [load, loadParts]);
+
+  useEffect(() => {
+    const term = (mixQuery.trim() || partQuery.trim());
+    const handle = window.setTimeout(() => {
+      void loadParts(term);
+    }, term ? 250 : 0);
+    return () => window.clearTimeout(handle);
+  }, [partQuery, mixQuery, loadParts]);
 
   useEffect(() => {
     if (!usesLaborCatalog(profile.type) && !usesServiceAddonWorkspace(profile.type)) return;
@@ -564,7 +579,7 @@ export default function BillDetailPage() {
       setSelectedPartId("");
       setPartQuery("");
       load();
-      api<{ data: Part[] }>("/parts?per_page=100").then((result) => setParts(result.data)).catch(() => undefined);
+      void loadParts(partQuery);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("bill.err_item"));
     }
@@ -701,11 +716,11 @@ export default function BillDetailPage() {
         });
         resetItemForm(itemTypes[0]?.value);
         load();
-        api<{ data: Part[] }>("/parts?per_page=100").then((result) => setParts(result.data)).catch(() => undefined);
+        void loadParts(partQuery);
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : t("bill.err_panel_add"));
         load();
-        api<{ data: Part[] }>("/parts?per_page=100").then((result) => setParts(result.data)).catch(() => undefined);
+        void loadParts(partQuery);
       } finally {
         setAddingPanel(false);
       }
@@ -759,7 +774,7 @@ export default function BillDetailPage() {
       await api(`/bills/${id}/items`, { method: "POST", body: JSON.stringify(warranty ? { ...payload, ...warranty } : payload) });
       resetItemForm(isServiceJob ? (serviceAddMode === "discount" ? "discount" : "part") : itemTypes[0]?.value);
       load();
-      api<{ data: Part[] }>("/parts?per_page=100").then((result) => setParts(result.data)).catch(() => undefined);
+      void loadParts(partQuery);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("bill.err_item"));
     }
@@ -919,7 +934,7 @@ export default function BillDetailPage() {
     try {
       if (pendingDelete.kind === "item") {
         await api(`/bills/${id}/items/${pendingDelete.id}`, { method: "DELETE" });
-        api<{ data: Part[] }>("/parts?per_page=100").then((result) => setParts(result.data)).catch(() => undefined);
+        void loadParts(partQuery);
       } else {
         await api(`/bills/${id}/payments/${pendingDelete.id}`, { method: "DELETE" });
       }
