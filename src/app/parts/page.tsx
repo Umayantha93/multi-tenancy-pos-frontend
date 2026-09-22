@@ -32,6 +32,15 @@ type Part = {
 type Mode = "add" | "edit" | "restock" | null;
 type Supplier = { id: number; name: string; is_system?: boolean };
 
+type PartsPage = {
+  data: Part[];
+  current_page: number;
+  last_page: number;
+  total: number;
+};
+
+const PAGE_SIZE = 24;
+
 type ImportResult = {
   message: string;
   created: number;
@@ -44,6 +53,10 @@ type ImportResult = {
 export default function PartsPage() {
   const [parts, setParts] = useState<Part[]>([]);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [mode, setMode] = useState<Mode>(null);
@@ -62,6 +75,7 @@ export default function PartsPage() {
   const [canSerial, setCanSerial] = useState(false);
   const [stockUnit, setStockUnit] = useState<StockUnit>("qty");
   const importInputRef = useRef<HTMLInputElement>(null);
+  const loadSeq = useRef(0);
   const profile = useBusinessProfile();
   const isPaint = profile.type === "paint";
   const isStore = usesStoreCounter(profile.type);
@@ -69,18 +83,36 @@ export default function PartsPage() {
   const lowStockAt = isPaint ? 250 : 5;
   const itemNoun = isPaint ? "colour" : isStore ? "item" : "part";
 
-  const load = useCallback((term = search) => {
-    const params = new URLSearchParams({ search: term, per_page: "100" });
-    api<{ data: Part[] }>(`/parts?${params}`)
-      .then((result) => setParts(result.data))
-      .catch((caught) => setError(caught.message));
-  }, [search]);
+  const load = useCallback((term: string, pageNum: number) => {
+    const params = new URLSearchParams({
+      per_page: String(PAGE_SIZE),
+      page: String(Math.max(1, pageNum)),
+    });
+    const q = term.trim();
+    if (q) params.set("search", q);
+    const seq = ++loadSeq.current;
+    setLoading(true);
+    api<PartsPage>(`/parts?${params}`)
+      .then((result) => {
+        if (seq !== loadSeq.current) return;
+        setParts(result.data);
+        setPage(result.current_page || 1);
+        setLastPage(Math.max(1, result.last_page || 1));
+        setTotal(result.total ?? result.data.length);
+      })
+      .catch((caught) => {
+        if (seq !== loadSeq.current) return;
+        setError(caught.message);
+      })
+      .finally(() => {
+        if (seq === loadSeq.current) setLoading(false);
+      });
+  }, []);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       setAdmin(currentUser()?.role === "business_owner");
       setCanSerial(currentFeatures().includes("serial_inventory"));
-      load("");
       if (currentFeatures().includes("suppliers")) {
         api<{ data: Supplier[] }>("/suppliers?per_page=100")
           .then((result) => setSuppliers(result.data))
@@ -88,7 +120,12 @@ export default function PartsPage() {
       }
     });
     return () => cancelAnimationFrame(frame);
-  }, [load]);
+  }, []);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => load(search, 1), search.trim() ? 250 : 0);
+    return () => window.clearTimeout(handle);
+  }, [search, load]);
 
   useEffect(() => {
     if (!importOpen || suppliers.length === 0) return;
@@ -198,7 +235,7 @@ export default function PartsPage() {
         `${result.message} ${result.created} created, ${result.updated} updated, ${result.expenses_created} expenses (${money(result.expense_total)}). Default: ${importPayment === "credit" ? "credit (supplier owe)" : "paid (debit)"}${supplierName ? ` · ${supplierName}` : ""}.`,
       );
       setImportOpen(false);
-      load("");
+      load(search, 1);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not import spreadsheet.");
     } finally {
@@ -230,7 +267,7 @@ export default function PartsPage() {
       form.reset();
       setMode(null);
       setSelected(null);
-      load("");
+      load(search, 1);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save part.");
     } finally {
@@ -272,7 +309,7 @@ export default function PartsPage() {
       form.reset();
       setMode(null);
       setSelected(null);
-      load("");
+      load(search, 1);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not restock part.");
     } finally {
@@ -298,7 +335,7 @@ export default function PartsPage() {
       await api(`/parts/${pendingDelete.id}`, { method: "DELETE" });
       setNotice(`Deleted ${pendingDelete.name}.`);
       setPendingDelete(null);
-      load("");
+      load(search, 1);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : `Could not delete ${itemNoun}.`);
     } finally {
@@ -350,19 +387,46 @@ export default function PartsPage() {
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            onKeyDown={(event) => event.key === "Enter" && load()}
-            className={`${inputClass} pl-10`}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              load(search, 1);
+            }}
+            className={`${inputClass} pl-10 ${search ? "pr-10" : ""}`}
             placeholder="Name, SKU, barcode, brand or model"
+            aria-label="Search inventory"
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center text-[#6f746e] hover:text-[#20221f]"
+              aria-label="Clear search"
+            >
+              <X size={16} />
+            </button>
+          )}
         </label>
-        <button onClick={() => load()} className={buttonClass}>Search</button>
+        <button type="button" onClick={() => load(search, 1)} className={buttonClass}>Search</button>
       </div>
 
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
       {notice && <div className="mb-5"><SuccessMessage message={notice} /></div>}
+      {total > 0 && (
+        <p className="mb-3 text-xs text-[#6f746e]">
+          {search.trim()
+            ? `${total} match${total === 1 ? "" : "es"}`
+            : `${total} in catalog`}
+          {lastPage > 1 ? ` · page ${page} of ${lastPage}` : ""}
+        </p>
+      )}
 
-      {parts.length === 0 && !error ? (
-        <PageState message={isStore ? "No stock in the catalog yet." : isPaint ? "No parts in the catalog yet." : "No inventory in the catalog yet."} />
+      {loading && parts.length === 0 && !error ? (
+        <PageState message="Loading inventory..." />
+      ) : parts.length === 0 && !error ? (
+        <PageState message={search.trim()
+          ? "No inventory matches this search."
+          : isStore ? "No stock in the catalog yet." : isPaint ? "No parts in the catalog yet." : "No inventory in the catalog yet."} />
       ) : (
         <div className="grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {parts.map((part) => {
@@ -437,6 +501,27 @@ export default function PartsPage() {
               </Panel>
             );
           })}
+        </div>
+      )}
+
+      {lastPage > 1 && (
+        <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            disabled={page <= 1 || loading}
+            onClick={() => load(search, page - 1)}
+            className="h-8 border border-[#c9c5b9] bg-white px-3 text-[11px] font-semibold disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            disabled={page >= lastPage || loading}
+            onClick={() => load(search, page + 1)}
+            className="h-8 border border-[#c9c5b9] bg-white px-3 text-[11px] font-semibold disabled:opacity-40"
+          >
+            Next
+          </button>
         </div>
       )}
 
