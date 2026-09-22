@@ -2,7 +2,7 @@
 
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ScanBarcode, Trash2 } from "lucide-react";
+import { ScanBarcode, Trash2, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, QtyStepper, buttonClass, inputClass } from "@/components/ui";
 import { api, currentFeatures, money } from "@/lib/api";
@@ -244,9 +244,19 @@ export default function PosPage() {
               onChange={(event) => setSearch(event.target.value)}
               onKeyDown={onScanKey}
               autoFocus
-              className={`${inputClass} pl-10`}
+              className={`${inputClass} pl-10 ${search ? "pr-10" : ""}`}
               placeholder={isStore ? t("pos.scan_placeholder") : t("pos.search_placeholder")}
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center text-[#6f746e] hover:text-[#20221f]"
+                aria-label={t("common.clear")}
+              >
+                <X size={16} />
+              </button>
+            )}
           </label>
           {error && !saving && <div className="mt-3"><ErrorMessage message={error} /></div>}
           {loading ? <PageState message={t("pos.loading")} /> : (

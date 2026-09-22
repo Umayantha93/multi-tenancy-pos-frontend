@@ -2,7 +2,7 @@
 
 import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { ChevronDown, CreditCard, Lock, MessageCircle, MessageSquare, Plus, Printer, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
+import { ChevronDown, CreditCard, Lock, MessageCircle, MessageSquare, Plus, Printer, RotateCcw, ShieldCheck, Trash2, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { EmployeePicker } from "@/components/employee-picker";
 import { LaborCatalogPicker, type LaborCategory } from "@/components/labor-catalog-picker";
@@ -2245,28 +2245,43 @@ export default function BillDetailPage() {
                       <div key="stock-search" className="space-y-3">
                         <label className="block text-xs font-bold uppercase">
                           {t("bill.search_scan")}
-                          <input
-                            value={partQuery}
-                            onChange={(event) => {
-                              const value = event.target.value;
-                              setPartQuery(value);
-                              const exact = findPartByCode(value);
-                              if (exact) {
-                                setSelectedPartId(String(exact.id));
-                                setError("");
-                              } else {
-                                setSelectedPartId("");
-                              }
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key !== "Enter") return;
-                              event.preventDefault();
-                              void selectPartByScan(partQuery);
-                            }}
-                            className={`${inputClass} mt-2`}
-                            placeholder={t("bill.scan_placeholder")}
-                            autoComplete="off"
-                          />
+                          <span className="relative mt-2 block">
+                            <input
+                              value={partQuery}
+                              onChange={(event) => {
+                                const value = event.target.value;
+                                setPartQuery(value);
+                                const exact = findPartByCode(value);
+                                if (exact) {
+                                  setSelectedPartId(String(exact.id));
+                                  setError("");
+                                } else {
+                                  setSelectedPartId("");
+                                }
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key !== "Enter") return;
+                                event.preventDefault();
+                                void selectPartByScan(partQuery);
+                              }}
+                              className={`${inputClass} ${partQuery ? "pr-9" : ""}`}
+                              placeholder={t("bill.scan_placeholder")}
+                              autoComplete="off"
+                            />
+                            {partQuery && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPartQuery("");
+                                  setSelectedPartId("");
+                                }}
+                                className="absolute right-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center text-[#6f746e] hover:text-[#20221f]"
+                                aria-label={t("common.clear")}
+                              >
+                                <X size={16} />
+                              </button>
+                            )}
+                          </span>
                         </label>
                         <div className="max-h-44 overflow-y-auto border border-[#d7d3c8] bg-white">
                           {filteredParts.length === 0 ? (

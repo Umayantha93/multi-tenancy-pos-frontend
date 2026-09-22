@@ -2,7 +2,7 @@
 
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardCheck, Save, ScanBarcode, Trash2 } from "lucide-react";
+import { ClipboardCheck, Save, ScanBarcode, Trash2, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { AddressField } from "@/components/address-field";
 import { EmployeePicker } from "@/components/employee-picker";
@@ -177,9 +177,19 @@ function GarageInstantTill() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               onKeyDown={onScanKey}
-              className={`${inputClass} pl-10`}
+              className={`${inputClass} pl-10 ${search ? "pr-10" : ""}`}
               placeholder={t("bill.scan_placeholder")}
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center text-[#6f746e] hover:text-[#20221f]"
+                aria-label={t("common.clear")}
+              >
+                <X size={16} />
+              </button>
+            )}
           </label>
           {error && !saving && <div className="mt-3"><ErrorMessage message={error} /></div>}
           {loading && items.length === 0 ? <PageState message={t("pos.loading")} /> : (
