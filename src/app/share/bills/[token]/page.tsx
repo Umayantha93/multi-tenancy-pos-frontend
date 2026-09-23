@@ -292,7 +292,7 @@ export default function SharedBillPage() {
             </thead>
             <tbody>
               {chargeItems.map((item) => {
-                const { title, inclusions } = billLinePresentation(item);
+                const { title } = billLinePresentation(item);
                 const hideHours = Boolean(item.hide_hours);
                 const warranty = warrantyLabel(item.warranty_months, item.warranty_until, item.warranty_starts_on, t);
                 return (
@@ -300,13 +300,6 @@ export default function SharedBillPage() {
                   <td className="px-5 py-3">
                     <p className="font-semibold">{title}</p>
                     {warranty && <p className="mt-1 text-[11px] font-semibold uppercase text-[#167c73]">{warranty}</p>}
-                    {inclusions.length > 0 && (
-                      <ul className="mt-1.5 space-y-0.5 text-xs text-[#6f746e]">
-                        {inclusions.map((name) => (
-                          <li key={name}>– {name}</li>
-                        ))}
-                      </ul>
-                    )}
                   </td>
                   <td className="px-3 py-3 tabular-nums">{hideHours || item.quantity == null ? "—" : item.quantity}</td>
                   <td className="px-3 py-3 tabular-nums">{hideHours || item.unit_price == null ? "—" : money(item.unit_price)}</td>

@@ -734,13 +734,18 @@ export function billLinePresentation(item: {
   included_services?: string[] | null;
 }): { title: string; inclusions: string[] } {
   if (Array.isArray(item.included_services) && item.included_services.length > 0) {
-    return { title: item.description, inclusions: item.included_services };
+    const names = item.included_services.map((name) => String(name).trim()).filter(Boolean);
+    return {
+      title: names.length > 0 ? `${item.description} (${names.join(", ")})` : item.description,
+      inclusions: [],
+    };
   }
   const match = item.description.match(/^(.*?)\s*\(includes\s+(.+)\)\s*$/i);
   if (match) {
+    const names = match[2].split(/\s*,\s*/).map((name) => name.trim()).filter(Boolean);
     return {
-      title: match[1].trim(),
-      inclusions: match[2].split(/\s*,\s*/).map((name) => name.trim()).filter(Boolean),
+      title: names.length > 0 ? `${match[1].trim()} (${names.join(", ")})` : match[1].trim(),
+      inclusions: [],
     };
   }
   return { title: item.description, inclusions: [] };
