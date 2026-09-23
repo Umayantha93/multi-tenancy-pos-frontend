@@ -11,15 +11,24 @@ export default function ProfilePage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
+  const [lockingBills, setLockingBills] = useState(false);
+  const [billPrefix, setBillPrefix] = useState("");
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   useEffect(() => {
     setUser(currentUser());
-    api<{ user: User }>("/user").then((result) => setUser(result.user)).catch((caught) => setError(caught.message));
+    api<{ user: User }>("/user").then((result) => {
+      setUser(result.user);
+      setBillPrefix(result.user.tenant?.bill_prefix ?? "");
+    }).catch((caught) => setError(caught.message));
   }, []);
 
   const isOwner = user?.role === "business_owner";
   const tenant = user?.tenant;
+  const canShortBills = tenant?.business_type === "garage" || tenant?.business_type === "paint";
+  const billLocked = Boolean(tenant?.bill_number_locked || tenant?.bill_number_locked_at);
+  const previewPrefix = (billPrefix || tenant?.bill_prefix || "BILL").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12) || "BILL";
+  const previewNext = `${previewPrefix}-${String((Number(tenant?.bill_sequence) || 0) + 1).padStart(4, "0")}`;
 
   async function saveBusiness(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -27,10 +36,14 @@ export default function ProfilePage() {
     setError("");
     setNotice("");
     const formData = new FormData(event.currentTarget);
+    if (canShortBills && !billLocked) {
+      formData.set("bill_prefix", billPrefix);
+    }
     try {
       const updated = await api<NonNullable<User["tenant"]>>("/tenant/profile", { method: "POST", body: formData });
       const next = { ...user!, tenant: { ...tenant!, ...updated } };
       setUser(next);
+      setBillPrefix(updated.bill_prefix ?? "");
       const token = localStorage.getItem("garage_token");
       if (token) storeSession(token, next, currentFeatures());
       setNotice("Shop details saved.");
@@ -39,6 +52,37 @@ export default function ProfilePage() {
       setError(caught instanceof Error ? caught.message : "Could not save shop details.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function lockBillNumbers() {
+    if (!canShortBills || billLocked) return;
+    const prefix = billPrefix.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+    if (!prefix) {
+      setError("Enter a short bill prefix before locking.");
+      return;
+    }
+    if (!window.confirm(`Lock bill numbers as ${prefix}-0001, ${prefix}-0002, …? You cannot change this again without super-admin.`)) {
+      return;
+    }
+    setLockingBills(true);
+    setError("");
+    setNotice("");
+    const formData = new FormData();
+    formData.set("bill_prefix", prefix);
+    formData.set("lock_bill_numbers", "1");
+    try {
+      const updated = await api<NonNullable<User["tenant"]>>("/tenant/profile", { method: "POST", body: formData });
+      const next = { ...user!, tenant: { ...tenant!, ...updated } };
+      setUser(next);
+      setBillPrefix(updated.bill_prefix ?? prefix);
+      const token = localStorage.getItem("garage_token");
+      if (token) storeSession(token, next, currentFeatures());
+      setNotice(`Bill numbers locked. Next bill: ${updated.next_bill_number ?? `${prefix}-0001`}.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not lock bill numbers.");
+    } finally {
+      setLockingBills(false);
     }
   }
 
@@ -107,6 +151,38 @@ export default function ProfilePage() {
               // eslint-disable-next-line @next/next/no-img-element
               <img src={logo} alt="" className="h-20 w-20 object-contain border border-[#d7d3c8] bg-white p-1" />
             ) : null}
+            {canShortBills && (
+              <div className="border border-[#d7d3c8] bg-[#fbfaf6] p-4">
+                <p className="text-xs font-bold uppercase">Bill numbers</p>
+                <p className="mt-1 text-sm text-[#6f746e]">
+                  Short numbers like {previewNext}. Unique to this shop. After you confirm, only super-admin can unlock.
+                </p>
+                <label className="mt-3 block text-xs font-bold uppercase">
+                  Prefix
+                  <input
+                    value={billPrefix}
+                    onChange={(event) => setBillPrefix(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12))}
+                    disabled={billLocked || saving || lockingBills}
+                    placeholder="e.g. B06"
+                    className={`${inputClass} mt-2 font-normal normal-case disabled:bg-[#eeece5]`}
+                  />
+                </label>
+                <p className="mt-2 text-sm">
+                  Next bill: <strong className="tabular-nums">{billLocked ? (tenant?.next_bill_number ?? previewNext) : previewNext}</strong>
+                  {billLocked ? " · locked" : ""}
+                </p>
+                {!billLocked && (
+                  <button
+                    type="button"
+                    disabled={lockingBills || saving || !billPrefix}
+                    onClick={() => void lockBillNumbers()}
+                    className={`${buttonClass} mt-3`}
+                  >
+                    {lockingBills ? "Locking..." : "Confirm & lock bill numbers"}
+                  </button>
+                )}
+              </div>
+            )}
             <button disabled={saving} className={buttonClass}>{saving ? "Saving..." : "Save shop details"}</button>
           </form>
         </Panel>

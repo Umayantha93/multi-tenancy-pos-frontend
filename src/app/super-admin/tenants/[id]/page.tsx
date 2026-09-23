@@ -55,7 +55,7 @@ type ConfirmState = {
   message: string;
   confirmLabel: string;
   tone: "default" | "danger" | "teal";
-  action: "status" | "dual-enable" | "dual-disable" | "fee-paid" | "fee-unpaid" | "delete" | "setup-remove";
+  action: "status" | "dual-enable" | "dual-disable" | "fee-paid" | "fee-unpaid" | "delete" | "setup-remove" | "reset-bills";
   paymentId?: number;
 };
 
@@ -236,6 +236,31 @@ export default function TenantDetailPage() {
       tone: "danger",
       action: "delete",
     });
+  }
+
+  function requestResetBillNumbers() {
+    if (!tenant) return;
+    setConfirm({
+      title: "Reset bill numbering",
+      message: `Unlock bill numbers for ${tenant.business_name}? Prefix stays ${tenant.bill_prefix || "—"}, sequence resets to 0, and the owner can confirm again.`,
+      confirmLabel: "Reset numbering",
+      tone: "teal",
+      action: "reset-bills",
+    });
+  }
+
+  async function resetBillNumbers() {
+    if (!tenant) return;
+    setError("");
+    setNotice("");
+    try {
+      const updated = await api<Detail>(`/super-admin/tenants/${id}/reset-bill-numbers`, { method: "POST", body: JSON.stringify({}) });
+      setTenant((current) => (current ? { ...current, ...updated } : updated));
+      setNotice("Bill numbering unlocked. The shop owner can confirm a new prefix.");
+      setConfirm(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not reset bill numbers.");
+    }
   }
 
   async function deleteTenant() {
@@ -448,6 +473,7 @@ export default function TenantDetailPage() {
     if (!confirm) return;
     if (confirm.action === "status") await changeStatus();
     if (confirm.action === "delete") await deleteTenant();
+    if (confirm.action === "reset-bills") await resetBillNumbers();
     if (confirm.action === "dual-enable") await saveDualFinancialView(true);
     if (confirm.action === "dual-disable") await saveDualFinancialView(false);
     if (confirm.action === "fee-paid") await saveFeePayment(true);
@@ -529,6 +555,14 @@ export default function TenantDetailPage() {
           >
             Grant 21-day demo
           </button>
+          {(tenant.business_type === "garage" || tenant.business_type === "paint") && (
+            <button
+              onClick={requestResetBillNumbers}
+              className="flex h-8 items-center gap-2 border border-[#c9c5b9] bg-white px-2.5 text-[11px] font-semibold"
+            >
+              Reset bill numbers
+            </button>
+          )}
           {Number(tenant.setup_fee_amount || 0) > 0 && !setupSettled && (
             <button
               onClick={openSetupSettle}

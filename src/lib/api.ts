@@ -106,6 +106,11 @@ export type Tenant = {
   current_month_paid?: boolean;
   logo?: string | null;
   logo_url?: string | null;
+  bill_prefix?: string | null;
+  bill_sequence?: number | null;
+  bill_number_locked_at?: string | null;
+  bill_number_locked?: boolean;
+  next_bill_number?: string | null;
   owner_email?: string | null;
   owner_phone?: string | null;
   owner_phones?: PhoneEntry[] | null;
