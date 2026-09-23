@@ -8,6 +8,13 @@ import { api, currentFeatures, currentUser, money } from "@/lib/api";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 import { allowsServiceJobs } from "@/lib/business-profiles";
 
+type VehicleClass = {
+  id: number;
+  name: string;
+  sort_order: number;
+  active: boolean;
+};
+
 type ServiceAddon = {
   id: number;
   name: string;
@@ -15,11 +22,14 @@ type ServiceAddon = {
   sort_order: number;
   is_full_service: boolean;
   active: boolean;
+  service_vehicle_class_id?: number | null;
   inclusions: Array<{ id: number; name: string }>;
 };
 
 export default function ServiceAddonsPage() {
   const [isOwner, setIsOwner] = useState(false);
+  const [classes, setClasses] = useState<VehicleClass[]>([]);
+  const [selectedClassId, setSelectedClassId] = useState("");
   const [addons, setAddons] = useState<ServiceAddon[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -27,22 +37,55 @@ export default function ServiceAddonsPage() {
   const [fullPrice, setFullPrice] = useState("");
   const [includedIds, setIncludedIds] = useState<number[]>([]);
   const [savingFull, setSavingFull] = useState(false);
+  const [newClassName, setNewClassName] = useState("");
+  const [renaming, setRenaming] = useState("");
 
-  const regularAddons = useMemo(() => addons.filter((addon) => !addon.is_full_service), [addons]);
-  const fullService = useMemo(() => addons.find((addon) => addon.is_full_service) ?? null, [addons]);
   const isPaint = useBusinessProfile().type === "paint";
   const profileType = useBusinessProfile().type;
   const serviceAllowed = allowsServiceJobs(profileType, currentFeatures());
+  const usesClasses = !isPaint;
+
+  const activeClassId = selectedClassId || (classes[0] ? String(classes[0].id) : "");
+  const classAddons = useMemo(
+    () => (usesClasses
+      ? addons.filter((addon) => String(addon.service_vehicle_class_id ?? "") === activeClassId)
+      : addons),
+    [addons, activeClassId, usesClasses],
+  );
+  const regularAddons = useMemo(() => classAddons.filter((addon) => !addon.is_full_service), [classAddons]);
+  const fullService = useMemo(() => classAddons.find((addon) => addon.is_full_service) ?? null, [classAddons]);
+  const selectedClass = classes.find((row) => String(row.id) === activeClassId) ?? null;
+
+  function loadAddons(classId?: string) {
+    const query = usesClasses && classId ? `?service_vehicle_class_id=${classId}` : "";
+    return api<ServiceAddon[]>(`/service-addons${query}`).then((result) => {
+      setAddons(result);
+      const scoped = usesClasses && classId
+        ? result.filter((addon) => String(addon.service_vehicle_class_id ?? "") === classId)
+        : result;
+      const full = scoped.find((addon) => addon.is_full_service);
+      setFullPrice(full ? String(Number(full.price)) : "");
+      setIncludedIds(full?.inclusions.map((item) => item.id) ?? []);
+    });
+  }
 
   function load() {
     setLoading(true);
-    api<ServiceAddon[]>("/service-addons")
-      .then((result) => {
-        setAddons(result);
-        const full = result.find((addon) => addon.is_full_service);
-        setFullPrice(full ? String(Number(full.price)) : "");
-        setIncludedIds(full?.inclusions.map((item) => item.id) ?? []);
-      })
+    setError("");
+    const boot = usesClasses
+      ? api<VehicleClass[]>("/service-vehicle-classes").then((rows) => {
+          const active = rows.filter((row) => row.active !== false);
+          setClasses(active);
+          const nextId = selectedClassId && active.some((row) => String(row.id) === selectedClassId)
+            ? selectedClassId
+            : (active[0] ? String(active[0].id) : "");
+          setSelectedClassId(nextId);
+          setRenaming(active.find((row) => String(row.id) === nextId)?.name ?? "");
+          return loadAddons(nextId);
+        })
+      : loadAddons();
+
+    boot
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load service addons."))
       .finally(() => setLoading(false));
   }
@@ -50,7 +93,73 @@ export default function ServiceAddonsPage() {
   useEffect(() => {
     setIsOwner(currentUser()?.role === "business_owner");
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function switchClass(nextId: string) {
+    setSelectedClassId(nextId);
+    setRenaming(classes.find((row) => String(row.id) === nextId)?.name ?? "");
+    setLoading(true);
+    setError("");
+    try {
+      await loadAddons(nextId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not load services.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function createClass(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!isOwner || !newClassName.trim()) return;
+    setError("");
+    try {
+      const created = await api<VehicleClass>("/service-vehicle-classes", {
+        method: "POST",
+        body: JSON.stringify({ name: newClassName.trim() }),
+      });
+      setNewClassName("");
+      setClasses((current) => [...current, created]);
+      setSelectedClassId(String(created.id));
+      setRenaming(created.name);
+      setLoading(true);
+      try {
+        await loadAddons(String(created.id));
+      } finally {
+        setLoading(false);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to add vehicle type.");
+    }
+  }
+
+  async function renameClass() {
+    if (!isOwner || !selectedClass || !renaming.trim()) return;
+    setError("");
+    try {
+      const updated = await api<VehicleClass>(`/service-vehicle-classes/${selectedClass.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ name: renaming.trim() }),
+      });
+      setClasses((current) => current.map((row) => (row.id === updated.id ? updated : row)));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to rename vehicle type.");
+    }
+  }
+
+  async function removeClass(id: number) {
+    if (!isOwner) return;
+    setError("");
+    try {
+      await api(`/service-vehicle-classes/${id}`, { method: "DELETE" });
+      const next = classes.filter((row) => row.id !== id);
+      setClasses(next);
+      setSelectedClassId(next[0] ? String(next[0].id) : "");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to delete vehicle type.");
+    }
+  }
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -64,10 +173,11 @@ export default function ServiceAddonsPage() {
         body: JSON.stringify({
           name: data.get("name"),
           price: Number(data.get("price")),
+          ...(usesClasses ? { service_vehicle_class_id: Number(activeClassId) } : {}),
         }),
       });
       form.reset();
-      load();
+      await loadAddons(activeClassId || undefined);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to save addon.");
     }
@@ -82,7 +192,7 @@ export default function ServiceAddonsPage() {
         method: "PUT",
         body: JSON.stringify({ price: Number(price) }),
       });
-      load();
+      await loadAddons(activeClassId || undefined);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to update price.");
     } finally {
@@ -95,7 +205,7 @@ export default function ServiceAddonsPage() {
     setError("");
     try {
       await api(`/service-addons/${id}`, { method: "DELETE" });
-      load();
+      await loadAddons(activeClassId || undefined);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to delete addon.");
     }
@@ -115,6 +225,7 @@ export default function ServiceAddonsPage() {
             price: Number(fullPrice),
             is_full_service: true,
             included_addon_ids: includedIds,
+            ...(usesClasses ? { service_vehicle_class_id: Number(activeClassId) } : {}),
           }),
         });
       } else {
@@ -125,10 +236,11 @@ export default function ServiceAddonsPage() {
             price: Number(fullPrice),
             is_full_service: true,
             included_addon_ids: includedIds,
+            ...(usesClasses ? { service_vehicle_class_id: Number(activeClassId) } : {}),
           }),
         });
       }
-      load();
+      await loadAddons(activeClassId || undefined);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to save full service.");
     } finally {
@@ -143,7 +255,7 @@ export default function ServiceAddonsPage() {
   }
 
   return (
-    <AppShell title={isPaint ? "Paint packages" : "Service addons"} eyebrow={isPaint ? "Buttons on paint-package jobs" : "Buttons on service job cards"}>
+    <AppShell title={isPaint ? "Paint packages" : "Service addons"} eyebrow={isPaint ? "Buttons on paint-package jobs" : "Prices by vehicle type on service jobs"}>
       {!serviceAllowed && profileType === "garage" ? (
         <PageState message="Service jobs are off for this shop. Super-admin can enable them under Admit vehicle." />
       ) : (
@@ -152,6 +264,66 @@ export default function ServiceAddonsPage() {
         <p className="mb-5 text-sm text-[#6f746e]">Only the owner can add, price, or remove these buttons.</p>
       )}
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
+
+      {usesClasses && (
+        <Panel className="mb-5 p-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="font-display text-xl font-semibold uppercase">Vehicle type</h2>
+              <p className="mt-1 text-sm text-[#6f746e]">Car, van, bus — each type has its own service prices and Full service package.</p>
+            </div>
+            {isOwner && (
+              <form onSubmit={createClass} className="flex flex-wrap items-center gap-2">
+                <input
+                  value={newClassName}
+                  onChange={(event) => setNewClassName(event.target.value)}
+                  placeholder="e.g. SUV"
+                  className={`${inputClass} w-36`}
+                />
+                <button className={buttonClass} type="submit"><Plus size={14} /> Add type</button>
+              </form>
+            )}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-1">
+            {classes.map((row) => (
+              <button
+                key={row.id}
+                type="button"
+                onClick={() => void switchClass(String(row.id))}
+                className={`h-8 border px-3 text-[11px] font-bold uppercase ${
+                  String(row.id) === activeClassId
+                    ? "border-[#20221f] bg-[#20221f] text-white"
+                    : "border-[#d7d3c8] bg-[#fbfaf6] hover:border-[#20221f]"
+                }`}
+              >
+                {row.name}
+              </button>
+            ))}
+            {classes.length === 0 && <p className="text-sm text-[#6f746e]">No vehicle types yet.</p>}
+          </div>
+          {isOwner && selectedClass && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <input
+                value={renaming}
+                onChange={(event) => setRenaming(event.target.value)}
+                className={`${inputClass} w-40`}
+              />
+              <button
+                type="button"
+                onClick={() => void renameClass()}
+                disabled={renaming.trim() === selectedClass.name}
+                className="h-8 border border-[#c9c5b9] bg-white px-3 text-[11px] font-semibold disabled:opacity-40"
+              >
+                Rename
+              </button>
+              <button type="button" onClick={() => void removeClass(selectedClass.id)} className="text-[11px] font-bold uppercase text-[#b84837]">
+                Delete type
+              </button>
+            </div>
+          )}
+        </Panel>
+      )}
+
       <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
         {isOwner && (
           <Panel className="p-5">
@@ -159,12 +331,12 @@ export default function ServiceAddonsPage() {
             <p className="mt-1 text-sm text-[#6f746e]">
               {isPaint
                 ? "This appears on paint-package jobs. Staff tap it to add the priced line."
-                : "This appears on service job cards. Staff tap it to add the priced line."}
+                : `This appears on service jobs for ${selectedClass?.name ?? "this vehicle type"}.`}
             </p>
             <form onSubmit={create} className="mt-4 space-y-3">
               <input name="name" required placeholder={isPaint ? "e.g. Bumper respray" : "e.g. Under wash"} className={inputClass} />
               <input name="price" required type="number" min="0" step="0.01" placeholder="Amount" className={inputClass} />
-              <button className={buttonClass}><Plus size={16} /> Save addon</button>
+              <button disabled={usesClasses && !activeClassId} className={buttonClass}><Plus size={16} /> Save addon</button>
             </form>
           </Panel>
         )}
@@ -182,7 +354,7 @@ export default function ServiceAddonsPage() {
                 />
               ))}
               {regularAddons.length === 0 && (
-                <p className="p-8 text-center text-sm text-[#6f746e]">{isPaint ? "No paint packages yet." : "No service buttons yet."}</p>
+                <p className="p-8 text-center text-sm text-[#6f746e]">{isPaint ? "No paint packages yet." : "No service buttons for this vehicle type yet."}</p>
               )}
             </div>
           )}
@@ -191,9 +363,9 @@ export default function ServiceAddonsPage() {
 
       {!isPaint && (
       <Panel className="mt-5 p-5">
-        <h2 className="font-display text-2xl font-semibold uppercase">Full service</h2>
+        <h2 className="font-display text-2xl font-semibold uppercase">Full service{selectedClass ? ` · ${selectedClass.name}` : ""}</h2>
         <p className="mt-1 text-sm text-[#6f746e]">
-          Set the package price and choose which buttons are included. Tapping Full service on a job card adds one line at this price.
+          Set the package price and choose which buttons are included for this vehicle type.
         </p>
         <form onSubmit={saveFullService} className="mt-4 space-y-4">
           <label className="block max-w-xs text-xs font-bold uppercase">
@@ -205,7 +377,7 @@ export default function ServiceAddonsPage() {
               required
               value={fullPrice}
               onChange={(event) => setFullPrice(event.target.value)}
-              disabled={!isOwner}
+              disabled={!isOwner || (usesClasses && !activeClassId)}
               className={`${inputClass} mt-2`}
             />
           </label>
@@ -228,9 +400,12 @@ export default function ServiceAddonsPage() {
                 </label>
               ))}
             </div>
+            {regularAddons.length === 0 && (
+              <p className="mt-2 text-sm text-[#6f746e]">Add regular services for this type before setting Full service inclusions.</p>
+            )}
           </div>
           {isOwner && (
-            <button disabled={savingFull} className={buttonClass}>
+            <button disabled={savingFull || (usesClasses && !activeClassId)} className={buttonClass}>
               <Save size={16} />{savingFull ? "Saving..." : "Save full service"}
             </button>
           )}

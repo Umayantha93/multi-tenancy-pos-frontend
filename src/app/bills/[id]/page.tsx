@@ -30,9 +30,14 @@ type ServiceAddon = {
   price: string;
   is_full_service: boolean;
   active: boolean;
+  service_vehicle_class_id?: number | null;
   inclusions?: Array<{ id: number; name: string }>;
 };
-
+type VehicleClassRow = {
+  id: number;
+  name: string;
+  active: boolean;
+};
 type DiscountTypeRow = {
   id: number;
   name: string;
@@ -47,6 +52,8 @@ type Bill = {
   status: string;
   admission_date?: string | null;
   job_kind?: string | null;
+  service_vehicle_class_id?: number | null;
+  service_vehicle_class?: { id: number; name: string } | null;
   hide_amounts?: boolean;
   owe_in_due_date?: string | null;
   subtotal: string;
@@ -145,6 +152,8 @@ export default function BillDetailPage() {
   const [bill, setBill] = useState<Bill | null>(null);
   const [parts, setParts] = useState<Part[]>([]);
   const [addons, setAddons] = useState<ServiceAddon[]>([]);
+  const [vehicleClasses, setVehicleClasses] = useState<VehicleClassRow[]>([]);
+  const [serviceClassId, setServiceClassId] = useState("");
   const [discountTypes, setDiscountTypes] = useState<DiscountTypeRow[]>([]);
   const [selectedDiscountTypeId, setSelectedDiscountTypeId] = useState("");
   const [lineDiscountPercent, setLineDiscountPercent] = useState("");
@@ -236,13 +245,25 @@ export default function BillDetailPage() {
     if (option.value === "charge") return isStore && bill?.job_kind !== "repair";
     if (isPaint && option.value === "part" && bill?.job_kind !== "parts_sale") return false;
     if (isStore && option.value === "labor" && bill?.job_kind !== "repair") return false;
-    if (isGarage && bill?.job_kind === "parts_sale") return option.value === "part" || option.value === "discount";
+    if (isGarage && bill?.job_kind === "parts_sale") {
+      return option.value === "part" || option.value === "labor" || option.value === "discount";
+    }
     return true;
+  }).sort((a, b) => {
+    if (!(isGarage && bill?.job_kind === "parts_sale")) return 0;
+    const order = ["part", "labor", "discount"];
+    return order.indexOf(a.value) - order.indexOf(b.value);
   });
   const selectedType = itemTypes.find((option) => option.value === type) ?? itemTypes[0];
   const activeType = type || selectedType?.value || "labor";
   const isServiceJob = usesServiceAddonWorkspace(profile.type) && bill?.job_kind === "service";
-  const isLaborType = activeType === "labor" && usesLaborCatalog(profile.type);
+  const SERVICE_CLASS_STORAGE_KEY = "garage_service_vehicle_class_id";
+  const visibleAddons = useMemo(() => {
+    if (!isServiceJob || isPaint || !serviceClassId) return addons;
+    return addons.filter((addon) => String(addon.service_vehicle_class_id ?? "") === serviceClassId);
+  }, [addons, isPaint, isServiceJob, serviceClassId]);
+  // Instant bills: labor = free-text custom line (not labor catalog).
+  const isLaborType = activeType === "labor" && usesLaborCatalog(profile.type) && !isGarageInstant;
   const selectedLabor = useMemo(() => {
     for (const category of laborCategories) {
       const match = (category.items ?? []).find((item) => String(item.id) === selectedLaborId);
@@ -557,6 +578,11 @@ export default function BillDetailPage() {
 
   useEffect(() => {
     if (!usesLaborCatalog(profile.type) && !usesServiceAddonWorkspace(profile.type)) return;
+    if (profile.type === "garage") {
+      api<VehicleClassRow[]>("/service-vehicle-classes")
+        .then((rows) => setVehicleClasses(rows.filter((row) => row.active !== false)))
+        .catch(() => undefined);
+    }
     api<ServiceAddon[]>("/service-addons")
       .then((result) => setAddons(result.filter((addon) => addon.active !== false)))
       .catch(() => undefined);
@@ -569,6 +595,44 @@ export default function BillDetailPage() {
       .then((result) => setLaborCategories(result))
       .catch(() => undefined);
   }, [profile.type]);
+
+  useEffect(() => {
+    if (!isServiceJob || isPaint || !bill) return;
+    const fromBill = bill.service_vehicle_class_id ? String(bill.service_vehicle_class_id) : "";
+    const stored = typeof window !== "undefined" ? localStorage.getItem(SERVICE_CLASS_STORAGE_KEY) ?? "" : "";
+    const car = vehicleClasses.find((row) => row.name.toLowerCase() === "car");
+    const next = fromBill
+      || (stored && vehicleClasses.some((row) => String(row.id) === stored) ? stored : "")
+      || (car ? String(car.id) : "")
+      || (vehicleClasses[0] ? String(vehicleClasses[0].id) : "");
+    if (next && next !== serviceClassId) {
+      setServiceClassId(next);
+    }
+    if (next && !fromBill && !isLocked) {
+      void api<Bill>(`/bills/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ service_vehicle_class_id: Number(next) }),
+      }).then((updated) => setBill(updated)).catch(() => undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bill?.id, bill?.service_vehicle_class_id, vehicleClasses, isServiceJob, isPaint]);
+
+  async function selectServiceClass(nextId: string) {
+    setServiceClassId(nextId);
+    if (typeof window !== "undefined") {
+      localStorage.setItem(SERVICE_CLASS_STORAGE_KEY, nextId);
+    }
+    if (!id || isLocked || !nextId) return;
+    try {
+      const updated = await api<Bill>(`/bills/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ service_vehicle_class_id: Number(nextId) }),
+      });
+      setBill(updated);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t("bill.err_item"));
+    }
+  }
 
   useEffect(() => {
     if (!canAssignEmployees) return;
@@ -645,7 +709,7 @@ export default function BillDetailPage() {
 
     const local = findPartByCode(trimmed);
     if (local) {
-      if (isGarageInstant && activeType !== "discount") {
+      if (isGarageInstant && activeType === "part") {
         await addGarageStockLine(local);
         return true;
       }
@@ -659,7 +723,7 @@ export default function BillDetailPage() {
       const result = await api<{ data: Part[] }>(`/parts?barcode=${encodeURIComponent(trimmed)}&per_page=5`);
       const match = result.data.find((part) => part.stock_qty > 0) ?? null;
       if (match) {
-        if (isGarageInstant && activeType !== "discount") {
+        if (isGarageInstant && activeType === "part") {
           setParts((current) => (current.some((part) => part.id === match.id) ? current : [...current, match]));
           await addGarageStockLine(match);
           return true;
@@ -684,7 +748,7 @@ export default function BillDetailPage() {
           .includes(trimmed.toLowerCase()),
       );
     if (matches.length === 1) {
-      if (isGarageInstant && activeType !== "discount") {
+      if (isGarageInstant && activeType === "part") {
         await addGarageStockLine(matches[0]);
         return true;
       }
@@ -1669,7 +1733,7 @@ export default function BillDetailPage() {
                     {!isLocked && (
                       <form
                         onSubmit={saveMileage}
-                        className="no-print mt-1.5 flex flex-wrap items-center gap-1"
+                        className="no-print mt-1.5 grid max-w-[15rem] grid-cols-2 gap-1"
                       >
                         <input
                           type="number"
@@ -1677,38 +1741,48 @@ export default function BillDetailPage() {
                           step="1"
                           value={mileageDraft}
                           onChange={(event) => setMileageDraft(event.target.value)}
-                          className="h-6 w-[4.75rem] border border-[#c9c5b9] bg-white px-1.5 text-[10px] tabular-nums outline-none focus:border-[#167c73]"
+                          className="h-6 w-full border border-[#c9c5b9] bg-white px-1.5 text-[10px] tabular-nums outline-none focus:border-[#167c73]"
                           placeholder={t("bill.current_km")}
                           aria-label={t("bill.current_km")}
                         />
-                        {isServiceJob && (
+                        {isServiceJob ? (
                           <input
                             type="number"
                             min="0"
                             step="1"
                             value={nextServiceMileageDraft}
                             onChange={(event) => setNextServiceMileageDraft(event.target.value)}
-                            className="h-6 w-[4.75rem] border border-[#c9c5b9] bg-white px-1.5 text-[10px] tabular-nums outline-none focus:border-[#167c73]"
+                            className="h-6 w-full border border-[#c9c5b9] bg-white px-1.5 text-[10px] tabular-nums outline-none focus:border-[#167c73]"
                             placeholder={t("bill.next_km")}
                             aria-label={t("bill.next_km")}
                           />
+                        ) : (
+                          <button
+                            type="submit"
+                            disabled={savingMileage}
+                            className="inline-flex h-6 w-full items-center justify-center border border-[#20221f] px-2 text-[9px] font-bold uppercase leading-none"
+                          >
+                            {savingMileage ? "..." : t("common.save")}
+                          </button>
                         )}
                         {isServiceJob && canReminders && (
                           <input
                             type="date"
                             value={nextServiceDueDraft}
                             onChange={(event) => setNextServiceDueDraft(event.target.value)}
-                            className="h-6 w-[7.25rem] border border-[#c9c5b9] bg-white px-1 text-[10px] outline-none focus:border-[#167c73]"
+                            className="h-6 w-full border border-[#c9c5b9] bg-white px-1 text-[10px] outline-none focus:border-[#167c73]"
                             aria-label={t("bill.next_due")}
                           />
                         )}
-                        <button
-                          type="submit"
-                          disabled={savingMileage}
-                          className="inline-flex h-6 shrink-0 items-center justify-center border border-[#20221f] px-2 text-[9px] font-bold uppercase leading-none"
-                        >
-                          {savingMileage ? "..." : t("common.save")}
-                        </button>
+                        {isServiceJob && (
+                          <button
+                            type="submit"
+                            disabled={savingMileage}
+                            className={`inline-flex h-6 w-full items-center justify-center border border-[#20221f] px-2 text-[9px] font-bold uppercase leading-none ${!canReminders ? "col-start-2" : ""}`}
+                          >
+                            {savingMileage ? "..." : t("common.save")}
+                          </button>
+                        )}
                       </form>
                     )}
                   </div>
@@ -2146,6 +2220,26 @@ export default function BillDetailPage() {
                       onChange={switchServiceAddMode}
                       paint={isPaint}
                     />
+                    {!isPaint && vehicleClasses.length > 0 && (
+                      <label className="block text-xs font-bold uppercase">
+                        {t("bill.vehicle_type")}
+                        <select
+                          value={serviceClassId}
+                          disabled={isLocked}
+                          onChange={(event) => void selectServiceClass(event.target.value)}
+                          className={`${inputClass} mt-1.5`}
+                        >
+                          {!serviceClassId && (
+                            <option value="">{t("bill.pick_vehicle_type")}</option>
+                          )}
+                          {vehicleClasses.map((row) => (
+                            <option key={row.id} value={row.id}>
+                              {row.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
                     <label className="block text-xs font-bold uppercase">
                       {t("common.quantity")}
                       <input
@@ -2159,13 +2253,13 @@ export default function BillDetailPage() {
                     </label>
                     <p className="text-xs font-bold uppercase">{isPaint ? t("bill.packages") : t("bill.services")}</p>
                     <div className="grid grid-cols-2 gap-1.5">
-                      {addons.map((addon) => {
+                      {visibleAddons.map((addon) => {
                         const busy = addingAddonId === addon.id;
                         return (
                           <button
                             key={addon.id}
                             type="button"
-                            disabled={Boolean(addingAddonId)}
+                            disabled={Boolean(addingAddonId) || (!isPaint && !serviceClassId)}
                             onClick={() => addAddon(addon)}
                             className={`min-h-16 border px-2 py-2 text-left ${
                               addon.is_full_service
@@ -2181,11 +2275,11 @@ export default function BillDetailPage() {
                         );
                       })}
                     </div>
-                    {addons.length === 0 && (
+                    {visibleAddons.length === 0 && (
                       <p className="text-sm text-[#6f746e]">
                         {isPaint
                           ? t("bill.no_packages")
-                          : t("bill.no_services")}
+                          : (!serviceClassId ? t("bill.pick_vehicle_type") : t("bill.no_services"))}
                       </p>
                     )}
                   </div>
@@ -2225,7 +2319,9 @@ export default function BillDetailPage() {
                               : "border-[#d7d3c8] bg-[#fbfaf6] text-[#20221f] hover:border-[#20221f]"
                           }`}
                         >
-                          {t(`terms.${option.label}`)}
+                          {isGarageInstant && option.value === "labor"
+                            ? t("bill.custom_item")
+                            : t(`terms.${option.label}`)}
                         </button>
                       );
                     })}
@@ -2653,17 +2749,29 @@ export default function BillDetailPage() {
                 ) : (
                   <>
                     <label className="block text-xs font-bold uppercase">
-                      {isStore && activeType === "labor" ? t("bill.repair_work") : t("common.description")}
+                      {isStore && activeType === "labor"
+                        ? t("bill.repair_work")
+                        : isGarageInstant && activeType === "labor"
+                          ? t("bill.custom_item")
+                          : t("common.description")}
                       <input
                         name="description"
                         required
                         className={`${inputClass} mt-2`}
-                        placeholder={isStore && activeType === "labor" ? t("bill.screen_placeholder") : undefined}
+                        placeholder={
+                          isStore && activeType === "labor"
+                            ? t("bill.screen_placeholder")
+                            : isGarageInstant && activeType === "labor"
+                              ? t("bill.custom_item_placeholder")
+                              : undefined
+                        }
                       />
                     </label>
                     {showCost && (
                       <label className="block text-xs font-bold uppercase">
-                        {isStore && activeType === "labor" ? t("common.amount") : t("common.cost")}
+                        {(isStore && activeType === "labor") || (isGarageInstant && activeType === "labor")
+                          ? t("common.amount")
+                          : t("common.cost")}
                         <input name="unit_price" type="number" min="0" step="0.01" required className={`${inputClass} mt-2`} />
                       </label>
                     )}

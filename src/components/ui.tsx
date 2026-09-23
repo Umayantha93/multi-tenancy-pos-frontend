@@ -156,10 +156,11 @@ export function QtyStepper({
 }: {
   value: number;
   min?: number;
-  max: number;
+  max?: number;
   onChange: (value: number) => void;
 }) {
   const t = useT();
+  const atMax = max != null && value >= max;
   return (
     <div className="inline-flex h-7 shrink-0 items-stretch overflow-hidden border border-[#c9c5b9] bg-white">
       <button
@@ -176,13 +177,17 @@ export function QtyStepper({
         min={min}
         max={max}
         value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
+        onChange={(event) => {
+          const next = Number(event.target.value);
+          if (!Number.isFinite(next)) return;
+          onChange(max != null ? Math.min(max, Math.max(min, next)) : Math.max(min, next));
+        }}
         className="w-8 border-x border-[#c9c5b9] bg-white text-center text-xs tabular-nums outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         aria-label={t("common.quantity")}
       />
       <button
         type="button"
-        disabled={value >= max}
+        disabled={atMax}
         onClick={() => onChange(value + 1)}
         className="grid w-7 place-items-center text-[#6f746e] hover:bg-[#eeece5] disabled:opacity-30"
         aria-label={`+ ${t("common.qty")}`}

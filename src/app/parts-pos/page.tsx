@@ -23,8 +23,18 @@ type StockItem = {
   sku?: string | null;
   barcode?: string | null;
   brand?: string;
+  type?: string | null;
 };
-type CartLine = StockItem & { quantity: number };
+type CartLine = {
+  key: string;
+  kind: "stock" | "custom";
+  partId?: number;
+  name: string;
+  price: number;
+  quantity: number;
+  stock_qty?: number;
+  stock_unit?: string | null;
+};
 
 export default function InstantBillPage() {
   const profile = useBusinessProfile();
@@ -50,69 +60,124 @@ function GarageInstantTill() {
   const router = useRouter();
   const t = useT();
   const scanRef = useRef<HTMLInputElement>(null);
-  const [items, setItems] = useState<StockItem[]>([]);
+  const customKey = useRef(0);
+  const [matches, setMatches] = useState<StockItem[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [search, setSearch] = useState("");
+  const [customName, setCustomName] = useState("");
+  const [customPrice, setCustomPrice] = useState("");
+  const [customQty, setCustomQty] = useState("1");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [payLater, setPayLater] = useState(false);
   const [tendered, setTendered] = useState("");
 
   useEffect(() => {
+    const needle = search.trim();
+    if (!needle) {
+      setMatches([]);
+      setSearching(false);
+      return;
+    }
+
     let cancelled = false;
-    const query = encodeURIComponent(search.trim());
-    if (items.length === 0) setLoading(true);
-    api<{ data: StockItem[] }>(`/parts?search=${query}&per_page=40`)
-      .then((result) => {
-        if (!cancelled) setItems(result.data);
-      })
-      .catch((caught) => {
-        if (!cancelled) setError(caught instanceof Error ? caught.message : t("pos.catalog_failed"));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    const timer = window.setTimeout(() => {
+      setSearching(true);
+      api<{ data: StockItem[] }>(`/parts?search=${encodeURIComponent(needle)}&per_page=100`)
+        .then((result) => {
+          if (!cancelled) setMatches(result.data);
+        })
+        .catch((caught) => {
+          if (!cancelled) {
+            setMatches([]);
+            setError(caught instanceof Error ? caught.message : t("pos.catalog_failed"));
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setSearching(false);
+        });
+    }, 220);
+
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
-  }, [search]);
+  }, [search, t]);
 
   useEffect(() => {
     scanRef.current?.focus({ preventScroll: true });
   }, []);
 
   const subtotal = useMemo(
-    () => cart.reduce((sum, line) => sum + Number(line.price) * line.quantity, 0),
+    () => cart.reduce((sum, line) => sum + line.price * line.quantity, 0),
     [cart],
   );
   const tenderedAmount = Number(tendered || 0);
   const changeDue = !payLater && tenderedAmount > subtotal ? tenderedAmount - subtotal : 0;
 
-  function add(item: StockItem) {
+  function add(item: StockItem, clearSearch = false) {
     if (item.stock_qty < 1) return;
     setCart((lines) => {
-      const existing = lines.find((line) => line.id === item.id);
+      const existing = lines.find((line) => line.kind === "stock" && line.partId === item.id);
       if (existing) {
         if (existing.quantity >= item.stock_qty) return lines;
-        return lines.map((line) => (line.id === item.id ? { ...line, quantity: line.quantity + 1 } : line));
+        return lines.map((line) => (
+          line.key === existing.key ? { ...line, quantity: line.quantity + 1 } : line
+        ));
       }
-      return [...lines, { ...item, quantity: 1 }];
+      return [...lines, {
+        key: `stock-${item.id}`,
+        kind: "stock" as const,
+        partId: item.id,
+        name: item.name,
+        price: Number(item.price),
+        quantity: 1,
+        stock_qty: item.stock_qty,
+        stock_unit: item.stock_unit,
+      }];
     });
     setError("");
+    if (clearSearch) {
+      setSearch("");
+      setMatches([]);
+    }
     scanRef.current?.focus({ preventScroll: true });
   }
 
-  function setQty(id: number, quantity: number, stock: number) {
-    const next = Math.max(1, Math.min(stock, quantity));
-    setCart((lines) => lines.map((line) => (line.id === id ? { ...line, quantity: next } : line)));
+  function addCustom(event?: FormEvent) {
+    event?.preventDefault();
+    const name = customName.trim();
+    const price = Number(customPrice);
+    const quantity = Math.max(1, Number(customQty) || 1);
+    if (!name || !Number.isFinite(price) || price < 0) {
+      setError(t("instant.custom_required"));
+      return;
+    }
+    customKey.current += 1;
+    setCart((lines) => [...lines, {
+      key: `custom-${customKey.current}`,
+      kind: "custom",
+      name,
+      price,
+      quantity,
+    }]);
+    setCustomName("");
+    setCustomPrice("");
+    setCustomQty("1");
+    setError("");
+  }
+
+  function setQty(key: string, quantity: number, max?: number) {
+    const next = Math.max(1, max != null ? Math.min(max, quantity) : quantity);
+    setCart((lines) => lines.map((line) => (line.key === key ? { ...line, quantity: next } : line)));
   }
 
   async function scanExact(needle: string): Promise<StockItem | null> {
     try {
       const exact = await api<{ data: StockItem[] }>(`/parts?barcode=${encodeURIComponent(needle)}&per_page=1`);
       if (exact.data[0]) return exact.data[0];
-      const sku = await api<{ data: StockItem[] }>(`/parts?search=${encodeURIComponent(needle)}&per_page=5`);
+      const sku = await api<{ data: StockItem[] }>(`/parts?search=${encodeURIComponent(needle)}&per_page=100`);
       return sku.data.find((part) =>
         part.barcode?.toLowerCase() === needle.toLowerCase()
         || part.sku?.toLowerCase() === needle.toLowerCase()
@@ -129,15 +194,17 @@ function GarageInstantTill() {
     const needle = search.trim();
     if (!needle) return;
     const scanned = await scanExact(needle);
-    const fallback = items.find((item) =>
+    const fallback = matches.find((item) =>
       item.barcode?.toLowerCase() === needle.toLowerCase()
       || item.sku?.toLowerCase() === needle.toLowerCase()
       || item.name.toLowerCase() === needle.toLowerCase(),
     );
-    const match = scanned ?? fallback ?? items[0];
-    if (match) add(match);
-    setSearch("");
-    scanRef.current?.focus({ preventScroll: true });
+    const match = scanned ?? fallback ?? (matches.length === 1 ? matches[0] : null);
+    if (match) {
+      add(match, true);
+      return;
+    }
+    setError(t("pos.no_stock"));
   }
 
   async function checkout(event: FormEvent<HTMLFormElement>) {
@@ -154,7 +221,11 @@ function GarageInstantTill() {
           customer_phone: form.get("customer_phone") || null,
           payment_method: form.get("payment_method") || "cash",
           payment_amount: payLater ? 0 : subtotal,
-          items: cart.map((line) => ({ part_id: line.id, quantity: line.quantity })),
+          items: cart.map((line) => (
+            line.kind === "stock"
+              ? { type: "part", part_id: line.partId, quantity: line.quantity }
+              : { type: "labor", description: line.name, unit_price: line.price, quantity: line.quantity }
+          )),
         }),
       });
       router.push(`/bills/${bill.id}`);
@@ -169,67 +240,123 @@ function GarageInstantTill() {
       <BillingBranchBanner />
       <p className="mb-4 max-w-2xl text-sm text-[#6f746e]">{t("instant.hint")}</p>
       <div className="flex flex-col gap-5 xl:grid xl:grid-cols-[1.25fr_0.75fr]">
-        <Panel className="p-4">
-          <label className="relative block">
-            <ScanBarcode className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f746e]" size={16} />
-            <input
-              ref={scanRef}
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              onKeyDown={onScanKey}
-              className={`${inputClass} pl-10 ${search ? "pr-10" : ""}`}
-              placeholder={t("bill.scan_placeholder")}
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch("")}
-                className="absolute right-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center text-[#6f746e] hover:text-[#20221f]"
-                aria-label={t("common.clear")}
-              >
-                <X size={16} />
-              </button>
-            )}
-          </label>
-          {error && !saving && <div className="mt-3"><ErrorMessage message={error} /></div>}
-          {loading && items.length === 0 ? <PageState message={t("pos.loading")} /> : (
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
-              {items.map((item) => (
+        <div className="space-y-4">
+          <Panel className="p-4">
+            <label className="relative block">
+              <ScanBarcode className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f746e]" size={16} />
+              <input
+                ref={scanRef}
+                value={search}
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setError("");
+                }}
+                onKeyDown={onScanKey}
+                className={`${inputClass} pl-10 ${search ? "pr-10" : ""}`}
+                placeholder={t("bill.scan_placeholder")}
+                autoComplete="off"
+              />
+              {search && (
                 <button
-                  key={item.id}
                   type="button"
-                  onClick={() => add(item)}
-                  disabled={item.stock_qty < 1}
-                  className="border border-[#d7d3c8] bg-[#fbfaf6] p-3 text-left hover:border-[#167c73] disabled:opacity-40"
+                  onClick={() => {
+                    setSearch("");
+                    setMatches([]);
+                    setError("");
+                    scanRef.current?.focus({ preventScroll: true });
+                  }}
+                  className="absolute right-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center text-[#6f746e] hover:text-[#20221f]"
+                  aria-label={t("common.clear")}
                 >
-                  <p className="font-semibold">{item.name}</p>
-                  <p className="text-xs text-[#6f746e]">
-                    {[item.barcode, item.sku, item.brand].filter(Boolean).join(" · ") || t("common.stock")}
-                  </p>
-                  <div className="mt-2 flex justify-between text-sm">
-                    <strong className="tabular-nums">{money(item.price)}</strong>
-                    <span className="text-[#6f746e]">{formatStockQty(item.stock_qty, item.stock_unit)}</span>
-                  </div>
+                  <X size={16} />
                 </button>
-              ))}
-              {items.length === 0 && <p className="col-span-2 p-6 text-center text-sm text-[#6f746e]">{t("pos.no_stock")}</p>}
-            </div>
-          )}
-        </Panel>
+              )}
+            </label>
+            {error && !saving && <div className="mt-3"><ErrorMessage message={error} /></div>}
+            {!search.trim() && (
+              <p className="mt-4 text-sm text-[#6f746e]">{t("instant.search_idle")}</p>
+            )}
+            {search.trim() && searching && <PageState message={t("pos.loading")} />}
+            {search.trim() && !searching && (
+              <div className="mt-4 grid max-h-[50vh] gap-2 overflow-y-auto sm:grid-cols-2">
+                {matches.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => add(item)}
+                    disabled={item.stock_qty < 1}
+                    className="border border-[#d7d3c8] bg-[#fbfaf6] p-3 text-left hover:border-[#167c73] disabled:opacity-40"
+                  >
+                    <p className="font-semibold">{item.name}</p>
+                    <p className="text-xs text-[#6f746e]">
+                      {[item.barcode, item.sku, item.brand, item.type].filter(Boolean).join(" · ") || t("common.stock")}
+                    </p>
+                    <div className="mt-2 flex justify-between text-sm">
+                      <strong className="tabular-nums">{money(item.price)}</strong>
+                      <span className="text-[#6f746e]">{formatStockQty(item.stock_qty, item.stock_unit)}</span>
+                    </div>
+                  </button>
+                ))}
+                {matches.length === 0 && (
+                  <p className="col-span-2 p-6 text-center text-sm text-[#6f746e]">{t("pos.no_stock")}</p>
+                )}
+              </div>
+            )}
+          </Panel>
+
+          <Panel className="p-4">
+            <h2 className="text-xs font-bold uppercase text-[#6f746e]">{t("bill.custom_item")}</h2>
+            <p className="mt-1 text-sm text-[#6f746e]">{t("instant.custom_hint")}</p>
+            <form onSubmit={addCustom} className="mt-3 grid gap-2 sm:grid-cols-[1.4fr_0.8fr_0.55fr_auto]">
+              <input
+                value={customName}
+                onChange={(event) => setCustomName(event.target.value)}
+                className={inputClass}
+                placeholder={t("bill.custom_item_placeholder")}
+              />
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={customPrice}
+                onChange={(event) => setCustomPrice(event.target.value)}
+                className={inputClass}
+                placeholder={t("common.amount")}
+              />
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={customQty}
+                onChange={(event) => setCustomQty(event.target.value)}
+                className={inputClass}
+                placeholder={t("common.qty")}
+              />
+              <button type="submit" className={buttonClass}>{t("bill.add")}</button>
+            </form>
+          </Panel>
+        </div>
 
         <Panel className="p-5 xl:sticky xl:top-4">
           <h2 className="font-display text-2xl font-semibold uppercase">{t("common.bill")}</h2>
           <div className="mt-4 max-h-[40vh] space-y-3 overflow-y-auto">
             {cart.map((line) => (
-              <div key={line.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[#e2ded4] pb-2 text-sm">
+              <div key={line.key} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[#e2ded4] pb-2 text-sm">
                 <div className="min-w-0 flex-1 basis-40">
                   <p className="truncate font-semibold">{line.name}</p>
-                  <p className="tabular-nums text-[#6f746e]">{money(line.price)} × {line.quantity}</p>
+                  <p className="tabular-nums text-[#6f746e]">
+                    {money(line.price)} × {line.quantity}
+                    {line.kind === "custom" ? ` · ${t("bill.custom_item")}` : ""}
+                  </p>
                 </div>
                 <div className="ml-auto flex shrink-0 items-center gap-2">
-                  <QtyStepper value={line.quantity} max={line.stock_qty} onChange={(qty) => setQty(line.id, qty, line.stock_qty)} />
-                  <strong className="shrink-0 whitespace-nowrap text-right text-sm tabular-nums">{money(Number(line.price) * line.quantity)}</strong>
-                  <button type="button" className="grid size-7 shrink-0 place-items-center text-[#b84837]" onClick={() => setCart((rows) => rows.filter((row) => row.id !== line.id))} aria-label={t("common.remove")}><Trash2 size={14} /></button>
+                  <QtyStepper
+                    value={line.quantity}
+                    max={line.kind === "stock" ? line.stock_qty : undefined}
+                    onChange={(qty) => setQty(line.key, qty, line.kind === "stock" ? line.stock_qty : undefined)}
+                  />
+                  <strong className="shrink-0 whitespace-nowrap text-right text-sm tabular-nums">{money(line.price * line.quantity)}</strong>
+                  <button type="button" className="grid size-7 shrink-0 place-items-center text-[#b84837]" onClick={() => setCart((rows) => rows.filter((row) => row.key !== line.key))} aria-label={t("common.remove")}><Trash2 size={14} /></button>
                 </div>
               </div>
             ))}
