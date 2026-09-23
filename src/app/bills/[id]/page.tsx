@@ -32,6 +32,14 @@ type ServiceAddon = {
   active: boolean;
   inclusions?: Array<{ id: number; name: string }>;
 };
+
+type DiscountTypeRow = {
+  id: number;
+  name: string;
+  mode: "amount" | "percent";
+  value: string | number;
+  active: boolean;
+};
 type Bill = {
   id: number;
   bill_number: string;
@@ -72,6 +80,7 @@ type Bill = {
     included_services?: string[] | null;
     quantity: string;
     unit_price: string;
+    discount_percent?: string | number | null;
     line_total: string;
     part_id?: number | null;
     part?: { id?: number; stock_unit?: string | null } | null;
@@ -136,6 +145,9 @@ export default function BillDetailPage() {
   const [bill, setBill] = useState<Bill | null>(null);
   const [parts, setParts] = useState<Part[]>([]);
   const [addons, setAddons] = useState<ServiceAddon[]>([]);
+  const [discountTypes, setDiscountTypes] = useState<DiscountTypeRow[]>([]);
+  const [selectedDiscountTypeId, setSelectedDiscountTypeId] = useState("");
+  const [lineDiscountPercent, setLineDiscountPercent] = useState("");
   const [addonQty, setAddonQty] = useState("1");
   const [itemQty, setItemQty] = useState("1");
   const [itemSerials, setItemSerials] = useState("");
@@ -224,7 +236,7 @@ export default function BillDetailPage() {
     if (option.value === "charge") return isStore && bill?.job_kind !== "repair";
     if (isPaint && option.value === "part" && bill?.job_kind !== "parts_sale") return false;
     if (isStore && option.value === "labor" && bill?.job_kind !== "repair") return false;
-    if (isGarage && bill?.job_kind === "parts_sale") return option.value === "part";
+    if (isGarage && bill?.job_kind === "parts_sale") return option.value === "part" || option.value === "discount";
     return true;
   });
   const selectedType = itemTypes.find((option) => option.value === type) ?? itemTypes[0];
@@ -360,6 +372,8 @@ export default function BillDetailPage() {
     setLaborHours("1");
     setAddonQty("1");
     setItemQty("1");
+    setLineDiscountPercent("");
+    setSelectedDiscountTypeId("");
     setItemSerials("");
     setPanelName("");
     setPanelCustom(false);
@@ -414,6 +428,8 @@ export default function BillDetailPage() {
     setError("");
     setItemQty("1");
     setAddonQty("1");
+    setLineDiscountPercent("");
+    setSelectedDiscountTypeId("");
     if (next === "inventory") setType("part");
     if (next === "discount") setType("discount");
     setFormKey((value) => value + 1);
@@ -544,6 +560,11 @@ export default function BillDetailPage() {
     api<ServiceAddon[]>("/service-addons")
       .then((result) => setAddons(result.filter((addon) => addon.active !== false)))
       .catch(() => undefined);
+    if (profile.type === "garage" || profile.type === "paint") {
+      api<DiscountTypeRow[]>("/discount-types")
+        .then((result) => setDiscountTypes(result.filter((row) => row.active !== false)))
+        .catch(() => undefined);
+    }
     api<LaborCategory[]>("/labor-catalog")
       .then((result) => setLaborCategories(result))
       .catch(() => undefined);
@@ -580,8 +601,16 @@ export default function BillDetailPage() {
 
   const selectedPart = parts.find((part) => String(part.id) === selectedPartId);
   const isStockType = selectedType?.kind === "stock" || (isServiceJob && serviceAddMode === "inventory");
+  const isDiscountType = activeType === "discount" || (isServiceJob && serviceAddMode === "discount");
   const showQuantity = isStockType || Boolean(selectedType?.allowQty);
   const showCost = !isStockType || outsidePart;
+  const selectedDiscountType = discountTypes.find((row) => String(row.id) === selectedDiscountTypeId) ?? null;
+  const linePctPreview = Math.min(100, Math.max(0, Number(lineDiscountPercent) || 0));
+  const stockUnitPrice = outsidePart ? null : Number(selectedPart?.price ?? 0);
+  const stockQtyPreview = Number(itemQty) || 0;
+  const stockNetPreview = stockUnitPrice != null && stockQtyPreview > 0 && linePctPreview > 0
+    ? stockUnitPrice * stockQtyPreview * (1 - linePctPreview / 100)
+    : null;
   const useStockSearch = isStockType && !outsidePart && !customerPart;
 
   async function addGarageStockLine(part: Part, quantity = 1) {
@@ -616,7 +645,7 @@ export default function BillDetailPage() {
 
     const local = findPartByCode(trimmed);
     if (local) {
-      if (isGarageInstant) {
+      if (isGarageInstant && activeType !== "discount") {
         await addGarageStockLine(local);
         return true;
       }
@@ -630,7 +659,7 @@ export default function BillDetailPage() {
       const result = await api<{ data: Part[] }>(`/parts?barcode=${encodeURIComponent(trimmed)}&per_page=5`);
       const match = result.data.find((part) => part.stock_qty > 0) ?? null;
       if (match) {
-        if (isGarageInstant) {
+        if (isGarageInstant && activeType !== "discount") {
           setParts((current) => (current.some((part) => part.id === match.id) ? current : [...current, match]));
           await addGarageStockLine(match);
           return true;
@@ -655,7 +684,7 @@ export default function BillDetailPage() {
           .includes(trimmed.toLowerCase()),
       );
     if (matches.length === 1) {
-      if (isGarageInstant) {
+      if (isGarageInstant && activeType !== "discount") {
         await addGarageStockLine(matches[0]);
         return true;
       }
@@ -754,6 +783,10 @@ export default function BillDetailPage() {
         payload.unit_price = String(formData.get("unit_price") || "");
         payload.purchase_unit_cost = String(formData.get("purchase_unit_cost") || "");
         payload.quantity = String(formData.get("quantity") || "1");
+        const outsidePct = Number(formData.get("discount_percent") || lineDiscountPercent || 0);
+        if (Number.isFinite(outsidePct) && outsidePct > 0) {
+          payload.discount_percent = String(outsidePct);
+        }
       } else {
         if (!selectedPartId) {
           setError(t("bill.err_part"));
@@ -770,6 +803,10 @@ export default function BillDetailPage() {
           payload.serials = serials;
           payload.quantity = String(serials.length);
         }
+        const linePct = Number(formData.get("discount_percent") || lineDiscountPercent || 0);
+        if (Number.isFinite(linePct) && linePct > 0) {
+          payload.discount_percent = String(linePct);
+        }
       }
     } else if (isLaborType && selectedLaborId) {
       payload.type = "labor";
@@ -779,6 +816,8 @@ export default function BillDetailPage() {
       payload.description = String(formData.get("description") || "");
       payload.unit_price = String(formData.get("unit_price") || "");
       payload.quantity = laborHours || "1";
+    } else if (payload.type === "discount" && selectedDiscountTypeId) {
+      payload.discount_type_id = selectedDiscountTypeId;
     } else {
       payload.description = String(formData.get("description") || "");
       payload.unit_price = String(formData.get("unit_price") || "");
@@ -1548,144 +1587,138 @@ export default function BillDetailPage() {
       )}
       <div className={`bill-print-sheet min-w-0 max-w-full ${!isClosed && Number(bill.balance_due) > 0 ? "pb-12 xl:pb-0" : ""}`}>
       <BillWatermark src={printWithLogo ? logoUrl : null} printOnly />
-      <Panel className="bill-letterhead mb-5 overflow-hidden p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 items-start gap-4">
-            {logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={logoUrl}
-                alt={tenant?.business_name ?? t("bill.business_logo")}
-                className="h-20 w-20 shrink-0 object-contain border border-[#d7d3c8] bg-white p-1"
-              />
-            ) : (
-              <div className="grid h-20 w-20 shrink-0 place-items-center border border-dashed border-[#c9c5b9] bg-[#fbfaf6] text-center text-[10px] font-bold uppercase text-[#6f746e]">
-                {t("bill.no_logo")}
+
+      <div className="grid min-w-0 items-start gap-3 xl:grid-cols-[1.55fr_0.75fr] print:block print:space-y-2">
+        <div className={`min-w-0 space-y-3 print:space-y-2 ${!isClosed && floorPane !== "work" ? "hidden" : "block"} xl:block`}>
+          <Panel className="bill-letterhead overflow-hidden p-2.5 sm:p-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="flex min-w-0 items-start gap-2.5">
+                {logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={logoUrl}
+                    alt={tenant?.business_name ?? t("bill.business_logo")}
+                    className="h-10 w-10 shrink-0 object-contain border border-[#d7d3c8] bg-white p-0.5"
+                  />
+                ) : (
+                  <div className="grid h-10 w-10 shrink-0 place-items-center border border-dashed border-[#c9c5b9] bg-[#fbfaf6] text-center text-[8px] font-bold uppercase text-[#6f746e]">
+                    {t("bill.no_logo")}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="break-words font-display text-base font-semibold uppercase leading-tight sm:text-lg">
+                    {tenant?.business_name ?? t("bill.business")}
+                  </p>
+                  {isMultiBranch() && bill.branch?.name && (
+                    <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#167c73]">{bill.branch.name}</p>
+                  )}
+                  <p className="mt-0.5 text-xs font-semibold text-[#20221f]">{bill.bill_number}</p>
+                  <div className="mt-0.5 space-y-0 text-[10px] leading-snug text-[#6f746e] print:text-[9px]">
+                    {(bill.branch?.address || tenant?.address) && <p><span className="text-[#6f746e]">{t("common.address")}:</span> {bill.branch?.address || tenant?.address}</p>}
+                    {tenant?.tin && <p><span className="text-[#6f746e]">{t("common.tin")}:</span> {tenant.tin}</p>}
+                    {contactPhones.map((phone) => (
+                      <p key={phone}><span className="text-[#6f746e]">{t("common.mobile")}:</span> {phone}</p>
+                    ))}
+                    {contactEmail && <p><span className="text-[#6f746e]">{t("common.email")}:</span> {contactEmail}</p>}
+                  </div>
+                </div>
               </div>
-            )}
-            <div className="min-w-0">
-              <p className="break-words font-display text-2xl font-semibold uppercase leading-tight sm:text-3xl sm:leading-none">
-                {tenant?.business_name ?? t("bill.business")}
-              </p>
-              {isMultiBranch() && bill.branch?.name && (
-                <p className="mt-1 text-sm font-semibold uppercase tracking-wide text-[#167c73]">{bill.branch.name}</p>
-              )}
-              <p className="mt-1 text-sm text-[#6f746e]">{bill.bill_number}</p>
-              <div className="mt-1.5 space-y-0.5 text-sm print:text-xs">
-                {(bill.branch?.address || tenant?.address) && <p><span className="text-[#6f746e]">{t("common.address")}:</span> {bill.branch?.address || tenant?.address}</p>}
-                {tenant?.tin && <p><span className="text-[#6f746e]">{t("common.tin")}:</span> {tenant.tin}</p>}
-                {contactPhones.map((phone) => (
-                  <p key={phone}><span className="text-[#6f746e]">{t("common.mobile")}:</span> {phone}</p>
-                ))}
-                {contactEmail && <p><span className="text-[#6f746e]">{t("common.email")}:</span> {contactEmail}</p>}
+              <div className="flex w-full flex-col items-start text-left text-[9px] uppercase text-[#6f746e] sm:w-auto sm:shrink-0 sm:items-end sm:text-right">
+                <p className="font-bold text-[#167c73]">
+                  {hidePrintMoney ? t("bill.repair_note") : t("bill.tax_invoice", { kind: t(`terms.${profile.billingSingular}`).toLowerCase() })}
+                  {showJobKind && !hidePrintMoney ? <span className="bill-print-kind">{` · ${jobKindLabel}`}</span> : ""}
+                </p>
+                <p className="mt-0.5 normal-case">{new Date().toLocaleString(locale === "si" ? "si-LK" : "en-LK")}</p>
+                <BillStatusSeal stamp={stamp} paymentDate={paymentDate} />
               </div>
             </div>
-          </div>
-          <div className="flex w-full flex-col items-start text-left text-xs uppercase text-[#6f746e] sm:w-auto sm:shrink-0 sm:items-end sm:text-right">
-            <p className="font-bold text-[#167c73]">
-              {hidePrintMoney ? t("bill.repair_note") : t("bill.tax_invoice", { kind: t(`terms.${profile.billingSingular}`).toLowerCase() })}
-              {showJobKind && !hidePrintMoney ? <span className="bill-print-kind">{` · ${jobKindLabel}`}</span> : ""}
-            </p>
-            <p className="mt-1 normal-case">{new Date().toLocaleString(locale === "si" ? "si-LK" : "en-LK")}</p>
-            <BillStatusSeal stamp={stamp} paymentDate={paymentDate} />
-          </div>
-        </div>
-      </Panel>
+          </Panel>
 
-      <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[1.55fr_0.75fr] print:block print:space-y-2">
-        <div className={`min-w-0 space-y-5 print:space-y-2 ${!isClosed && floorPane !== "work" ? "hidden" : "block"} xl:block`}>
           <Panel className={isGarageInstant ? "bill-instant-meta" : undefined}>
-            <div className="bill-meta grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="bill-customer">
-                <p className="text-[10px] font-bold uppercase text-[#6f746e]">{t("common.customer")}</p>
-                <p className="mt-1 font-semibold">{bill.customer?.name ?? t("common.walk_in")}</p>
+            <div className="bill-meta grid gap-x-3 gap-y-2 p-2.5 sm:grid-cols-2 sm:p-3 lg:grid-cols-4">
+              <div className="bill-customer min-w-0">
+                <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{t("common.customer")}</p>
+                <p className="mt-0.5 text-[13px] font-semibold leading-tight">{bill.customer?.name ?? t("common.walk_in")}</p>
                 {bill.customer?.phone && (
-                  <p className="text-sm text-[#6f746e]">{bill.customer.phone}</p>
+                  <p className="text-[11px] leading-tight text-[#6f746e]">{bill.customer.phone}</p>
                 )}
                 {bill.customer?.address && (
-                  <p className="mt-1 text-sm text-[#6f746e]">{bill.customer.address}</p>
+                  <p className="mt-0.5 text-[10px] leading-tight text-[#6f746e]">{bill.customer.address}</p>
                 )}
               </div>
               {bill.vehicle ? (
                 <>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase text-[#6f746e]">{profile.type === "device_repair" ? t("admit.device") : t("common.vehicle")}</p>
-                    <p className="mt-1 font-semibold">{bill.vehicle.number_plate}</p>
-                    <p className="text-sm text-[#6f746e]">{bill.vehicle.make} {bill.vehicle.model}</p>
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{profile.type === "device_repair" ? t("admit.device") : t("common.vehicle")}</p>
+                    <p className="mt-0.5 text-[13px] font-semibold leading-tight tracking-wide">{bill.vehicle.number_plate}</p>
+                    <p className="text-[11px] leading-tight text-[#6f746e]">{bill.vehicle.make} {bill.vehicle.model}</p>
                   </div>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase text-[#6f746e]">{t("bill.chassis")}</p>
-                    <p className="mt-1 break-all text-sm">{bill.vehicle.chassis_number || "—"}</p>
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{t("bill.chassis")}</p>
+                    <p className="mt-0.5 break-all text-[11px] leading-tight">{bill.vehicle.chassis_number || "—"}</p>
                   </div>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase text-[#6f746e]">{t("bill.mileage")}</p>
-                    <p className="mt-1 font-semibold">
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{t("bill.mileage")}</p>
+                    <p className="mt-0.5 text-[12px] font-semibold leading-tight">
                       {bill.mileage != null && bill.mileage !== "" ? t("common.km", { count: Number(bill.mileage).toLocaleString() }) : "—"}
+                      {isServiceJob && (bill.next_service_mileage != null && bill.next_service_mileage !== ""
+                        ? ` · ${t("bill.next_service")} ${Number(bill.next_service_mileage).toLocaleString()} km`
+                        : "")}
+                      {isServiceJob && bill.next_service_due_on ? ` · ${formatDate(bill.next_service_due_on)}` : ""}
                     </p>
-                    {isServiceJob && (
-                      <>
-                        <p className="mt-3 text-[10px] font-bold uppercase text-[#6f746e]">{t("bill.next_service")}</p>
-                        <p className="mt-1 font-semibold">
-                          {bill.next_service_mileage != null && bill.next_service_mileage !== ""
-                            ? t("common.km", { count: Number(bill.next_service_mileage).toLocaleString() })
-                            : "—"}
-                          {bill.next_service_due_on ? ` · ${formatDate(bill.next_service_due_on)}` : ""}
-                        </p>
-                      </>
-                    )}
                     {!isLocked && (
-                      <form onSubmit={saveMileage} className="no-print mt-2 space-y-2">
-                        <div className="flex h-8 min-w-0 items-stretch gap-2">
+                      <form
+                        onSubmit={saveMileage}
+                        className="no-print mt-1.5 flex flex-wrap items-center gap-1"
+                      >
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={mileageDraft}
+                          onChange={(event) => setMileageDraft(event.target.value)}
+                          className="h-6 w-[4.75rem] border border-[#c9c5b9] bg-white px-1.5 text-[10px] tabular-nums outline-none focus:border-[#167c73]"
+                          placeholder={t("bill.current_km")}
+                          aria-label={t("bill.current_km")}
+                        />
+                        {isServiceJob && (
                           <input
                             type="number"
                             min="0"
                             step="1"
-                            value={mileageDraft}
-                            onChange={(event) => setMileageDraft(event.target.value)}
-                            className={`${inputClass} min-w-0`}
-                            placeholder={t("bill.current_km")}
+                            value={nextServiceMileageDraft}
+                            onChange={(event) => setNextServiceMileageDraft(event.target.value)}
+                            className="h-6 w-[4.75rem] border border-[#c9c5b9] bg-white px-1.5 text-[10px] tabular-nums outline-none focus:border-[#167c73]"
+                            placeholder={t("bill.next_km")}
+                            aria-label={t("bill.next_km")}
                           />
-                          {!isServiceJob && (
-                            <button type="submit" disabled={savingMileage} className="inline-flex h-8 shrink-0 items-center justify-center border border-[#20221f] px-2.5 text-[10px] font-bold uppercase">
-                              {savingMileage ? "..." : t("common.save")}
-                            </button>
-                          )}
-                        </div>
-                        {isServiceJob && (
-                          <>
-                            <input
-                              type="number"
-                              min="0"
-                              step="1"
-                              value={nextServiceMileageDraft}
-                              onChange={(event) => setNextServiceMileageDraft(event.target.value)}
-                              className={inputClass}
-                              placeholder={t("bill.next_km")}
-                            />
-                            {canReminders && (
-                              <input
-                                type="date"
-                                value={nextServiceDueDraft}
-                                onChange={(event) => setNextServiceDueDraft(event.target.value)}
-                                className={inputClass}
-                                aria-label={t("bill.next_due")}
-                              />
-                            )}
-                            <button type="submit" disabled={savingMileage} className="inline-flex h-8 items-center justify-center border border-[#20221f] px-3 text-[10px] font-bold uppercase">
-                              {savingMileage ? "..." : t("common.save")}
-                            </button>
-                          </>
                         )}
+                        {isServiceJob && canReminders && (
+                          <input
+                            type="date"
+                            value={nextServiceDueDraft}
+                            onChange={(event) => setNextServiceDueDraft(event.target.value)}
+                            className="h-6 w-[7.25rem] border border-[#c9c5b9] bg-white px-1 text-[10px] outline-none focus:border-[#167c73]"
+                            aria-label={t("bill.next_due")}
+                          />
+                        )}
+                        <button
+                          type="submit"
+                          disabled={savingMileage}
+                          className="inline-flex h-6 shrink-0 items-center justify-center border border-[#20221f] px-2 text-[9px] font-bold uppercase leading-none"
+                        >
+                          {savingMileage ? "..." : t("common.save")}
+                        </button>
                       </form>
                     )}
                   </div>
                 </>
               ) : (
                 <div className="bill-instant-kind sm:col-span-2">
-                  <p className="text-[10px] font-bold uppercase text-[#6f746e]">
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">
                     {isStore ? (bill.job_kind === "repair" ? t("bill.repair") : t("bill.sale")) : bill.job_kind === "parts_sale" ? t("bill.instant_bill") : t("common.type")}
                   </p>
-                  <p className="mt-1 font-semibold">
+                  <p className="mt-0.5 text-[13px] font-semibold leading-tight">
                     {isStore
                       ? (bill.notes || (bill.job_kind === "repair" ? t("bill.repair_job") : t("bill.counter_sale")))
                       : (bill.job_kind === "parts_sale" ? t("bill.no_vehicle") : t(`terms.${profile.label}`))}
@@ -1693,9 +1726,9 @@ export default function BillDetailPage() {
                 </div>
               )}
               {(bill.warranty_until || Number(bill.warranty_months) > 0) && (
-                <div>
-                  <p className="text-[10px] font-bold uppercase text-[#6f746e]">{t("common.warranty")}</p>
-                  <p className="mt-1 font-semibold">
+                <div className="min-w-0">
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{t("common.warranty")}</p>
+                  <p className="mt-0.5 text-[12px] font-semibold leading-tight">
                     {warrantyLabel(bill.warranty_months, bill.warranty_until, bill.warranty_starts_on, t)}
                   </p>
                 </div>
@@ -1704,11 +1737,255 @@ export default function BillDetailPage() {
           </Panel>
 
           {smsNotice && (
-            <div className="no-print border border-[#167c73]/20 bg-[#167c73]/10 px-4 py-3 text-sm text-[#167c73]">
+            <div className="no-print border border-[#167c73]/20 bg-[#167c73]/10 px-3 py-2 text-xs text-[#167c73]">
               {smsNotice}
             </div>
           )}
 
+          {error && <div className="no-print"><ErrorMessage message={error} /></div>}
+          {isClosed && (
+            <div className="no-print flex flex-wrap items-center gap-2 border border-[#20221f]/15 bg-[#20221f]/5 px-3 py-2 text-xs text-[#20221f]">
+              <Lock size={14} />
+              {t("bill.closed_banner", { kind: t(`terms.${profile.billingSingular}`).toLowerCase() })}
+              {amountRefunded > 0 ? ` ${t("bill.refunded_amount", { amount: money(amountRefunded) })}` : ""}
+              {" "}{t("bill.closed_actions")}
+            </div>
+          )}
+          {isOweIn && (
+            <div className="no-print flex items-center gap-2 border border-[#2b6cb0]/20 bg-[#2b6cb0]/8 px-3 py-2 text-xs text-[#2b6cb0]">
+              <Lock size={14} />
+              {bill.owe_in_due_date
+                ? t("bill.owe_until", { kind: t(`terms.${profile.billingSingular}`).toLowerCase(), date: formatDate(bill.owe_in_due_date) })
+                : `${t("bill.owe_banner", { kind: t(`terms.${profile.billingSingular}`).toLowerCase() })} ${t("bill.owe_items_locked")}`}
+            </div>
+          )}
+
+          <Panel>
+            <div className="bill-section-head border-b border-[#d7d3c8] px-3 py-2">
+              <h2 className="font-display text-base font-semibold uppercase sm:text-lg">{t("bill.bill_items")}</h2>
+            </div>
+            <div className="bill-items-scroll print:overflow-visible">
+              <table className="bill-items-table w-full min-w-[36rem] text-left text-xs print:min-w-0">
+                <colgroup>
+                  <col className="bill-col-desc w-[36%]" />
+                  <col className="bill-col-type w-[14%]" />
+                  <col className="bill-col-qty w-[10%]" />
+                  <col className="bill-col-rate w-[18%]" />
+                  <col className="bill-col-total w-[18%]" />
+                  {!isLocked && <col className="no-print w-10" />}
+                </colgroup>
+                <thead className="bg-[#eeece5] text-[9px] uppercase text-[#6f746e]">
+                  <tr>
+                    <th className="bill-col-desc px-3 py-2">{t("common.description")}</th>
+                    <th className="bill-col-type px-2 py-2">{t("common.type")}</th>
+                    <th className="bill-col-qty px-2 py-2 text-right">{t("common.qty")}</th>
+                    <th className="bill-col-rate px-2 py-2 text-right">{t("bill.rate")}</th>
+                    <th className="bill-col-total px-3 py-2 text-right">{t("common.total")}</th>
+                    {!isLocked && <th className="no-print px-2 py-2" />}
+                  </tr>
+                </thead>
+                <tbody>
+                  {chargeGroups.map((row) => {
+                    if (row.kind === "group") {
+                      const open = Boolean(expandedPanels[row.groupId]);
+                      return (
+                        <Fragment key={row.groupId}>
+                          <tr className="border-t border-[#e2ded4] align-top">
+                            <td className="bill-col-desc px-3 py-2 break-words">
+                              <button
+                                type="button"
+                                onClick={() => setExpandedPanels((current) => ({ ...current, [row.groupId]: !open }))}
+                                className="no-print mr-1 inline-flex align-middle text-[#6f746e]"
+                                aria-expanded={open}
+                                aria-label={open ? t("bill.hide_details", { name: row.name }) : t("bill.show_details", { name: row.name })}
+                              >
+                                <ChevronDown size={14} className={`transition ${open ? "" : "-rotate-90"}`} />
+                              </button>
+                              <span className="font-semibold">{row.name}</span>
+                            </td>
+                            <td className="bill-col-type px-2 py-2 whitespace-nowrap text-[#6f746e]">{t("bill.panel")}</td>
+                            <td className="bill-col-qty px-2 py-2 whitespace-nowrap text-right tabular-nums">—</td>
+                            <td className="bill-col-rate px-2 py-2 whitespace-nowrap text-right tabular-nums">—</td>
+                            <td className="bill-col-total px-3 py-2 whitespace-nowrap text-right tabular-nums">
+                              <span className={hidePrintMoney ? "print:hidden" : ""}>{money(row.total)}</span>
+                              {hidePrintMoney && <span className="hidden print:inline">—</span>}
+                            </td>
+                            {!isLocked && (
+                              <td className="no-print px-2 py-2">
+                                <button onClick={() => remove(row.items[0].id)} className="text-[#b84837]" title={t("bill.remove_panel")}>
+                                  <Trash2 size={14} />
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                          {row.items.map((item) => (
+                            <ChargeItemRow
+                              key={item.id}
+                              item={item}
+                              profile={profile}
+                              isLocked={isLocked}
+                              savingLaborHours={savingLaborHours}
+                              onSaveHours={saveLaborHours}
+                              onRemove={remove}
+                              canWarranty={canWarranty}
+                              onEditWarranty={setWarrantyItem}
+                              hideOnPrint
+                              hideAmountsOnPrint={hidePrintMoney}
+                              nested
+                              visible={open}
+                            />
+                          ))}
+                        </Fragment>
+                      );
+                    }
+                    return (
+                      <ChargeItemRow
+                        key={row.item.id}
+                        item={row.item}
+                        profile={profile}
+                        isLocked={isLocked}
+                        savingLaborHours={savingLaborHours}
+                        onSaveHours={saveLaborHours}
+                        onRemove={remove}
+                        canWarranty={canWarranty}
+                        onEditWarranty={setWarrantyItem}
+                        hideAmountsOnPrint={hidePrintMoney}
+                      />
+                    );
+                  })}
+                </tbody>
+                {discountItems.length > 0 && (
+                  <tbody>
+                    <tr className="bill-discount-row border-t-2 border-[#167c73]/35 bg-[#e7f4f2]">
+                      <td colSpan={5} className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-wide text-[#167c73]">
+                        {t("common.discount")}
+                      </td>
+                      {!isLocked && <td className="no-print" />}
+                    </tr>
+                    {discountItems.map((item) => (
+                      <tr key={item.id} className="bill-discount-row border-t border-[#167c73]/20 bg-[#e7f4f2] align-top text-[#167c73]">
+                        <td className="bill-col-desc px-3 py-2 font-semibold break-words">{item.description}</td>
+                        <td className="bill-col-type px-2 py-2 whitespace-nowrap">
+                          {billItemLabel(item.type, profile, t)}
+                        </td>
+                        <td className="bill-col-qty px-2 py-2 whitespace-nowrap text-right tabular-nums">
+                          {Number(item.quantity) > 1 ? Number(item.quantity) : "—"}
+                        </td>
+                        <td className="bill-col-rate px-2 py-2 whitespace-nowrap text-right tabular-nums">
+                          <span className={hidePrintMoney ? "print:hidden" : ""}>{money(item.unit_price)}</span>
+                          {hidePrintMoney && <span className="hidden print:inline">—</span>}
+                        </td>
+                        <td className="bill-col-total px-3 py-2 whitespace-nowrap text-right font-semibold tabular-nums">
+                          <span className={hidePrintMoney ? "print:hidden" : ""}>-{money(item.line_total)}</span>
+                          {hidePrintMoney && <span className="hidden print:inline">—</span>}
+                        </td>
+                        {!isLocked && (
+                          <td className="no-print px-2 py-2">
+                            <button onClick={() => remove(item.id)} className="text-[#b84837]" title={t("bill.remove_item")}>
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                )}
+              </table>
+              {billItems.length === 0 && <p className="p-5 text-center text-xs text-[#6f746e]">{t("bill.no_charges")}</p>}
+            </div>
+          </Panel>
+
+          {bill.payments.length > 0 && (
+            <Panel>
+              <div className="bill-section-head border-b border-[#d7d3c8] px-5 py-4">
+                <h2 className="font-display text-2xl font-semibold uppercase">{t("bill.payments")}</h2>
+              </div>
+              <div className="divide-y divide-[#e2ded4]">
+                {bill.payments.map((payment) => (
+                  <div key={payment.id} className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
+                    <div className="min-w-0 flex-1">
+                      <span className="uppercase text-[#6f746e]">{t(`method.${payment.method}`)}</span>
+                      {payment.method === "cheque" && (
+                        <p className="mt-0.5 text-[11px] text-[#6f746e]">
+                          {payment.cheque_number ? `#${payment.cheque_number}` : t("method.cheque")}
+                          {payment.cheque_date ? ` · ${formatDate(payment.cheque_date)}` : ""}
+                          {payment.cheque_status ? ` · ${t(`status.${payment.cheque_status}`)}` : ""}
+                          {payment.reference ? ` · ${payment.reference}` : ""}
+                        </p>
+                      )}
+                    </div>
+                    <strong className="tabular-nums">{money(payment.amount)}</strong>
+                    {!isLocked && payment.method === "cheque" && payment.cheque_status === "pending" && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={clearingPaymentId === payment.id}
+                          onClick={() => void clearCheque(payment.id)}
+                          className="no-print text-[11px] font-bold uppercase text-[#167c73]"
+                        >
+                          {t("common.clear")}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={clearingPaymentId === payment.id}
+                          onClick={() => void bounceCheque(payment.id)}
+                          className="no-print text-[11px] font-bold uppercase text-[#b84837]"
+                        >
+                          {t("bill.bounce")}
+                        </button>
+                      </>
+                    )}
+                    {!isLocked && (
+                      <button
+                        type="button"
+                        onClick={() => removePayment(payment.id)}
+                        className="no-print text-[#b84837]"
+                        title={t("bill.remove_payment")}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          )}
+
+          {(bill.refunds?.length ?? 0) > 0 && (
+            <Panel className="no-print">
+              <div className="bill-section-head border-b border-[#d7d3c8] px-5 py-4">
+                <h2 className="font-display text-2xl font-semibold uppercase">{t("bill.refunds")}</h2>
+              </div>
+              <div className="divide-y divide-[#e2ded4]">
+                {(bill.refunds ?? []).map((refund) => (
+                  <div key={refund.id} className="space-y-2 px-5 py-3 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-[#b84837]">{money(refund.amount)}</span>
+                      <span className="uppercase text-[#6f746e]">{t(`method.${refund.method}`)}</span>
+                      <span className="text-[#6f746e]">{formatDate(refund.refunded_at)}</span>
+                    </div>
+                    <p className="text-[#4f544e]">{refund.reason}</p>
+                    <ul className="space-y-1 text-[12px] text-[#6f746e]">
+                      {(refund.items ?? []).map((item) => (
+                        <li key={item.id}>
+                          {item.bill_item?.description ?? t("bill.item_n", { id: item.bill_item_id })}
+                          {" · "}
+                          {t("bill.qty_short", { qty: item.quantity })}
+                          {" · "}
+                          {money(item.amount)}
+                          {item.disposition === "restock"
+                            ? ` · ${t("bill.returned_stock")}`
+                            : item.disposition === "write_off"
+                              ? ` · ${t("bill.written_off")}`
+                              : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          )}
           {canWarranty && usesVehicleJobs(profile.type) && !isGarageInstant && (
             <Panel className="no-print">
               <div className="border-b border-[#d7d3c8] px-5 py-3">
@@ -1824,261 +2101,18 @@ export default function BillDetailPage() {
           </Panel>
           )}
 
-          {error && <div className="no-print"><ErrorMessage message={error} /></div>}
           {canJobPhotos && isGarage && bill.job_kind !== "parts_sale" && (
             <JobPhotos billId={bill.id} readOnly={isClosed} />
           )}
           {canJobVideos && isGarage && bill.job_kind !== "parts_sale" && (
             <JobVideos billId={bill.id} readOnly={isClosed} />
           )}
-          {isClosed && (
-            <div className="no-print flex flex-wrap items-center gap-2 border border-[#20221f]/15 bg-[#20221f]/5 px-4 py-3 text-sm text-[#20221f]">
-              <Lock size={16} />
-              {t("bill.closed_banner", { kind: t(`terms.${profile.billingSingular}`).toLowerCase() })}
-              {amountRefunded > 0 ? ` ${t("bill.refunded_amount", { amount: money(amountRefunded) })}` : ""}
-              {" "}{t("bill.closed_actions")}
-            </div>
-          )}
-          {isOweIn && (
-            <div className="no-print flex items-center gap-2 border border-[#2b6cb0]/20 bg-[#2b6cb0]/8 px-4 py-3 text-sm text-[#2b6cb0]">
-              <Lock size={16} />
-              {bill.owe_in_due_date
-                ? t("bill.owe_until", { kind: t(`terms.${profile.billingSingular}`).toLowerCase(), date: formatDate(bill.owe_in_due_date) })
-                : `${t("bill.owe_banner", { kind: t(`terms.${profile.billingSingular}`).toLowerCase() })} ${t("bill.owe_items_locked")}`}
-            </div>
-          )}
 
-          <Panel>
-            <div className="bill-section-head border-b border-[#d7d3c8] px-5 py-4">
-              <h2 className="font-display text-2xl font-semibold uppercase">{t("bill.bill_items")}</h2>
-            </div>
-            <div className="bill-items-scroll print:overflow-visible">
-              <table className="bill-items-table w-full min-w-[36rem] text-left text-sm print:min-w-0">
-                <colgroup>
-                  <col className="bill-col-desc w-[36%]" />
-                  <col className="bill-col-type w-[14%]" />
-                  <col className="bill-col-qty w-[10%]" />
-                  <col className="bill-col-rate w-[18%]" />
-                  <col className="bill-col-total w-[18%]" />
-                  {!isLocked && <col className="no-print w-10" />}
-                </colgroup>
-                <thead className="bg-[#eeece5] text-[10px] uppercase text-[#6f746e]">
-                  <tr>
-                    <th className="bill-col-desc px-4 py-3">{t("common.description")}</th>
-                    <th className="bill-col-type px-3 py-3">{t("common.type")}</th>
-                    <th className="bill-col-qty px-3 py-3 text-right">{t("common.qty")}</th>
-                    <th className="bill-col-rate px-3 py-3 text-right">{t("bill.rate")}</th>
-                    <th className="bill-col-total px-4 py-3 text-right">{t("common.total")}</th>
-                    {!isLocked && <th className="no-print px-2 py-3" />}
-                  </tr>
-                </thead>
-                <tbody>
-                  {chargeGroups.map((row) => {
-                    if (row.kind === "group") {
-                      const open = Boolean(expandedPanels[row.groupId]);
-                      return (
-                        <Fragment key={row.groupId}>
-                          <tr className="border-t border-[#e2ded4] align-top">
-                            <td className="bill-col-desc px-4 py-3 break-words">
-                              <button
-                                type="button"
-                                onClick={() => setExpandedPanels((current) => ({ ...current, [row.groupId]: !open }))}
-                                className="no-print mr-1 inline-flex align-middle text-[#6f746e]"
-                                aria-expanded={open}
-                                aria-label={open ? t("bill.hide_details", { name: row.name }) : t("bill.show_details", { name: row.name })}
-                              >
-                                <ChevronDown size={16} className={`transition ${open ? "" : "-rotate-90"}`} />
-                              </button>
-                              <span className="font-semibold">{row.name}</span>
-                            </td>
-                            <td className="bill-col-type px-3 py-3 whitespace-nowrap text-[#6f746e]">{t("bill.panel")}</td>
-                            <td className="bill-col-qty px-3 py-3 whitespace-nowrap text-right tabular-nums">—</td>
-                            <td className="bill-col-rate px-3 py-3 whitespace-nowrap text-right tabular-nums">—</td>
-                            <td className="bill-col-total px-4 py-3 whitespace-nowrap text-right tabular-nums">
-                              <span className={hidePrintMoney ? "print:hidden" : ""}>{money(row.total)}</span>
-                              {hidePrintMoney && <span className="hidden print:inline">—</span>}
-                            </td>
-                            {!isLocked && (
-                              <td className="no-print px-2 py-3">
-                                <button onClick={() => remove(row.items[0].id)} className="text-[#b84837]" title={t("bill.remove_panel")}>
-                                  <Trash2 size={16} />
-                                </button>
-                              </td>
-                            )}
-                          </tr>
-                          {row.items.map((item) => (
-                            <ChargeItemRow
-                              key={item.id}
-                              item={item}
-                              profile={profile}
-                              isLocked={isLocked}
-                              savingLaborHours={savingLaborHours}
-                              onSaveHours={saveLaborHours}
-                              onRemove={remove}
-                              canWarranty={canWarranty}
-                              onEditWarranty={setWarrantyItem}
-                              hideOnPrint
-                              hideAmountsOnPrint={hidePrintMoney}
-                              nested
-                              visible={open}
-                            />
-                          ))}
-                        </Fragment>
-                      );
-                    }
-                    return (
-                      <ChargeItemRow
-                        key={row.item.id}
-                        item={row.item}
-                        profile={profile}
-                        isLocked={isLocked}
-                        savingLaborHours={savingLaborHours}
-                        onSaveHours={saveLaborHours}
-                        onRemove={remove}
-                        canWarranty={canWarranty}
-                        onEditWarranty={setWarrantyItem}
-                        hideAmountsOnPrint={hidePrintMoney}
-                      />
-                    );
-                  })}
-                </tbody>
-                {discountItems.length > 0 && (
-                  <tbody>
-                    <tr className="bill-discount-row border-t-2 border-[#167c73]/35 bg-[#e7f4f2]">
-                      <td colSpan={5} className="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-[#167c73]">
-                        {t("common.discount")}
-                      </td>
-                      {!isLocked && <td className="no-print" />}
-                    </tr>
-                    {discountItems.map((item) => (
-                      <tr key={item.id} className="bill-discount-row border-t border-[#167c73]/20 bg-[#e7f4f2] align-top text-[#167c73]">
-                        <td className="bill-col-desc px-4 py-3 font-semibold break-words">{item.description}</td>
-                        <td className="bill-col-type px-3 py-3 whitespace-nowrap">
-                          {billItemLabel(item.type, profile, t)}
-                        </td>
-                        <td className="bill-col-qty px-3 py-3 whitespace-nowrap text-right tabular-nums">
-                          {Number(item.quantity) > 1 ? Number(item.quantity) : "—"}
-                        </td>
-                        <td className="bill-col-rate px-3 py-3 whitespace-nowrap text-right tabular-nums">
-                          <span className={hidePrintMoney ? "print:hidden" : ""}>{money(item.unit_price)}</span>
-                          {hidePrintMoney && <span className="hidden print:inline">—</span>}
-                        </td>
-                        <td className="bill-col-total px-4 py-3 whitespace-nowrap text-right font-semibold tabular-nums">
-                          <span className={hidePrintMoney ? "print:hidden" : ""}>-{money(item.line_total)}</span>
-                          {hidePrintMoney && <span className="hidden print:inline">—</span>}
-                        </td>
-                        {!isLocked && (
-                          <td className="no-print px-2 py-3">
-                            <button onClick={() => remove(item.id)} className="text-[#b84837]" title={t("bill.remove_item")}>
-                              <Trash2 size={16} />
-                            </button>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                )}
-              </table>
-              {billItems.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">{t("bill.no_charges")}</p>}
-            </div>
-          </Panel>
-
-          {bill.payments.length > 0 && (
-            <Panel>
-              <div className="bill-section-head border-b border-[#d7d3c8] px-5 py-4">
-                <h2 className="font-display text-2xl font-semibold uppercase">{t("bill.payments")}</h2>
-              </div>
-              <div className="divide-y divide-[#e2ded4]">
-                {bill.payments.map((payment) => (
-                  <div key={payment.id} className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
-                    <div className="min-w-0 flex-1">
-                      <span className="uppercase text-[#6f746e]">{t(`method.${payment.method}`)}</span>
-                      {payment.method === "cheque" && (
-                        <p className="mt-0.5 text-[11px] text-[#6f746e]">
-                          {payment.cheque_number ? `#${payment.cheque_number}` : t("method.cheque")}
-                          {payment.cheque_date ? ` · ${formatDate(payment.cheque_date)}` : ""}
-                          {payment.cheque_status ? ` · ${t(`status.${payment.cheque_status}`)}` : ""}
-                          {payment.reference ? ` · ${payment.reference}` : ""}
-                        </p>
-                      )}
-                    </div>
-                    <strong className="tabular-nums">{money(payment.amount)}</strong>
-                    {!isLocked && payment.method === "cheque" && payment.cheque_status === "pending" && (
-                      <>
-                        <button
-                          type="button"
-                          disabled={clearingPaymentId === payment.id}
-                          onClick={() => void clearCheque(payment.id)}
-                          className="no-print text-[11px] font-bold uppercase text-[#167c73]"
-                        >
-                          {t("common.clear")}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={clearingPaymentId === payment.id}
-                          onClick={() => void bounceCheque(payment.id)}
-                          className="no-print text-[11px] font-bold uppercase text-[#b84837]"
-                        >
-                          {t("bill.bounce")}
-                        </button>
-                      </>
-                    )}
-                    {!isLocked && (
-                      <button
-                        type="button"
-                        onClick={() => removePayment(payment.id)}
-                        className="no-print text-[#b84837]"
-                        title={t("bill.remove_payment")}
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </Panel>
-          )}
-
-          {(bill.refunds?.length ?? 0) > 0 && (
-            <Panel className="no-print">
-              <div className="bill-section-head border-b border-[#d7d3c8] px-5 py-4">
-                <h2 className="font-display text-2xl font-semibold uppercase">{t("bill.refunds")}</h2>
-              </div>
-              <div className="divide-y divide-[#e2ded4]">
-                {(bill.refunds ?? []).map((refund) => (
-                  <div key={refund.id} className="space-y-2 px-5 py-3 text-sm">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-[#b84837]">{money(refund.amount)}</span>
-                      <span className="uppercase text-[#6f746e]">{t(`method.${refund.method}`)}</span>
-                      <span className="text-[#6f746e]">{formatDate(refund.refunded_at)}</span>
-                    </div>
-                    <p className="text-[#4f544e]">{refund.reason}</p>
-                    <ul className="space-y-1 text-[12px] text-[#6f746e]">
-                      {(refund.items ?? []).map((item) => (
-                        <li key={item.id}>
-                          {item.bill_item?.description ?? t("bill.item_n", { id: item.bill_item_id })}
-                          {" · "}
-                          {t("bill.qty_short", { qty: item.quantity })}
-                          {" · "}
-                          {money(item.amount)}
-                          {item.disposition === "restock"
-                            ? ` · ${t("bill.returned_stock")}`
-                            : item.disposition === "write_off"
-                              ? ` · ${t("bill.written_off")}`
-                              : ""}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            </Panel>
-          )}
         </div>
 
-        <div className={`space-y-5 print:mt-2 ${!isClosed && floorPane !== "pay" ? "hidden" : "block"} xl:block`}>
+        <div className={`space-y-3 print:mt-2 ${!isClosed && floorPane !== "pay" ? "hidden" : "block"} xl:block`}>
           {!isClosed && (
-          <Panel className="no-print xl:sticky xl:top-4">
+          <Panel className="no-print xl:sticky xl:top-3">
             {!isOweIn && (
             <>
             <div className="hidden grid-cols-2 border-b border-[#d7d3c8] xl:grid">
@@ -2166,8 +2200,7 @@ export default function BillDetailPage() {
                     paint={isPaint}
                   />
                 )}
-                {isGarageInstant && <input type="hidden" name="type" value="part" />}
-                {!isServiceJob && !isGarageInstant && (
+                {!isServiceJob && (
                 <div>
                   <p className="mb-2 text-xs font-bold uppercase">{t("common.type")}</p>
                   <div className="flex gap-1">
@@ -2183,6 +2216,8 @@ export default function BillDetailPage() {
                             setPartQuery("");
                             setOutsidePart(false);
                             setCustomerPart(false);
+                            setSelectedDiscountTypeId("");
+                            setLineDiscountPercent("");
                           }}
                           className={`h-7 min-w-0 flex-1 border px-1 text-center text-[9px] font-bold uppercase leading-none ${
                             selected
@@ -2283,31 +2318,33 @@ export default function BillDetailPage() {
                             )}
                           </span>
                         </label>
-                        <div className="max-h-44 overflow-y-auto border border-[#d7d3c8] bg-white">
-                          {filteredParts.length === 0 ? (
-                            <p className="p-3 text-sm text-[#6f746e]">{t("bill.no_matching_stock")}</p>
-                          ) : (
-                            filteredParts.map((part) => (
-                              <button
-                                type="button"
-                                key={part.id}
-                                onClick={() => {
-                                  setSelectedPartId(String(part.id));
-                                  setError("");
-                                }}
-                                className={`flex w-full items-center justify-between border-b border-[#eeeae1] px-3 py-2 text-left text-sm ${selectedPartId === String(part.id) ? "bg-[#167c73]/10" : "hover:bg-[#f7f5ef]"}`}
-                              >
-                                <span>
-                                  <span className="font-semibold">{part.name}</span>
-                                  {part.barcode && (
-                                    <span className="mt-0.5 block text-[10px] text-[#6f746e]">{t("common.barcode", { code: part.barcode })}</span>
-                                  )}
-                                </span>
-                                <span className="text-xs text-[#6f746e]">{formatStockQty(part.stock_qty, part.stock_unit, isPaint)} · {money(part.price)}</span>
-                              </button>
-                            ))
-                          )}
-                        </div>
+                        {partQuery.trim() && (
+                          <div className="max-h-44 overflow-y-auto border border-[#d7d3c8] bg-white">
+                            {filteredParts.length === 0 ? (
+                              <p className="p-3 text-sm text-[#6f746e]">{t("bill.no_matching_stock")}</p>
+                            ) : (
+                              filteredParts.map((part) => (
+                                <button
+                                  type="button"
+                                  key={part.id}
+                                  onClick={() => {
+                                    setSelectedPartId(String(part.id));
+                                    setError("");
+                                  }}
+                                  className={`flex w-full items-center justify-between border-b border-[#eeeae1] px-3 py-2 text-left text-sm ${selectedPartId === String(part.id) ? "bg-[#167c73]/10" : "hover:bg-[#f7f5ef]"}`}
+                                >
+                                  <span>
+                                    <span className="font-semibold">{part.name}</span>
+                                    {part.barcode && (
+                                      <span className="mt-0.5 block text-[10px] text-[#6f746e]">{t("common.barcode", { code: part.barcode })}</span>
+                                    )}
+                                  </span>
+                                  <span className="text-xs text-[#6f746e]">{formatStockQty(part.stock_qty, part.stock_unit, isPaint)} · {money(part.price)}</span>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        )}
                         {selectedPart && (
                           <p className="text-xs text-[#167c73]">
                             {t("common.selected", { name: selectedPart.name })}
@@ -2566,6 +2603,53 @@ export default function BillDetailPage() {
                       </>
                     )}
                   </>
+                ) : isDiscountType ? (
+                  <>
+                    {(isGarage || isPaint) && (
+                      <label className="block text-xs font-bold uppercase">
+                        {t("bill.discount_type")}
+                        <select
+                          value={selectedDiscountTypeId}
+                          onChange={(event) => setSelectedDiscountTypeId(event.target.value)}
+                          className={`${inputClass} mt-2`}
+                        >
+                          <option value="">{t("bill.custom_discount")}</option>
+                          {discountTypes.map((row) => (
+                            <option key={row.id} value={row.id}>
+                              {row.name}
+                              {row.mode === "percent"
+                                ? ` · ${Number(row.value)}%`
+                                : ` · ${money(row.value)}`}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                    {selectedDiscountType ? (
+                      <p className="text-sm text-[#167c73]">
+                        {selectedDiscountType.mode === "percent"
+                          ? t("bill.discount_percent_preview", {
+                              name: selectedDiscountType.name,
+                              percent: Number(selectedDiscountType.value),
+                            })
+                          : t("bill.discount_amount_preview", {
+                              name: selectedDiscountType.name,
+                              amount: money(selectedDiscountType.value),
+                            })}
+                      </p>
+                    ) : (
+                      <>
+                        <label className="block text-xs font-bold uppercase">
+                          {t("common.description")}
+                          <input name="description" required className={`${inputClass} mt-2`} placeholder={t("bill.discount_placeholder")} />
+                        </label>
+                        <label className="block text-xs font-bold uppercase">
+                          {t("common.amount")}
+                          <input name="unit_price" type="number" min="0" step="0.01" required className={`${inputClass} mt-2`} />
+                        </label>
+                      </>
+                    )}
+                  </>
                 ) : (
                   <>
                     <label className="block text-xs font-bold uppercase">
@@ -2602,34 +2686,73 @@ export default function BillDetailPage() {
                 )}
 
                 {isStockType && showQuantity && (selectedPartId || outsidePart || customerPart) && !(canSerial && selectedPart?.serialized && !outsidePart && !customerPart) && (
-                  <label key={`qty-${outsidePart ? "outside" : customerPart ? "customer" : "stock"}`} className="block text-xs font-bold uppercase">
-                    {isPaint ? t("bill.qty_ml") : selectedPart?.stock_unit && selectedPart.stock_unit !== "qty"
-                      ? `${t("common.quantity")} (${stockUnitLabel(selectedPart.stock_unit)})`
-                      : t("common.quantity")}
-                    <input
-                      name="quantity"
-                      type="number"
-                      min={selectedPart?.stock_unit && selectedPart.stock_unit !== "qty" ? "0.001" : "1"}
-                      step={selectedPart?.stock_unit && selectedPart.stock_unit !== "qty" ? "0.001" : "1"}
-                      value={itemQty}
-                      onChange={(event) => setItemQty(event.target.value)}
-                      required
-                      className={`${inputClass} mt-2`}
-                    />
-                  </label>
+                  <div key={`qty-${outsidePart ? "outside" : customerPart ? "customer" : "stock"}`} className={`grid gap-2 ${(selectedPartId || outsidePart) && !customerPart ? "grid-cols-[1fr_5.5rem]" : ""}`}>
+                    <label className="block text-xs font-bold uppercase">
+                      {isPaint ? t("bill.qty_ml") : selectedPart?.stock_unit && selectedPart.stock_unit !== "qty"
+                        ? `${t("common.quantity")} (${stockUnitLabel(selectedPart.stock_unit)})`
+                        : t("common.quantity")}
+                      <input
+                        name="quantity"
+                        type="number"
+                        min={selectedPart?.stock_unit && selectedPart.stock_unit !== "qty" ? "0.001" : "1"}
+                        step={selectedPart?.stock_unit && selectedPart.stock_unit !== "qty" ? "0.001" : "1"}
+                        value={itemQty}
+                        onChange={(event) => setItemQty(event.target.value)}
+                        required
+                        className={`${inputClass} mt-1.5`}
+                      />
+                    </label>
+                    {(selectedPartId || outsidePart) && !customerPart && (
+                      <label className="block text-xs font-bold uppercase">
+                        {t("bill.percent_off")}
+                        <input
+                          name="discount_percent"
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={lineDiscountPercent}
+                          onChange={(event) => setLineDiscountPercent(event.target.value)}
+                          className={`${inputClass} mt-1.5`}
+                          placeholder="0"
+                        />
+                      </label>
+                    )}
+                  </div>
+                )}
+                {stockNetPreview != null && (
+                  <p className="text-xs text-[#167c73]">
+                    {t("bill.line_net", { amount: money(stockNetPreview), percent: linePctPreview })}
+                  </p>
                 )}
                 {isStockType && canSerial && selectedPart?.serialized && !outsidePart && !customerPart && (
-                  <label className="block text-xs font-bold uppercase">
-                    {t("serials.enter_imeis")}
-                    <textarea
-                      value={itemSerials}
-                      onChange={(event) => setItemSerials(event.target.value)}
-                      rows={3}
-                      required
-                      className={`${inputClass} mt-2`}
-                      placeholder="356938035643809"
-                    />
-                  </label>
+                  <>
+                    <label className="block text-xs font-bold uppercase">
+                      {t("serials.enter_imeis")}
+                      <textarea
+                        value={itemSerials}
+                        onChange={(event) => setItemSerials(event.target.value)}
+                        rows={3}
+                        required
+                        className={`${inputClass} mt-2`}
+                        placeholder="356938035643809"
+                      />
+                    </label>
+                    <label className="block text-xs font-bold uppercase">
+                      {t("bill.percent_off")}
+                      <input
+                        name="discount_percent"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={lineDiscountPercent}
+                        onChange={(event) => setLineDiscountPercent(event.target.value)}
+                        className={`${inputClass} mt-1.5`}
+                        placeholder="0"
+                      />
+                    </label>
+                  </>
                 )}
                 {canWarranty && !isGarageInstant && !isPanelComposer && activeType !== "discount" && (
                   <WarrantyFields
@@ -2707,8 +2830,8 @@ export default function BillDetailPage() {
           </Panel>
           )}
 
-          <Panel className="bill-summary p-5">
-            <p className="text-xs font-bold uppercase text-[#6f746e]">{t("bill.summary")}</p>
+          <Panel className="bill-summary p-3 sm:p-4">
+            <p className="text-[10px] font-bold uppercase text-[#6f746e]">{t("bill.summary")}</p>
             {hidePrintMoney && (
               <p className="mt-3 hidden text-sm text-[#6f746e] print:block">{t("bill.work_list")}</p>
             )}
@@ -2781,6 +2904,7 @@ function ChargeItemRow({
     quantity: string;
     unit_price: string;
     line_total: string;
+    discount_percent?: string | number | null;
     part?: { stock_unit?: string | null } | null;
     warranty_months?: number | null;
     warranty_starts_on?: string | null;
@@ -2800,6 +2924,7 @@ function ChargeItemRow({
     quantity: string;
     unit_price: string;
     line_total: string;
+    discount_percent?: string | number | null;
     warranty_months?: number | null;
     warranty_starts_on?: string | null;
     warranty_until?: string | null;
@@ -2815,16 +2940,20 @@ function ChargeItemRow({
   const isPartLine = item.type === "part" || fromCustomer;
   const showQty = isPartLine || Number(item.quantity) > 1;
   const hidden = nested && !visible;
+  const linePct = Number(item.discount_percent ?? 0);
 
   return (
     <tr className={`border-t border-[#e2ded4] align-top ${hideOnPrint ? "no-print" : ""} ${hidden ? "hidden" : ""}`}>
-      <td className={`bill-col-desc px-4 py-3 break-words ${nested ? "pl-8" : ""}`}>
+      <td className={`bill-col-desc px-3 py-2 break-words ${nested ? "pl-7" : ""}`}>
         <BillItemDescription item={item} />
+        {linePct > 0 && (
+          <p className="mt-0.5 text-[10px] font-semibold text-[#167c73]">{t("bill.line_pct_off", { percent: linePct })}</p>
+        )}
       </td>
-      <td className="bill-col-type px-3 py-3 whitespace-nowrap text-[#6f746e]">
+      <td className="bill-col-type px-2 py-2 whitespace-nowrap text-[#6f746e]">
         {billItemLabel(item.type, profile, t)}
       </td>
-      <td className="bill-col-qty px-3 py-3 whitespace-nowrap text-right tabular-nums">
+      <td className="bill-col-qty px-2 py-2 whitespace-nowrap text-right tabular-nums">
         {isLaborLine ? (
           <>
             {!isLocked ? (
@@ -2841,10 +2970,10 @@ function ChargeItemRow({
                       void onSaveHours(item.id, event.target.value);
                     }
                   }}
-                  className="h-8 w-[4.5rem] border border-[#c9c5b9] bg-white px-1.5 text-right text-[13px] tabular-nums"
+                  className="h-7 w-[4.25rem] border border-[#c9c5b9] bg-white px-1.5 text-right text-[12px] tabular-nums"
                   aria-label={t("bill.labor_hours")}
                 />
-                <span className="text-[11px] text-[#6f746e]">{t("common.h")}</span>
+                <span className="text-[10px] text-[#6f746e]">{t("common.h")}</span>
               </span>
             ) : (
               <span className="no-print">{Number(item.quantity)} {t("common.h")}</span>
@@ -2858,7 +2987,7 @@ function ChargeItemRow({
           </>
         ) : "—"}
       </td>
-      <td className="bill-col-rate px-3 py-3 whitespace-nowrap text-right">
+      <td className="bill-col-rate px-2 py-2 whitespace-nowrap text-right">
         {fromCustomer ? (
           <span className="font-semibold text-[#167c73]">—</span>
         ) : isLaborLine ? (
@@ -2873,9 +3002,9 @@ function ChargeItemRow({
           </>
         )}
       </td>
-      <td className="bill-col-total px-4 py-3 whitespace-nowrap text-right">
+      <td className="bill-col-total px-3 py-2 whitespace-nowrap text-right">
         {fromCustomer ? (
-          <span className="inline-block max-w-full font-semibold leading-snug text-[#167c73]">
+          <span className="inline-block max-w-full text-[11px] font-semibold leading-snug text-[#167c73]">
             {t("bill.received_customer")}
           </span>
         ) : (
@@ -2886,16 +3015,16 @@ function ChargeItemRow({
         )}
       </td>
       {!isLocked && (
-        <td className="no-print px-2 py-3">
+        <td className="no-print px-2 py-2">
           {nested ? null : (
             <div className="flex items-center justify-end gap-1">
               {canWarranty && item.type !== "discount" && (
                 <button type="button" onClick={() => onEditWarranty?.(item)} className="text-[#167c73]" title={item.warranty_until ? t("warranty.edit") : t("warranty.add")}>
-                  <ShieldCheck size={16} />
+                  <ShieldCheck size={14} />
                 </button>
               )}
               <button type="button" onClick={() => onRemove(item.id)} className="text-[#b84837]" title={t("bill.remove_item")}>
-                <Trash2 size={16} />
+                <Trash2 size={14} />
               </button>
             </div>
           )}
@@ -2907,19 +3036,12 @@ function ChargeItemRow({
 
 function BillItemDescription({ item }: { item: { description: string; included_services?: string[] | null; warranty_months?: number | null; warranty_starts_on?: string | null; warranty_until?: string | null } }) {
   const t = useT();
-  const { title, inclusions } = billLinePresentation(item);
+  const { title } = billLinePresentation(item);
   const warranty = warrantyLabel(item.warranty_months, item.warranty_until, item.warranty_starts_on, t);
   return (
     <>
-      <p className="font-semibold">{title}</p>
-      {warranty && <p className="mt-1 text-[11px] font-semibold uppercase text-[#167c73] print:text-[#20221f]">{warranty}</p>}
-      {inclusions.length > 0 && (
-        <ul className="mt-1.5 space-y-0.5 text-xs font-normal text-[#6f746e]">
-          {inclusions.map((name) => (
-            <li key={name} className="pl-0.5">– {name}</li>
-          ))}
-        </ul>
-      )}
+      <p className="text-[13px] font-semibold leading-snug">{title}</p>
+      {warranty && <p className="mt-0.5 text-[10px] font-semibold uppercase text-[#167c73] print:text-[#20221f]">{warranty}</p>}
     </>
   );
 }

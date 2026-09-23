@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
-import { ArrowRight, ClipboardPlus, Hammer, Search, Wrench, X, Zap } from "lucide-react";
+import { ArrowRight, ClipboardPlus, Hammer, Percent, Search, Wrench, X, Zap } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
 import { api, currentFeatures, currentUser, formatDate, money } from "@/lib/api";
@@ -144,6 +144,14 @@ export default function BillsPage() {
                 className="flex h-8 items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-[11px] font-semibold hover:border-[#167c73]"
               >
                 <Wrench size={14} /><span className="hidden sm:inline">{profile.type === "paint" ? t("bills.paint_packages") : t("bills.service_addons")}</span>
+              </Link>
+              )}
+              {(profile.type === "garage" || profile.type === "paint") && (
+              <Link
+                href="/discount-types"
+                className="flex h-8 items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-[11px] font-semibold hover:border-[#167c73]"
+              >
+                <Percent size={14} /><span className="hidden sm:inline">{t("bills.discount_types")}</span>
               </Link>
               )}
             </>

@@ -45,6 +45,21 @@ type CustomerDetail = CustomerMatch & {
 type JobKind = "repair" | "service";
 type EmployeeOption = { id: number; name: string; position?: string | null };
 
+const JOB_KIND_STORAGE_KEY = "garage_admit_job_kind";
+
+function todayIsoDate() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+function readStoredJobKind(): JobKind | null {
+  if (typeof window === "undefined") return null;
+  const stored = localStorage.getItem(JOB_KIND_STORAGE_KEY);
+  return stored === "repair" || stored === "service" ? stored : null;
+}
+
 export default function AdmitVehiclePage() {
   const router = useRouter();
   const t = useT();
@@ -83,13 +98,23 @@ export default function AdmitVehiclePage() {
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
   const [customerVehicles, setCustomerVehicles] = useState<CustomerDetail["vehicles"]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
-  const [jobKind, setJobKind] = useState<JobKind>("repair");
+  const [jobKind, setJobKind] = useState<JobKind>(() => readStoredJobKind() ?? "repair");
+  const [admissionDate, setAdmissionDate] = useState(todayIsoDate);
   const [canRepair, setCanRepair] = useState(true);
   const [canService, setCanService] = useState(true);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [employeeIds, setEmployeeIds] = useState<number[]>([]);
   const [canAssignEmployees, setCanAssignEmployees] = useState(false);
   const phoneBoxRef = useRef<HTMLLabelElement>(null);
+
+  function chooseJobKind(next: JobKind) {
+    setJobKind(next);
+    try {
+      localStorage.setItem(JOB_KIND_STORAGE_KEY, next);
+    } catch {
+      /* ignore */
+    }
+  }
 
   useEffect(() => {
     const features = currentFeatures();
@@ -98,8 +123,17 @@ export default function AdmitVehiclePage() {
     const service = allowsServiceJobs(profile.type, features);
     setCanRepair(repair);
     setCanService(service);
-    if (repair && !service) setJobKind("repair");
-    if (service && !repair) setJobKind("service");
+    if (repair && !service) {
+      chooseJobKind("repair");
+      return;
+    }
+    if (service && !repair) {
+      chooseJobKind("service");
+      return;
+    }
+    const stored = readStoredJobKind();
+    if (stored === "repair" && repair) chooseJobKind("repair");
+    else if (stored === "service" && service) chooseJobKind("service");
   }, [profile.type]);
 
   useEffect(() => {
@@ -182,7 +216,12 @@ export default function AdmitVehiclePage() {
     try {
       const bill = await api<{ id: number }>("/bills/from-vehicle", {
         method: "POST",
-        body: JSON.stringify({ vehicle_id: vehicleId, job_kind: jobKind, employee_ids: employeeIds }),
+        body: JSON.stringify({
+          vehicle_id: vehicleId,
+          job_kind: jobKind,
+          admission_date: admissionDate,
+          employee_ids: employeeIds,
+        }),
       });
       router.push(`/bills/${bill.id}`);
     } catch (caught) {
@@ -201,6 +240,8 @@ export default function AdmitVehiclePage() {
       customer_name: customerName,
       customer_phone: customerPhone,
       customer_address: customerAddress,
+      job_kind: jobKind,
+      admission_date: admissionDate,
       employee_ids: employeeIds,
     };
     if (isDevice) payload.asset_kind = "device";
@@ -272,37 +313,56 @@ export default function AdmitVehiclePage() {
         </Panel>
 
         <Panel className="p-5">
-          <h2 className="font-display text-2xl font-semibold uppercase">{t("admit.job_type")}</h2>
-          <p className="mt-1 text-sm text-[#6f746e]">
-            {isPaint
-              ? t("admit.job_type_hint_paint")
-              : isGarage && !(canRepair && canService)
-                ? (canService ? "Every new admission is a service job." : "Every new admission is a repair job.")
-                : t("admit.job_type_hint")}
-          </p>
-          {(!isGarage || (canRepair && canService)) ? (
-          <div className="mt-4 grid max-w-md grid-cols-2 gap-2">
-            {([
-              ["repair", isPaint ? t("admit.panel_work") : t("admit.repair")],
-              ["service", isPaint ? t("admit.paint_package") : t("admit.service")],
-            ] as const).map(([value, label]) => {
-              const selected = jobKind === value;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setJobKind(value)}
-                  className={`h-8 border text-[11px] font-semibold ${
-                    selected
-                      ? "border-[#20221f] bg-[#20221f] text-white"
-                      : "border-[#d7d3c8] bg-white hover:border-[#20221f]"
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <h2 className="font-display text-2xl font-semibold uppercase">{t("admit.job_type")}</h2>
+              <p className="mt-1 text-sm text-[#6f746e]">
+                {isPaint
+                  ? t("admit.job_type_hint_paint")
+                  : isGarage && !(canRepair && canService)
+                    ? (canService ? "Every new admission is a service job." : "Every new admission is a repair job.")
+                    : t("admit.job_type_hint")}
+              </p>
+            </div>
+            <label className="block text-[10px] font-bold uppercase text-[#6f746e]">
+              {t("admit.job_date")}
+              <input
+                type="date"
+                value={admissionDate}
+                max={todayIsoDate()}
+                onChange={(event) => setAdmissionDate(event.target.value || todayIsoDate())}
+                className={`${inputClass} mt-1 w-auto min-w-40 font-normal normal-case`}
+              />
+            </label>
           </div>
+          {(!isGarage || (canRepair && canService)) ? (
+            <div
+              className="mt-4 inline-flex max-w-md overflow-hidden border border-[#20221f] bg-white p-0.5"
+              role="group"
+              aria-label={t("admit.job_type")}
+            >
+              {([
+                ["repair", isPaint ? t("admit.panel_work") : t("admit.repair")],
+                ["service", isPaint ? t("admit.paint_package") : t("admit.service")],
+              ] as const).map(([value, label]) => {
+                const selected = jobKind === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => chooseJobKind(value)}
+                    className={`h-9 min-w-28 flex-1 px-4 text-[11px] font-bold uppercase transition ${
+                      selected
+                        ? "bg-[#20221f] text-white"
+                        : "bg-transparent text-[#20221f] hover:bg-[#f7f5ef]"
+                    }`}
+                    aria-pressed={selected}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
           ) : (
             <p className="mt-4 text-sm font-semibold">{canService ? t("admit.service") : t("admit.repair")}</p>
           )}
