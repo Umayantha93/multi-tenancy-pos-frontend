@@ -158,6 +158,10 @@ export default function BillDetailPage() {
   const [selectedDiscountTypeId, setSelectedDiscountTypeId] = useState("");
   const [lineDiscountPercent, setLineDiscountPercent] = useState("");
   const [addonQty, setAddonQty] = useState("1");
+  const [serviceCustom, setServiceCustom] = useState(false);
+  const [customServiceName, setCustomServiceName] = useState("");
+  const [customServicePrice, setCustomServicePrice] = useState("");
+  const [addingCustomService, setAddingCustomService] = useState(false);
   const [itemQty, setItemQty] = useState("1");
   const [itemSerials, setItemSerials] = useState("");
   const [addingAddonId, setAddingAddonId] = useState<number | null>(null);
@@ -446,6 +450,9 @@ export default function BillDetailPage() {
     setPartQuery("");
     setOutsidePart(false);
     setCustomerPart(false);
+    setServiceCustom(false);
+    setCustomServiceName("");
+    setCustomServicePrice("");
     setError("");
     setItemQty("1");
     setAddonQty("1");
@@ -955,6 +962,39 @@ export default function BillDetailPage() {
       setError(caught instanceof Error ? caught.message : t("bill.err_service"));
     } finally {
       setAddingAddonId(null);
+    }
+  }
+
+  async function addCustomService(event?: FormEvent) {
+    event?.preventDefault();
+    if (isLocked) return;
+    const description = customServiceName.trim();
+    const unitPrice = Number(customServicePrice);
+    const quantity = Math.max(1, Number(addonQty) || 1);
+    if (!description || !Number.isFinite(unitPrice) || unitPrice < 0) {
+      setError(t("bill.custom_service_required"));
+      return;
+    }
+    setError("");
+    setAddingCustomService(true);
+    try {
+      await api(`/bills/${id}/items`, {
+        method: "POST",
+        body: JSON.stringify({
+          type: "labor",
+          description,
+          unit_price: unitPrice,
+          quantity,
+        }),
+      });
+      load();
+      setCustomServiceName("");
+      setCustomServicePrice("");
+      setAddonQty("1");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t("bill.err_service"));
+    } finally {
+      setAddingCustomService(false);
     }
   }
 
@@ -2240,6 +2280,15 @@ export default function BillDetailPage() {
                         </select>
                       </label>
                     )}
+                    <label className="flex cursor-pointer items-center gap-2 border border-[#d7d3c8] bg-[#fbfaf6] px-2.5 py-2">
+                      <input
+                        type="checkbox"
+                        checked={serviceCustom}
+                        onChange={(event) => setServiceCustom(event.target.checked)}
+                        className="size-4 accent-[#167c73]"
+                      />
+                      <span className="text-[10px] font-bold uppercase">{t("bill.custom_item")}</span>
+                    </label>
                     <label className="block text-xs font-bold uppercase">
                       {t("common.quantity")}
                       <input
@@ -2251,36 +2300,73 @@ export default function BillDetailPage() {
                         className={`${inputClass} mt-2`}
                       />
                     </label>
-                    <p className="text-xs font-bold uppercase">{isPaint ? t("bill.packages") : t("bill.services")}</p>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {visibleAddons.map((addon) => {
-                        const busy = addingAddonId === addon.id;
-                        return (
-                          <button
-                            key={addon.id}
-                            type="button"
-                            disabled={Boolean(addingAddonId) || (!isPaint && !serviceClassId)}
-                            onClick={() => addAddon(addon)}
-                            className={`min-h-16 border px-2 py-2 text-left ${
-                              addon.is_full_service
-                                ? "border-[#167c73] bg-[#167c73] text-white hover:bg-[#12665f]"
-                                : "border-[#d7d3c8] bg-[#fbfaf6] hover:border-[#20221f]"
-                            } disabled:opacity-50`}
-                          >
-                            <span className="block text-[10px] font-bold uppercase leading-tight">{addon.name}</span>
-                            <span className={`mt-1 block text-xs tabular-nums ${addon.is_full_service ? "text-white/80" : "text-[#6f746e]"}`}>
-                              {busy ? t("bill.adding") : money(addon.price)}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {visibleAddons.length === 0 && (
-                      <p className="text-sm text-[#6f746e]">
-                        {isPaint
-                          ? t("bill.no_packages")
-                          : (!serviceClassId ? t("bill.pick_vehicle_type") : t("bill.no_services"))}
-                      </p>
+                    {serviceCustom ? (
+                      <form onSubmit={addCustomService} className="space-y-3">
+                        <p className="text-xs text-[#6f746e]">{t("bill.custom_service_hint")}</p>
+                        <label className="block text-xs font-bold uppercase">
+                          {t("common.description")}
+                          <input
+                            value={customServiceName}
+                            onChange={(event) => setCustomServiceName(event.target.value)}
+                            className={`${inputClass} mt-2`}
+                            placeholder={t("bill.custom_item_placeholder")}
+                            autoComplete="off"
+                          />
+                        </label>
+                        <label className="block text-xs font-bold uppercase">
+                          {t("common.amount")}
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={customServicePrice}
+                            onChange={(event) => setCustomServicePrice(event.target.value)}
+                            className={`${inputClass} mt-2`}
+                            placeholder="0.00"
+                          />
+                        </label>
+                        <button
+                          type="submit"
+                          disabled={addingCustomService || isLocked}
+                          className={`${buttonClass} w-full`}
+                        >
+                          {addingCustomService ? t("bill.adding") : t("bill.add_to_bill")}
+                        </button>
+                      </form>
+                    ) : (
+                      <>
+                        <p className="text-xs font-bold uppercase">{isPaint ? t("bill.packages") : t("bill.services")}</p>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {visibleAddons.map((addon) => {
+                            const busy = addingAddonId === addon.id;
+                            return (
+                              <button
+                                key={addon.id}
+                                type="button"
+                                disabled={Boolean(addingAddonId) || (!isPaint && !serviceClassId)}
+                                onClick={() => addAddon(addon)}
+                                className={`min-h-16 border px-2 py-2 text-left ${
+                                  addon.is_full_service
+                                    ? "border-[#167c73] bg-[#167c73] text-white hover:bg-[#12665f]"
+                                    : "border-[#d7d3c8] bg-[#fbfaf6] hover:border-[#20221f]"
+                                } disabled:opacity-50`}
+                              >
+                                <span className="block text-[10px] font-bold uppercase leading-tight">{addon.name}</span>
+                                <span className={`mt-1 block text-xs tabular-nums ${addon.is_full_service ? "text-white/80" : "text-[#6f746e]"}`}>
+                                  {busy ? t("bill.adding") : money(addon.price)}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {visibleAddons.length === 0 && (
+                          <p className="text-sm text-[#6f746e]">
+                            {isPaint
+                              ? t("bill.no_packages")
+                              : (!serviceClassId ? t("bill.pick_vehicle_type") : t("bill.no_services"))}
+                          </p>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
