@@ -28,7 +28,8 @@ export default function ProfilePage() {
   const canShortBills = tenant?.business_type === "garage" || tenant?.business_type === "paint";
   const billLocked = Boolean(tenant?.bill_number_locked || tenant?.bill_number_locked_at);
   const previewPrefix = (billPrefix || tenant?.bill_prefix || "BILL").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12) || "BILL";
-  const previewNext = `${previewPrefix}-${String((Number(tenant?.bill_sequence) || 0) + 1).padStart(4, "0")}`;
+  const shopCode = String(tenant?.id ?? 0).padStart(2, "0");
+  const previewNext = `${previewPrefix}-${shopCode}-${String((Number(tenant?.bill_sequence) || 0) + 1).padStart(4, "0")}`;
 
   async function saveBusiness(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -78,7 +79,7 @@ export default function ProfilePage() {
       setBillPrefix(updated.bill_prefix ?? prefix);
       const token = localStorage.getItem("garage_token");
       if (token) storeSession(token, next, currentFeatures());
-      setNotice(`Bill numbers locked. Next bill: ${updated.next_bill_number ?? `${prefix}-0001`}.`);
+      setNotice(`Bill numbers locked. Next bill: ${updated.next_bill_number ?? `${prefix}-${String(tenant?.id ?? 0).padStart(2, "0")}-0001`}.`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not lock bill numbers.");
     } finally {
@@ -155,7 +156,7 @@ export default function ProfilePage() {
               <div className="border border-[#d7d3c8] bg-[#fbfaf6] p-4">
                 <p className="text-xs font-bold uppercase">Bill numbers</p>
                 <p className="mt-1 text-sm text-[#6f746e]">
-                  Short numbers like {previewNext}. Unique to this shop. After you confirm, only super-admin can unlock.
+                  Short numbers like {previewNext}. Prefix can match another shop — your tenant id sits in the middle so numbers stay unique. After you confirm, only super-admin can unlock.
                 </p>
                 <label className="mt-3 block text-xs font-bold uppercase">
                   Prefix

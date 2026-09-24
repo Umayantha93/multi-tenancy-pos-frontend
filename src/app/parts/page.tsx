@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { Boxes, Download, Loader2, PackagePlus, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
+import { Boxes, Download, Loader2, PackagePlus, Pencil, Plus, Search, TableProperties, Trash2, Upload, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { BulkRestockSheet } from "@/components/bulk-restock-sheet";
 import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel, SuccessMessage } from "@/components/ui";
 import { API_URL, api, currentFeatures, currentUser, mediaUrl, money } from "@/lib/api";
 import { useBusinessProfile } from "@/lib/use-business-profile";
@@ -69,6 +70,8 @@ export default function PartsPage() {
   const [pendingDelete, setPendingDelete] = useState<Part | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [bulkRestockOpen, setBulkRestockOpen] = useState(false);
+  const [restockFree, setRestockFree] = useState(false);
   const [importPayment, setImportPayment] = useState("paid");
   const [importDue, setImportDue] = useState("");
   const [importSupplierId, setImportSupplierId] = useState("");
@@ -168,6 +171,7 @@ export default function PartsPage() {
   function openRestock(part: Part) {
     setSelected(part);
     setStockUnit(normalizeStockUnit(part.stock_unit, isPaint));
+    setRestockFree(false);
     setMode("restock");
     setError("");
     setNotice("");
@@ -288,7 +292,11 @@ export default function PartsPage() {
     if (serials.length) {
       payload.quantity = String(serials.length);
     }
-    if (!payload.due_date || payload.payment_status !== "credit") {
+    if (restockFree) {
+      payload.unit_cost = "0";
+      payload.payment_status = "paid";
+      delete payload.due_date;
+    } else if (!payload.due_date || payload.payment_status !== "credit") {
       delete payload.due_date;
     }
     if (!payload.supplier_id) {
@@ -304,9 +312,13 @@ export default function PartsPage() {
     try {
       await api(`/parts/${selected.id}/restock`, {
         method: "POST",
-        body: JSON.stringify(serials.length ? { ...payload, serials } : payload),
+        body: JSON.stringify({
+          ...(serials.length ? { ...payload, serials } : payload),
+          ...(restockFree ? { is_free: true } : {}),
+        }),
       });
       form.reset();
+      setRestockFree(false);
       setMode(null);
       setSelected(null);
       load(search, 1);
@@ -349,6 +361,17 @@ export default function PartsPage() {
       eyebrow={`${parts.length} catalog items${isPaint ? " · millilitres" : ""}`}
       action={admin ? (
         <div className="flex flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setBulkRestockOpen(true);
+              setError("");
+              setNotice("");
+            }}
+            className="flex h-8 items-center gap-2 border border-[#167c73] bg-white px-2.5 text-[11px] font-semibold text-[#167c73]"
+          >
+            <TableProperties size={16} /><span className="hidden sm:inline">Bulk restock</span>
+          </button>
           <button
             type="button"
             onClick={downloadTemplate}
@@ -701,8 +724,19 @@ export default function PartsPage() {
             <div className="space-y-4 p-5">
               <p className="text-sm text-[#6f746e]">
                 Adding stock for <strong>{selected.name}</strong> (now {formatStockQty(selected.stock_qty, selected.stock_unit, isPaint)} @ cost {selected.cost_price || "0"}).
-                New unit cost is blended as a weighted average with existing stock. The purchase expense still uses this restock’s unit cost × qty. Paid hits finance now; credit stays as a payable until settled.
+                {restockFree
+                  ? " Free / gift stock: no purchase expense; average cost blends with unit cost 0."
+                  : " New unit cost is blended as a weighted average with existing stock. The purchase expense still uses this restock’s unit cost × qty. Paid hits finance now; credit stays as a payable until settled."}
               </p>
+              <label className="flex items-center gap-2 text-sm font-semibold">
+                <input
+                  type="checkbox"
+                  checked={restockFree}
+                  onChange={(event) => setRestockFree(event.target.checked)}
+                  className="size-4 accent-[#167c73]"
+                />
+                Free / gift from supplier (no cost)
+              </label>
               <label className="block text-xs font-bold uppercase">
                 Quantity to add{isPaint ? " (ML)" : isGarage ? ` (${stockUnitLabel(selected.stock_unit)})` : ""}
                 <input
@@ -730,7 +764,20 @@ export default function PartsPage() {
               )}
               <label className="block text-xs font-bold uppercase">
                 Unit cost
-                <input name="unit_cost" type="number" min="0" step="0.01" defaultValue={selected.cost_price || ""} className={`${inputClass} mt-2`} />
+                <input
+                  name="unit_cost"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  key={restockFree ? "free-cost" : `cost-${selected.id}`}
+                  defaultValue={restockFree ? "0" : (selected.cost_price || "")}
+                  disabled={restockFree}
+                  className={`${inputClass} mt-2 disabled:bg-[#eeece5]`}
+                />
+              </label>
+              <label className="block text-xs font-bold uppercase">
+                Selling price
+                <input name="price" type="number" min="0" step="0.01" defaultValue={selected.price || ""} className={`${inputClass} mt-2`} />
               </label>
               {suppliers.length > 0 && (
                 <label className="block text-xs font-bold uppercase">
@@ -750,14 +797,20 @@ export default function PartsPage() {
               )}
               <label className="block text-xs font-bold uppercase">
                 Supplier payment
-                <select name="payment_status" className={`${inputClass} mt-2`} defaultValue="paid">
+                <select
+                  name="payment_status"
+                  className={`${inputClass} mt-2 disabled:bg-[#eeece5]`}
+                  defaultValue="paid"
+                  disabled={restockFree}
+                  key={restockFree ? "pay-free" : "pay-normal"}
+                >
                   <option value="paid">Paid now</option>
                   <option value="credit">Buy on credit</option>
                 </select>
               </label>
               <label className="block text-xs font-bold uppercase">
                 Supplier due date (credit only)
-                <input name="due_date" type="date" className={`${inputClass} mt-2`} />
+                <input name="due_date" type="date" disabled={restockFree} className={`${inputClass} mt-2 disabled:bg-[#eeece5]`} />
               </label>
               <label className="block text-xs font-bold uppercase">
                 Expense date
@@ -824,6 +877,18 @@ export default function PartsPage() {
           </div>
         </div>
       )}
+      <BulkRestockSheet
+        open={bulkRestockOpen}
+        onClose={() => setBulkRestockOpen(false)}
+        onDone={(count) => {
+          setNotice(`Restocked ${count} line${count === 1 ? "" : "s"}.`);
+          load(search, page);
+        }}
+        suppliers={suppliers}
+        isGarage={isGarage}
+        isPaint={isPaint}
+        canSerial={canSerial}
+      />
       <ConfirmModal
         open={Boolean(pendingDelete)}
         title={`Delete ${itemNoun}`}

@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Plus, Save, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
+import { ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
 import { api, currentFeatures, currentUser, money } from "@/lib/api";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 import { allowsServiceJobs } from "@/lib/business-profiles";
@@ -32,6 +32,7 @@ export default function ServiceAddonsPage() {
   const [selectedClassId, setSelectedClassId] = useState("");
   const [addons, setAddons] = useState<ServiceAddon[]>([]);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fullPrice, setFullPrice] = useState("");
@@ -114,8 +115,9 @@ export default function ServiceAddonsPage() {
     event.preventDefault();
     if (!isOwner || !newClassName.trim()) return;
     setError("");
+    setNotice("");
     try {
-      const created = await api<VehicleClass>("/service-vehicle-classes", {
+      const created = await api<VehicleClass & { services_copied?: number }>("/service-vehicle-classes", {
         method: "POST",
         body: JSON.stringify({ name: newClassName.trim() }),
       });
@@ -126,6 +128,9 @@ export default function ServiceAddonsPage() {
       setLoading(true);
       try {
         await loadAddons(String(created.id));
+        if ((created.services_copied ?? 0) > 0) {
+          setNotice("Services copied from an existing type — set prices for this vehicle type.");
+        }
       } finally {
         setLoading(false);
       }
@@ -264,13 +269,14 @@ export default function ServiceAddonsPage() {
         <p className="mb-5 text-sm text-[#6f746e]">Only the owner can add, price, or remove these buttons.</p>
       )}
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
+      {notice && <div className="mb-5"><SuccessMessage message={notice} /></div>}
 
       {usesClasses && (
         <Panel className="mb-5 p-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 className="font-display text-xl font-semibold uppercase">Vehicle type</h2>
-              <p className="mt-1 text-sm text-[#6f746e]">Car, van, bus — each type has its own service prices and Full service package.</p>
+              <p className="mt-1 text-sm text-[#6f746e]">Car, van, bus — each type has its own prices. New types copy service names automatically; set prices after adding.</p>
             </div>
             {isOwner && (
               <form onSubmit={createClass} className="flex flex-wrap items-center gap-2">
