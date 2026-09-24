@@ -2,8 +2,8 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Boxes, Download, Loader2, PackagePlus, Pencil, Plus, Search, TableProperties, Trash2, Upload, X } from "lucide-react";
+import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
-import { BulkRestockSheet } from "@/components/bulk-restock-sheet";
 import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel, SuccessMessage } from "@/components/ui";
 import { API_URL, api, currentFeatures, currentUser, mediaUrl, money } from "@/lib/api";
 import { useBusinessProfile } from "@/lib/use-business-profile";
@@ -70,7 +70,6 @@ export default function PartsPage() {
   const [pendingDelete, setPendingDelete] = useState<Part | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [bulkRestockOpen, setBulkRestockOpen] = useState(false);
   const [restockFree, setRestockFree] = useState(false);
   const [importPayment, setImportPayment] = useState("paid");
   const [importDue, setImportDue] = useState("");
@@ -361,17 +360,12 @@ export default function PartsPage() {
       eyebrow={`${parts.length} catalog items${isPaint ? " · millilitres" : ""}`}
       action={admin ? (
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setBulkRestockOpen(true);
-              setError("");
-              setNotice("");
-            }}
+          <Link
+            href="/parts/bulk-restock"
             className="flex h-8 items-center gap-2 border border-[#167c73] bg-white px-2.5 text-[11px] font-semibold text-[#167c73]"
           >
             <TableProperties size={16} /><span className="hidden sm:inline">Bulk restock</span>
-          </button>
+          </Link>
           <button
             type="button"
             onClick={downloadTemplate}
@@ -877,18 +871,6 @@ export default function PartsPage() {
           </div>
         </div>
       )}
-      <BulkRestockSheet
-        open={bulkRestockOpen}
-        onClose={() => setBulkRestockOpen(false)}
-        onDone={(count) => {
-          setNotice(`Restocked ${count} line${count === 1 ? "" : "s"}.`);
-          load(search, page);
-        }}
-        suppliers={suppliers}
-        isGarage={isGarage}
-        isPaint={isPaint}
-        canSerial={canSerial}
-      />
       <ConfirmModal
         open={Boolean(pendingDelete)}
         title={`Delete ${itemNoun}`}

@@ -31,6 +31,13 @@ type Bill = {
   vehicle: { number_plate: string; make?: string; model?: string } | null;
 };
 
+function billJobKindClass(bill: Bill, type: string): string {
+  if (usesStoreCounter(type)) return "bg-[#eeece5] text-[#6f746e]";
+  if (bill.job_kind === "service") return "bg-[#4c51bf] text-white";
+  if (bill.job_kind === "parts_sale") return "bg-[#2f855a] text-white";
+  return "bg-[#c2581c] text-white";
+}
+
 function billJobKindLabel(bill: Bill, type: string, t: ReturnType<typeof useT>): string | null {
   if (!(type === "garage" || type === "paint" || usesStoreCounter(type))) return null;
   if (usesStoreCounter(type)) {
@@ -237,7 +244,7 @@ export default function BillsPage() {
                   </div>
                   <div className="mt-3 flex items-end justify-between gap-3">
                     {kind ? (
-                      <span className="bg-[#eeece5] px-2 py-1 text-[10px] font-bold uppercase text-[#6f746e]">{kind}</span>
+                      <span className={`px-2 py-1 text-[10px] font-bold uppercase ${billJobKindClass(bill, profile.type)}`}>{kind}</span>
                     ) : <span />}
                     <p className={`text-right text-lg font-semibold ${urgent ? "text-[#b84837]" : ""}`}>{money(bill.balance_due)}</p>
                   </div>
@@ -272,7 +279,7 @@ export default function BillsPage() {
                     <td>{formatDate(bill.admission_date)}</td>
                     <td>
                       {kind ? (
-                        <span className="px-2 py-1 text-[10px] font-bold uppercase bg-[#eeece5] text-[#6f746e]">
+                        <span className={`px-2 py-1 text-[10px] font-bold uppercase ${billJobKindClass(bill, profile.type)}`}>
                           {kind}
                         </span>
                       ) : "—"}
