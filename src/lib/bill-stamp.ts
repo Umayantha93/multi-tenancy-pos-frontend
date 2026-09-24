@@ -16,6 +16,15 @@ export function billStamp(bill: {
   return "quote";
 }
 
+export function billNetTotal(bill: {
+  amount_paid: string | number | null;
+  balance_due: string | number | null;
+  customer_balance?: string | number | null;
+}): number {
+  const total = Number(bill.amount_paid ?? 0) + Number(bill.balance_due ?? 0) - Number(bill.customer_balance ?? 0);
+  return Math.max(0, Math.round(total * 100) / 100);
+}
+
 export function latestPaymentAt(payments: Array<{ paid_at: string }>): string | null {
   if (!payments.length) return null;
   return [...payments].sort((a, b) => a.paid_at.localeCompare(b.paid_at)).at(-1)?.paid_at ?? null;

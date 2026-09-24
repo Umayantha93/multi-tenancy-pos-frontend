@@ -105,6 +105,8 @@ export default function AdmitVehiclePage() {
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [employeeIds, setEmployeeIds] = useState<number[]>([]);
   const [canAssignEmployees, setCanAssignEmployees] = useState(false);
+  const [driverName, setDriverName] = useState("");
+  const [driverPhone, setDriverPhone] = useState("");
   const phoneBoxRef = useRef<HTMLLabelElement>(null);
 
   function chooseJobKind(next: JobKind) {
@@ -221,6 +223,8 @@ export default function AdmitVehiclePage() {
           job_kind: jobKind,
           admission_date: admissionDate,
           employee_ids: employeeIds,
+          driver_name: driverName.trim() || null,
+          driver_phone: driverPhone.trim() || null,
         }),
       });
       router.push(`/bills/${bill.id}`);
@@ -243,6 +247,8 @@ export default function AdmitVehiclePage() {
       job_kind: jobKind,
       admission_date: admissionDate,
       employee_ids: employeeIds,
+      driver_name: driverName.trim() || null,
+      driver_phone: driverPhone.trim() || null,
     };
     if (isDevice) payload.asset_kind = "device";
     try {
@@ -365,6 +371,29 @@ export default function AdmitVehiclePage() {
             </div>
           ) : (
             <p className="mt-4 text-sm font-semibold">{canService ? t("admit.service") : t("admit.repair")}</p>
+          )}
+          {!isDevice && (
+            <div className="mt-5 grid max-w-2xl gap-4 sm:grid-cols-2">
+              <label className="text-xs font-semibold">
+                {t("admit.driver_name")} <span className="font-normal text-[#6f746e]">{t("instant.optional")}</span>
+                <input
+                  value={driverName}
+                  onChange={(event) => setDriverName(event.target.value)}
+                  className={`${inputClass} mt-2`}
+                  autoComplete="off"
+                />
+              </label>
+              <label className="text-xs font-semibold">
+                {t("admit.driver_phone")} <span className="font-normal text-[#6f746e]">{t("instant.optional")}</span>
+                <input
+                  type="tel"
+                  value={driverPhone}
+                  onChange={(event) => setDriverPhone(event.target.value)}
+                  className={`${inputClass} mt-2`}
+                  autoComplete="off"
+                />
+              </label>
+            </div>
           )}
           {canAssignEmployees && (
             <div className="mt-5">

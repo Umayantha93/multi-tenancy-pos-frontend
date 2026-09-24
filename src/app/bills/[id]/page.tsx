@@ -10,7 +10,7 @@ import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel }
 import { api, formatDate, isMultiBranch, mediaUrl, money, SessionPayload, storeSession, Tenant } from "@/lib/api";
 import { billItemLabel, billLinePresentation, PAINT_PANEL_NAMES, profileFor, sortBillItems, usesLaborCatalog, usesServiceAddonWorkspace, usesStoreCounter, usesVehicleJobs } from "@/lib/business-profiles";
 import { warrantyLabel } from "@/lib/warranty";
-import { billStamp, billStampDateLabel, billStatusLabel, garageBillPdfTitle, latestPaymentAt } from "@/lib/bill-stamp";
+import { billNetTotal, billStamp, billStampDateLabel, billStatusLabel, garageBillPdfTitle, latestPaymentAt } from "@/lib/bill-stamp";
 import { BillStatusSeal } from "@/components/bill-status-seal";
 import { BillWatermark } from "@/components/bill-watermark";
 import { BillingBranchBanner } from "@/components/branch-chip";
@@ -66,6 +66,8 @@ type Bill = {
   amount_refunded?: string | number;
   balance_due: string;
   customer_balance?: string | number;
+  driver_name?: string | null;
+  driver_phone?: string | null;
   mileage?: number | string | null;
   next_service_mileage?: number | string | null;
   next_service_due_on?: string | null;
@@ -196,6 +198,8 @@ export default function BillDetailPage() {
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [clearingPaymentId, setClearingPaymentId] = useState<number | null>(null);
   const [mileageDraft, setMileageDraft] = useState("");
+  const [driverNameDraft, setDriverNameDraft] = useState("");
+  const [driverPhoneDraft, setDriverPhoneDraft] = useState("");
   const [nextServiceMileageDraft, setNextServiceMileageDraft] = useState("");
   const [nextServiceDueDraft, setNextServiceDueDraft] = useState("");
   const [savingMileage, setSavingMileage] = useState(false);
@@ -540,6 +544,8 @@ export default function BillDetailPage() {
     api<Bill>(`/bills/${id}`)
       .then((result) => {
         setBill(result);
+        setDriverNameDraft(result.driver_name ?? "");
+        setDriverPhoneDraft(result.driver_phone ?? "");
         setMileageDraft(result.mileage != null && result.mileage !== "" ? String(result.mileage) : "");
         setNextServiceMileageDraft(result.next_service_mileage != null && result.next_service_mileage !== "" ? String(result.next_service_mileage) : "");
         setNextServiceDueDraft(result.next_service_due_on ? String(result.next_service_due_on).slice(0, 10) : "");
@@ -1109,6 +1115,25 @@ export default function BillDetailPage() {
       );
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function saveDriver() {
+    if (isLocked || !bill) return;
+    const name = driverNameDraft.trim();
+    const phone = driverPhoneDraft.trim();
+    if (name === (bill.driver_name ?? "") && phone === (bill.driver_phone ?? "")) return;
+    setError("");
+    try {
+      const updated = await api<Bill>(`/bills/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ driver_name: name || null, driver_phone: phone || null }),
+      });
+      setBill({ ...bill, driver_name: updated.driver_name, driver_phone: updated.driver_phone });
+      setDriverNameDraft(updated.driver_name ?? "");
+      setDriverPhoneDraft(updated.driver_phone ?? "");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t("bill.err_driver"));
     }
   }
 
@@ -1693,7 +1718,7 @@ export default function BillDetailPage() {
       <BillWatermark src={printWithLogo ? logoUrl : null} printOnly />
 
       <div className="grid min-w-0 items-start gap-3 xl:grid-cols-[1.55fr_0.75fr] print:block print:space-y-2">
-        <div className={`min-w-0 space-y-3 print:space-y-2 ${!isClosed && floorPane !== "work" ? "hidden" : "block"} xl:block`}>
+        <div className={`min-w-0 space-y-3 print:space-y-2 ${!isClosed && floorPane !== "work" ? "hidden" : "block"} xl:block print:block`}>
           <Panel className="bill-letterhead overflow-hidden p-2.5 sm:p-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="flex min-w-0 items-start gap-2.5">
@@ -1748,6 +1773,33 @@ export default function BillDetailPage() {
                 )}
                 {bill.customer?.address && (
                   <p className="mt-0.5 text-[10px] leading-tight text-[#6f746e]">{bill.customer.address}</p>
+                )}
+                {bill.vehicle && (bill.driver_name || bill.driver_phone) && (
+                  <p className={`mt-1 text-[11px] leading-tight ${!isLocked ? "hidden print:block" : ""}`}>
+                    <span className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{t("bill.driver")} </span>
+                    {[bill.driver_name, bill.driver_phone].filter(Boolean).join(" · ")}
+                  </p>
+                )}
+                {bill.vehicle && !isLocked && (
+                  <div className="no-print mt-1.5 grid max-w-[15rem] grid-cols-2 gap-1">
+                    <input
+                      value={driverNameDraft}
+                      onChange={(event) => setDriverNameDraft(event.target.value)}
+                      onBlur={() => void saveDriver()}
+                      className="h-6 w-full border border-[#c9c5b9] bg-white px-1.5 text-[10px] outline-none focus:border-[#167c73]"
+                      placeholder={t("admit.driver_name")}
+                      aria-label={t("admit.driver_name")}
+                    />
+                    <input
+                      type="tel"
+                      value={driverPhoneDraft}
+                      onChange={(event) => setDriverPhoneDraft(event.target.value)}
+                      onBlur={() => void saveDriver()}
+                      className="h-6 w-full border border-[#c9c5b9] bg-white px-1.5 text-[10px] outline-none focus:border-[#167c73]"
+                      placeholder={t("admit.driver_phone")}
+                      aria-label={t("admit.driver_phone")}
+                    />
+                  </div>
                 )}
               </div>
               {bill.vehicle ? (
@@ -2224,7 +2276,7 @@ export default function BillDetailPage() {
 
         </div>
 
-        <div className={`space-y-3 print:mt-2 ${!isClosed && floorPane !== "pay" ? "hidden" : "block"} xl:block`}>
+        <div className={`space-y-3 print:mt-2 ${!isClosed && floorPane !== "pay" ? "hidden" : "block"} xl:block print:block`}>
           {!isClosed && (
           <Panel className="no-print xl:sticky xl:top-3">
             {!isOweIn && (
@@ -3041,6 +3093,10 @@ export default function BillDetailPage() {
               {Number(bill.sscl_amount) > 0 && (
                 <div className="flex justify-between gap-6"><span>{t("bill.sscl")} {bill.sscl_rate ? `(${bill.sscl_rate}%)` : ""}</span><strong className="tabular-nums">{money(bill.sscl_amount ?? 0)}</strong></div>
               )}
+              <div className="flex justify-between gap-6 border-t border-[#e2ded4] pt-3 text-base font-semibold">
+                <span>{t("common.total")}</span>
+                <strong className="tabular-nums">{money(billNetTotal(bill))}</strong>
+              </div>
               <div className="flex justify-between gap-6"><span>{t("common.paid")}</span><strong className="tabular-nums">- {money(bill.amount_paid)}</strong></div>
               <div className="flex justify-between gap-6 border-t border-[#e2ded4] pt-3">
                 <span>{t("common.due")}</span>
