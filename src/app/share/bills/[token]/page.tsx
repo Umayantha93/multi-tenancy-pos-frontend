@@ -6,7 +6,7 @@ import { Download } from "lucide-react";
 import { API_URL, formatDate, mediaUrl, money, PhoneEntry, Tenant } from "@/lib/api";
 import { billLinePresentation, sortBillItems } from "@/lib/business-profiles";
 import { warrantyLabel } from "@/lib/warranty";
-import { billStamp, billStampDateLabel, garageBillPdfTitle, latestPaymentAt } from "@/lib/bill-stamp";
+import { billNetTotal, billStamp, billStampDateLabel, garageBillPdfTitle, latestPaymentAt } from "@/lib/bill-stamp";
 import { BillStatusSeal } from "@/components/bill-status-seal";
 import { BillWatermark } from "@/components/bill-watermark";
 import { useT } from "@/lib/locale";
@@ -24,6 +24,9 @@ type SharedBill = {
   sscl_amount?: string | number | null;
   amount_paid: string | null;
   balance_due: string | null;
+  customer_balance?: string | null;
+  driver_name?: string | null;
+  driver_phone?: string | null;
   mileage?: number | string | null;
   next_service_mileage?: number | string | null;
   warranty_months?: number | null;
@@ -250,6 +253,12 @@ export default function SharedBillPage() {
             <p className="mt-1 font-semibold">{bill.customer?.name ?? t("print.customer")}</p>
             {bill.customer?.phone && <p className="text-sm text-[#6f746e]">{bill.customer.phone}</p>}
             {bill.customer?.address && <p className="mt-1 text-sm text-[#6f746e]">{bill.customer.address}</p>}
+            {(bill.driver_name || bill.driver_phone) && (
+              <p className="mt-2 text-sm">
+                <span className="text-[10px] font-bold uppercase text-[#6f746e]">{t("bill.driver")} </span>
+                {[bill.driver_name, bill.driver_phone].filter(Boolean).join(" · ")}
+              </p>
+            )}
           </div>
           {bill.vehicle && (
             <div>
@@ -362,6 +371,10 @@ export default function SharedBillPage() {
               <strong className="tabular-nums">{money(bill.sscl_amount ?? 0)}</strong>
             </div>
           )}
+          <div className="flex justify-between border-t border-[#e2ddd0] pt-2 text-base">
+            <span className="font-semibold">{t("common.total")}</span>
+            <strong className="tabular-nums">{money(billNetTotal(bill))}</strong>
+          </div>
           {paid ? (
             <>
               <div className="flex justify-between">
