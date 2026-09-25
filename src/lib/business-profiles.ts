@@ -6,6 +6,7 @@ import {
   Camera,
   ClipboardList,
   Contact,
+  Droplets,
   Fingerprint,
   Gauge,
   Package,
@@ -165,6 +166,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { key: "suppliers", name: "Suppliers", group: "Inventory" },
       { key: "purchase_orders", name: "Purchase orders", group: "Inventory" },
       { key: "part_fitment", name: "Part fitment / substitutes", group: "Inventory" },
+      { key: "station_consumables", name: "Station consumables", group: "Inventory" },
       ...sharedPeopleFinance.map((m) => m.key === "billing" ? { ...m, name: "Job cards" } : m),
       { key: "service_reminders", name: "Next-service reminders", group: "Service Intake" },
       { key: "service_ops_report", name: "Service operations report", group: "Finance" },
@@ -180,6 +182,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { href: "/parts-pos", label: "Instant bill", icon: ShoppingBag, feature: "billing" },
       billProfitsNav,
       { href: "/parts", label: "Inventory", icon: Boxes, feature: "parts_inventory" },
+      { href: "/station-use", label: "Station use", icon: Droplets, feature: "station_consumables", owner: true },
       suppliersNav,
       ...sharedNavTail,
     ],
@@ -700,7 +703,7 @@ export function optionalFeaturesFor(type?: string | null): FeatureKey[] {
     return [
       "owner_bill_sms", "service_ops_report", "job_photos", "job_videos",
       "job_board", "job_bookings", "service_reminders",
-      "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp",
+      "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp", "station_consumables",
     ];
   }
   if (type === "tyre" || type === "paint") return ["job_bookings", "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp"];
