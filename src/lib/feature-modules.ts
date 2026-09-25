@@ -39,6 +39,7 @@ const FALLBACK_GROUP: Record<string, string> = {
   purchase_orders: "Inventory",
   part_fitment: "Inventory",
   serial_inventory: "Inventory",
+  station_consumables: "Inventory",
   employees_management: "People",
   attendance: "People",
   payroll: "People",
@@ -57,6 +58,7 @@ export const FEATURE_PARENTS: Record<string, string> = {
   job_videos: "admit_vehicle",
   service_reminders: "bill_sms",
   serial_inventory: "parts_inventory",
+  station_consumables: "parts_inventory",
   bill_whatsapp: "billing",
 };
 

@@ -1742,6 +1742,7 @@ export default function BillDetailPage() {
                     <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#167c73]">{bill.branch.name}</p>
                   )}
                   <p className="mt-0.5 text-xs font-semibold text-[#20221f]">{bill.bill_number}</p>
+                  <p className="text-[10px] font-semibold text-[#20221f] print:text-[9px]">{t("print.date", { date: formatDate(bill.admission_date) })}</p>
                   <div className="mt-0.5 space-y-0 text-[10px] leading-snug text-[#6f746e] print:text-[9px]">
                     {(bill.branch?.address || tenant?.address) && <p><span className="text-[#6f746e]">{t("common.address")}:</span> {bill.branch?.address || tenant?.address}</p>}
                     {tenant?.tin && <p><span className="text-[#6f746e]">{t("common.tin")}:</span> {tenant.tin}</p>}

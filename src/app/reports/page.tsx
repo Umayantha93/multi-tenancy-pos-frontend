@@ -93,6 +93,7 @@ type ServiceOps = {
   to: string;
   jobs: number;
   addon_revenue: number;
+  addon_consumable_cost?: number;
   addon_profit: number;
   average_addons_per_job: number;
   rows: Array<{
@@ -102,6 +103,7 @@ type ServiceOps = {
     sold_qty: number;
     inside_full_service: number | null;
     revenue: number;
+    consumable_cost?: number;
     profit: number;
   }>;
 };
@@ -246,6 +248,7 @@ export default function ReportsPage() {
               {[
                 ["Jobs", String(serviceOps.jobs)],
                 ["Addon revenue", money(serviceOps.addon_revenue)],
+                ...(Number(serviceOps.addon_consumable_cost) > 0 ? [["Station tins cost", money(serviceOps.addon_consumable_cost ?? 0)]] : []),
                 ["Est. profit", money(serviceOps.addon_profit)],
                 ["Avg addons / job", String(serviceOps.average_addons_per_job)],
               ].map(([label, value]) => (
@@ -268,6 +271,7 @@ export default function ReportsPage() {
                       <th>Sold qty</th>
                       <th>Inside full svc</th>
                       <th className="text-right">Revenue</th>
+                      <th className="text-right">Tin cost</th>
                       <th className="pr-5 text-right">Est. profit</th>
                     </tr>
                   </thead>
@@ -278,7 +282,8 @@ export default function ReportsPage() {
                         <td>{row.sold_qty}</td>
                         <td>{row.inside_full_service == null ? "—" : row.inside_full_service}</td>
                         <td className="text-right tabular-nums">{money(row.revenue)}</td>
-                        <td className="pr-5 text-right tabular-nums">{money(row.profit)}</td>
+                        <td className="text-right tabular-nums text-[#6f746e]">{Number(row.consumable_cost) > 0 ? money(row.consumable_cost ?? 0) : "—"}</td>
+                        <td className={`pr-5 text-right tabular-nums ${Number(row.profit) < 0 ? "text-[#b84837]" : ""}`}>{money(row.profit)}</td>
                       </tr>
                     ))}
                   </tbody>
