@@ -82,6 +82,7 @@ export type FeatureKey =
   | "suppliers"
   | "owner_bill_sms"
   | "service_ops_report"
+  | "station_consumables"
   | "job_videos"
   | "job_photos";
 
