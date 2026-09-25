@@ -21,6 +21,8 @@ type Part = {
   model?: string;
   year?: number;
   price: string;
+  pending_price?: string | null;
+  pending_price_at_qty?: string | null;
   cost_price: string;
   stock_qty: number;
   stock_unit?: string | null;
@@ -495,6 +497,11 @@ export default function PartsPage() {
                       </p>
                     )}
                     <p className="mt-2 font-display text-lg font-semibold">{money(part.price)}</p>
+                    {part.pending_price != null && (
+                      <p className="text-[10px] font-semibold text-[#167c73]">
+                        {money(part.pending_price)} after {formatStockQty(Math.max(0, Number(part.stock_qty) - Number(part.pending_price_at_qty ?? 0)), part.stock_unit, isPaint)} more sold
+                      </p>
+                    )}
                   </div>
                 </button>
                 <div className="mt-auto flex border-t border-[#d7d3c8]">
@@ -773,6 +780,19 @@ export default function PartsPage() {
                 Selling price
                 <input name="price" type="number" min="0" step="0.01" defaultValue={selected.price || ""} className={`${inputClass} mt-2`} />
               </label>
+              {Number(selected.stock_qty) > 0 && (
+                <label className="-mt-2 flex items-start gap-2 text-xs text-[#6f746e]">
+                  <input type="checkbox" name="price_after_old_stock" value="1" defaultChecked className="mt-0.5 size-4 accent-[#167c73]" />
+                  <span>
+                    If the selling price changes, keep {money(selected.price || 0)} until the old {formatStockQty(selected.stock_qty, selected.stock_unit, isPaint)} are sold, then switch by itself.
+                  </span>
+                </label>
+              )}
+              {selected.pending_price != null && (
+                <p className="-mt-2 text-xs font-semibold text-[#167c73]">
+                  Next price {money(selected.pending_price)} is waiting for old stock to sell.
+                </p>
+              )}
               {suppliers.length > 0 && (
                 <label className="block text-xs font-bold uppercase">
                   {isGarage ? "Supplier" : "Supplier (optional)"}
