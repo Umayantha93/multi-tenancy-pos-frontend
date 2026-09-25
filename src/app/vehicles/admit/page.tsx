@@ -98,7 +98,7 @@ export default function AdmitVehiclePage() {
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
   const [customerVehicles, setCustomerVehicles] = useState<CustomerDetail["vehicles"]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
-  const [jobKind, setJobKind] = useState<JobKind>(() => readStoredJobKind() ?? "repair");
+  const [jobKind, setJobKind] = useState<JobKind>("repair");
   const [admissionDate, setAdmissionDate] = useState(todayIsoDate);
   const [canRepair, setCanRepair] = useState(true);
   const [canService, setCanService] = useState(true);

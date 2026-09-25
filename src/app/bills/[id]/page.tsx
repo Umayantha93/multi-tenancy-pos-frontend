@@ -30,8 +30,8 @@ type ServiceAddon = {
   price: string;
   is_full_service: boolean;
   active: boolean;
-  service_vehicle_class_id?: number | null;
   inclusions?: Array<{ id: number; name: string }>;
+  vehicle_prices?: Array<{ service_vehicle_class_id: number; price: string | null; offered: boolean }>;
 };
 type VehicleClassRow = {
   id: number;
@@ -51,6 +51,7 @@ type Bill = {
   share_token?: string | null;
   status: string;
   admission_date?: string | null;
+  created_at?: string | null;
   job_kind?: string | null;
   service_vehicle_class_id?: number | null;
   service_vehicle_class?: { id: number; name: string } | null;
@@ -155,7 +156,6 @@ export default function BillDetailPage() {
   const [parts, setParts] = useState<Part[]>([]);
   const [addons, setAddons] = useState<ServiceAddon[]>([]);
   const [vehicleClasses, setVehicleClasses] = useState<VehicleClassRow[]>([]);
-  const [serviceClassId, setServiceClassId] = useState("");
   const [discountTypes, setDiscountTypes] = useState<DiscountTypeRow[]>([]);
   const [selectedDiscountTypeId, setSelectedDiscountTypeId] = useState("");
   const [lineDiscountPercent, setLineDiscountPercent] = useState("");
@@ -265,11 +265,17 @@ export default function BillDetailPage() {
   const selectedType = itemTypes.find((option) => option.value === type) ?? itemTypes[0];
   const activeType = type || selectedType?.value || "labor";
   const isServiceJob = usesServiceAddonWorkspace(profile.type) && bill?.job_kind === "service";
-  const SERVICE_CLASS_STORAGE_KEY = "garage_service_vehicle_class_id";
-  const visibleAddons = useMemo(() => {
-    if (!isServiceJob || isPaint || !serviceClassId) return addons;
-    return addons.filter((addon) => String(addon.service_vehicle_class_id ?? "") === serviceClassId);
-  }, [addons, isPaint, isServiceJob, serviceClassId]);
+  const serviceClassId = bill?.service_vehicle_class_id ? String(bill.service_vehicle_class_id) : "";
+  const needsServiceClass = !isPaint && vehicleClasses.length > 0 && !serviceClassId;
+  const addonSetting = (addon: ServiceAddon) => serviceClassId
+    ? addon.vehicle_prices?.find((row) => String(row.service_vehicle_class_id) === serviceClassId) ?? null
+    : null;
+  const addonTypePrice = (addon: ServiceAddon) => {
+    const price = addonSetting(addon)?.price;
+    return price === null || price === undefined ? null : Number(price);
+  };
+  const offeredAddons = isPaint ? addons : addons.filter((addon) => addonSetting(addon)?.offered !== false);
+  const canEditServicePrice = isGarage && !isPaint;
   // Instant bills: labor = free-text custom line (not labor catalog).
   const isLaborType = activeType === "labor" && usesLaborCatalog(profile.type) && !isGarageInstant;
   const selectedLabor = useMemo(() => {
@@ -609,33 +615,9 @@ export default function BillDetailPage() {
       .catch(() => undefined);
   }, [profile.type]);
 
-  useEffect(() => {
-    if (!isServiceJob || isPaint || !bill) return;
-    const fromBill = bill.service_vehicle_class_id ? String(bill.service_vehicle_class_id) : "";
-    const stored = typeof window !== "undefined" ? localStorage.getItem(SERVICE_CLASS_STORAGE_KEY) ?? "" : "";
-    const car = vehicleClasses.find((row) => row.name.toLowerCase() === "car");
-    const next = fromBill
-      || (stored && vehicleClasses.some((row) => String(row.id) === stored) ? stored : "")
-      || (car ? String(car.id) : "")
-      || (vehicleClasses[0] ? String(vehicleClasses[0].id) : "");
-    if (next && next !== serviceClassId) {
-      setServiceClassId(next);
-    }
-    if (next && !fromBill && !isLocked) {
-      void api<Bill>(`/bills/${id}`, {
-        method: "PUT",
-        body: JSON.stringify({ service_vehicle_class_id: Number(next) }),
-      }).then((updated) => setBill(updated)).catch(() => undefined);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bill?.id, bill?.service_vehicle_class_id, vehicleClasses, isServiceJob, isPaint]);
-
   async function selectServiceClass(nextId: string) {
-    setServiceClassId(nextId);
-    if (typeof window !== "undefined") {
-      localStorage.setItem(SERVICE_CLASS_STORAGE_KEY, nextId);
-    }
     if (!id || isLocked || !nextId) return;
+    setBill((current) => (current ? { ...current, service_vehicle_class_id: Number(nextId) } : current));
     try {
       const updated = await api<Bill>(`/bills/${id}`, {
         method: "PUT",
@@ -896,6 +878,7 @@ export default function BillDetailPage() {
     } else if (payload.type === "discount" && selectedDiscountTypeId) {
       payload.discount_type_id = selectedDiscountTypeId;
     } else {
+      if (isGarageInstant && payload.type === "labor") payload.type = "service_addon";
       payload.description = String(formData.get("description") || "");
       payload.unit_price = String(formData.get("unit_price") || "");
       payload.quantity = showQuantity ? String(formData.get("quantity") || "1") : "1";
@@ -950,7 +933,7 @@ export default function BillDetailPage() {
   }
 
   async function addAddon(addon: ServiceAddon) {
-    if (isLocked) return;
+    if (isLocked || needsServiceClass) return;
     setError("");
     setAddingAddonId(addon.id);
     try {
@@ -987,7 +970,7 @@ export default function BillDetailPage() {
       await api(`/bills/${id}/items`, {
         method: "POST",
         body: JSON.stringify({
-          type: "labor",
+          type: "service_addon",
           description,
           unit_price: unitPrice,
           quantity,
@@ -1018,6 +1001,25 @@ export default function BillDetailPage() {
       load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("bill.err_hours_update"));
+    } finally {
+      setSavingLaborHours(null);
+    }
+  }
+
+  async function saveLinePrice(itemId: number, price: string) {
+    if (isLocked) return;
+    const unitPrice = Number(price);
+    if (price.trim() === "" || !Number.isFinite(unitPrice) || unitPrice < 0) {
+      setError(t("bill.err_price_invalid"));
+      return;
+    }
+    setSavingLaborHours(itemId);
+    setError("");
+    try {
+      await api(`/bills/${id}/items/${itemId}`, { method: "PUT", body: JSON.stringify({ unit_price: unitPrice }) });
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t("bill.err_price_update"));
     } finally {
       setSavingLaborHours(null);
     }
@@ -1742,7 +1744,13 @@ export default function BillDetailPage() {
                     <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#167c73]">{bill.branch.name}</p>
                   )}
                   <p className="mt-0.5 text-xs font-semibold text-[#20221f]">{bill.bill_number}</p>
-                  <p className="text-[10px] font-semibold text-[#20221f] print:text-[9px]">{t("print.date", { date: formatDate(bill.admission_date) })}</p>
+                  <p className="bill-print-date text-[10px] font-semibold text-[#20221f] print:text-[9px]">
+                    {t("print.date", {
+                      date: bill.job_kind === "parts_sale" && bill.created_at
+                        ? new Date(bill.created_at).toLocaleString(locale === "si" ? "si-LK" : "en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+                        : formatDate(bill.admission_date),
+                    })}
+                  </p>
                   <div className="mt-0.5 space-y-0 text-[10px] leading-snug text-[#6f746e] print:text-[9px]">
                     {(bill.branch?.address || tenant?.address) && <p><span className="text-[#6f746e]">{t("common.address")}:</span> {bill.branch?.address || tenant?.address}</p>}
                     {tenant?.tin && <p><span className="text-[#6f746e]">{t("common.tin")}:</span> {tenant.tin}</p>}
@@ -1993,7 +2001,9 @@ export default function BillDetailPage() {
                               isLocked={isLocked}
                               savingLaborHours={savingLaborHours}
                               onSaveHours={saveLaborHours}
+                              onSavePrice={canEditServicePrice ? saveLinePrice : undefined}
                               onRemove={remove}
+                              laborAsQty={isGarageInstant}
                               canWarranty={canWarranty}
                               onEditWarranty={setWarrantyItem}
                               hideOnPrint
@@ -2013,7 +2023,9 @@ export default function BillDetailPage() {
                         isLocked={isLocked}
                         savingLaborHours={savingLaborHours}
                         onSaveHours={saveLaborHours}
+                        onSavePrice={canEditServicePrice ? saveLinePrice : undefined}
                         onRemove={remove}
+                        laborAsQty={isGarageInstant}
                         canWarranty={canWarranty}
                         onEditWarranty={setWarrantyItem}
                         hideAmountsOnPrint={hidePrintMoney}
@@ -2326,9 +2338,7 @@ export default function BillDetailPage() {
                             <option value="">{t("bill.pick_vehicle_type")}</option>
                           )}
                           {vehicleClasses.map((row) => (
-                            <option key={row.id} value={row.id}>
-                              {row.name}
-                            </option>
+                            <option key={row.id} value={row.id}>{row.name}</option>
                           ))}
                         </select>
                       </label>
@@ -2390,13 +2400,14 @@ export default function BillDetailPage() {
                       <>
                         <p className="text-xs font-bold uppercase">{isPaint ? t("bill.packages") : t("bill.services")}</p>
                         <div className="grid grid-cols-2 gap-1.5">
-                          {visibleAddons.map((addon) => {
+                          {offeredAddons.map((addon) => {
                             const busy = addingAddonId === addon.id;
+                            const shownPrice = isPaint ? Number(addon.price) : addonTypePrice(addon);
                             return (
                               <button
                                 key={addon.id}
                                 type="button"
-                                disabled={Boolean(addingAddonId) || (!isPaint && !serviceClassId)}
+                                disabled={Boolean(addingAddonId) || needsServiceClass}
                                 onClick={() => addAddon(addon)}
                                 className={`min-h-16 border px-2 py-2 text-left ${
                                   addon.is_full_service
@@ -2405,20 +2416,22 @@ export default function BillDetailPage() {
                                 } disabled:opacity-50`}
                               >
                                 <span className="block text-[10px] font-bold uppercase leading-tight">{addon.name}</span>
-                                <span className={`mt-1 block text-xs tabular-nums ${addon.is_full_service ? "text-white/80" : "text-[#6f746e]"}`}>
-                                  {busy ? t("bill.adding") : money(addon.price)}
-                                </span>
+                                {(busy || shownPrice !== null) && (
+                                  <span className={`mt-1 block text-xs tabular-nums ${addon.is_full_service ? "text-white/80" : "text-[#6f746e]"}`}>
+                                    {busy ? t("bill.adding") : money(shownPrice ?? 0)}
+                                  </span>
+                                )}
                               </button>
                             );
                           })}
                         </div>
-                        {visibleAddons.length === 0 && (
-                          <p className="text-sm text-[#6f746e]">
-                            {isPaint
-                              ? t("bill.no_packages")
-                              : (!serviceClassId ? t("bill.pick_vehicle_type") : t("bill.no_services"))}
-                          </p>
-                        )}
+                        {offeredAddons.length === 0 ? (
+                          <p className="text-sm text-[#6f746e]">{isPaint ? t("bill.no_packages") : t("bill.no_services")}</p>
+                        ) : needsServiceClass ? (
+                          <p className="text-xs text-[#b84837]">{t("bill.pick_vehicle_type")}</p>
+                        ) : !isPaint ? (
+                          <p className="text-xs text-[#6f746e]">{t("bill.service_price_hint")}</p>
+                        ) : null}
                       </>
                     )}
                   </div>
@@ -3139,7 +3152,9 @@ function ChargeItemRow({
   isLocked,
   savingLaborHours,
   onSaveHours,
+  onSavePrice,
   onRemove,
+  laborAsQty = false,
   canWarranty = false,
   onEditWarranty,
   hideOnPrint = false,
@@ -3165,7 +3180,9 @@ function ChargeItemRow({
   isLocked: boolean;
   savingLaborHours: number | null;
   onSaveHours: (itemId: number, hours: string) => void;
+  onSavePrice?: (itemId: number, price: string) => void;
   onRemove: (itemId: number) => void;
+  laborAsQty?: boolean;
   canWarranty?: boolean;
   onEditWarranty?: (item: {
     id: number;
@@ -3187,9 +3204,10 @@ function ChargeItemRow({
 }) {
   const t = useT();
   const fromCustomer = item.type === "customer_part";
-  const isLaborLine = item.type === "labor";
+  const isLaborLine = item.type === "labor" && !laborAsQty;
   const isPartLine = item.type === "part" || fromCustomer;
-  const showQty = isPartLine || Number(item.quantity) > 1;
+  const showQty = isPartLine || item.type === "service_addon" || (item.type === "labor" && laborAsQty) || Number(item.quantity) > 1;
+  const priceEditable = Boolean(onSavePrice) && !isLocked && !nested && item.type === "service_addon";
   const hidden = nested && !visible;
   const linePct = Number(item.discount_percent ?? 0);
 
@@ -3245,6 +3263,32 @@ function ChargeItemRow({
           <>
             <span className="no-print tabular-nums">{t("common.per_hour", { amount: money(item.unit_price) })}</span>
             <span className="hidden print:inline">—</span>
+          </>
+        ) : priceEditable ? (
+          <>
+            <input
+              key={`${item.id}-${item.unit_price}`}
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              defaultValue={Number(item.unit_price)}
+              disabled={savingLaborHours === item.id}
+              onBlur={(event) => {
+                if (event.target.value !== String(Number(item.unit_price))) {
+                  onSavePrice?.(item.id, event.target.value);
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+              className={`no-print h-7 w-24 border bg-white px-1.5 text-right text-[12px] tabular-nums ${
+                Number(item.unit_price) === 0 ? "border-[#b84837]" : "border-[#c9c5b9]"
+              }`}
+              aria-label={t("common.amount")}
+            />
+            <span className={`hidden tabular-nums ${hideAmountsOnPrint ? "" : "print:inline"}`}>{money(item.unit_price)}</span>
+            {hideAmountsOnPrint && <span className="hidden print:inline">—</span>}
           </>
         ) : (
           <>

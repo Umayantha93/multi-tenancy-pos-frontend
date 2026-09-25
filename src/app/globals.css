@@ -292,6 +292,12 @@ button, a { -webkit-tap-highlight-color: transparent; }
   html.thermal-print .bill-letterhead .font-display {
     font-size: 0.95rem !important;
   }
+  html.thermal-print .bill-print-date {
+    display: block !important;
+    font-size: 10px !important;
+    font-weight: 700 !important;
+    color: #000 !important;
+  }
   html.thermal-print .bill-status-seal,
   html.thermal-print .bill-customer,
   html.thermal-print .bill-instant-meta,
