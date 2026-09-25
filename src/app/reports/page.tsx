@@ -97,7 +97,8 @@ type ServiceOps = {
   addon_profit: number;
   average_addons_per_job: number;
   rows: Array<{
-    service_addon_id: number;
+    key: string;
+    service_addon_id: number | null;
     name: string;
     is_full_service: boolean;
     sold_qty: number;
@@ -277,7 +278,7 @@ export default function ReportsPage() {
                   </thead>
                   <tbody>
                     {serviceOps.rows.map((row) => (
-                      <tr key={row.service_addon_id} className="border-t border-[#e2ded4]">
+                      <tr key={row.key} className="border-t border-[#e2ded4]">
                         <td className="px-5 py-3 font-semibold">{row.name}</td>
                         <td>{row.sold_qty}</td>
                         <td>{row.inside_full_service == null ? "—" : row.inside_full_service}</td>

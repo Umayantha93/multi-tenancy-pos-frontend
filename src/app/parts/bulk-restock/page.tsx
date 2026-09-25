@@ -19,6 +19,7 @@ type PartHit = {
   barcode?: string | null;
   brand?: string;
   price?: string;
+  pending_price?: string | null;
   cost_price?: string;
   stock_qty: number;
   stock_unit?: string | null;
@@ -32,6 +33,7 @@ type SheetRow = {
   quantity: string;
   unitCost: string;
   sellPrice: string;
+  afterOldStock: boolean;
   isFree: boolean;
   savedUnitCost: string;
   serials: string;
@@ -62,7 +64,12 @@ type ReceiptsPage = { data: Receipt[]; current_page: number; last_page: number; 
 const SEARCH_LIMIT = 50;
 
 function emptyRow(key: string): SheetRow {
-  return { key, part: null, query: "", quantity: "", unitCost: "", sellPrice: "", isFree: false, savedUnitCost: "", serials: "" };
+  return { key, part: null, query: "", quantity: "", unitCost: "", sellPrice: "", afterOldStock: true, isFree: false, savedUnitCost: "", serials: "" };
+}
+
+function sellPriceChanged(row: SheetRow): boolean {
+  if (!row.part || row.sellPrice === "") return false;
+  return Number(row.sellPrice) !== Number(row.part.price ?? 0) && Number(row.part.stock_qty) > 0;
 }
 
 function parseSerials(raw: string): string[] {
@@ -316,6 +323,7 @@ export default function BulkRestockPage() {
         part_id: row.part!.id,
         unit_cost: row.isFree ? 0 : (row.unitCost === "" ? undefined : Number(row.unitCost)),
         price: row.sellPrice === "" ? undefined : Number(row.sellPrice),
+        price_after_old_stock: (sellPriceChanged(row) && row.afterOldStock) || undefined,
         is_free: row.isFree || undefined,
       };
       if (serials.length) body.serials = serials;
@@ -570,6 +578,20 @@ export default function BulkRestockPage() {
                             disabled={!row.part}
                             className={cellNum}
                           />
+                          {sellPriceChanged(row) && (
+                            <label className="mt-1 flex cursor-pointer items-center gap-1 text-[9px] leading-tight text-[#6f746e]" title="Old stock keeps its labelled price; the new price starts by itself when it runs out">
+                              <input
+                                type="checkbox"
+                                checked={row.afterOldStock}
+                                onChange={(event) => patchRow(row.key, { afterOldStock: event.target.checked })}
+                                className="size-3 accent-[#167c73]"
+                              />
+                              After old {formatStockQty(row.part!.stock_qty, row.part!.stock_unit, isPaint)} sold
+                            </label>
+                          )}
+                          {row.part?.pending_price != null && !sellPriceChanged(row) && (
+                            <p className="mt-1 text-[9px] leading-tight text-[#167c73]">Next price {money(row.part.pending_price)}</p>
+                          )}
                         </td>
                         {canSerial && (
                           <td className={td}>
