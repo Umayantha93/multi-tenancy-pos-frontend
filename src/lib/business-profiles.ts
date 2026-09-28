@@ -170,6 +170,8 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       ...sharedPeopleFinance.map((m) => m.key === "billing" ? { ...m, name: "Job cards" } : m),
       { key: "service_reminders", name: "Next-service reminders", group: "Service Intake" },
       { key: "service_ops_report", name: "Service operations report", group: "Finance" },
+      { key: "expense_job_split", name: "Repair / service expenses", group: "Finance" },
+      { key: "finance_report_export", name: "Finance report download", group: "Finance" },
     ],
     navigation: [
       { href: "/dashboard", label: "Overview", icon: Gauge },
@@ -704,6 +706,7 @@ export function optionalFeaturesFor(type?: string | null): FeatureKey[] {
       "owner_bill_sms", "service_ops_report", "job_photos", "job_videos",
       "job_board", "job_bookings", "service_reminders",
       "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp", "station_consumables",
+      "expense_job_split", "finance_report_export",
     ];
   }
   if (type === "tyre" || type === "paint") return ["job_bookings", "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp"];

@@ -1755,9 +1755,9 @@ export default function BillDetailPage() {
                     {(bill.branch?.address || tenant?.address) && <p><span className="text-[#6f746e]">{t("common.address")}:</span> {bill.branch?.address || tenant?.address}</p>}
                     {tenant?.tin && <p><span className="text-[#6f746e]">{t("common.tin")}:</span> {tenant.tin}</p>}
                     {contactPhones.map((phone) => (
-                      <p key={phone}><span className="text-[#6f746e]">{t("common.mobile")}:</span> {phone}</p>
+                      <p key={phone} className="bill-contact-line"><span className="text-[#6f746e]">{t("common.mobile")}:</span> {phone}</p>
                     ))}
-                    {contactEmail && <p><span className="text-[#6f746e]">{t("common.email")}:</span> {contactEmail}</p>}
+                    {contactEmail && <p className="bill-contact-line"><span className="text-[#6f746e]">{t("common.email")}:</span> {contactEmail}</p>}
                   </div>
                 </div>
               </div>

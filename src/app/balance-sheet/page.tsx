@@ -1,18 +1,22 @@
 "use client";
 
-import { FormEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
-import { Minus, Plus, TrendingUp, X } from "lucide-react";
+import { Download, Minus, Plus, TrendingUp, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
-import { api, currentUser, formatDate, money } from "@/lib/api";
+import { API_URL, api, currentFeatures, currentUser, formatDate, money } from "@/lib/api";
 import { ShopFilter } from "@/components/branch-chip";
 import { useBusinessProfile } from "@/lib/use-business-profile";
+
+const noopSubscribe = () => () => {};
 
 type AccountRow = {
   date: string;
   description: string;
   reference?: string | null;
+  vehicle?: string | null;
+  details?: string | null;
   category: string;
   type: "income" | "expense" | "payable" | "bill" | "refund";
   debit: number;
@@ -50,6 +54,7 @@ type Sheet = {
   expenses: number;
   net_profit: number;
   expense_breakdown: Record<string, number>;
+  expense_split?: { repair: number; service: number; other: number };
   accounts: AccountRow[];
   yearly_trend: Array<{ month: number; income: number; expenses: number; net_profit: number }>;
   period?: { month: number; year: number };
@@ -106,6 +111,11 @@ function BalanceSheetPageInner() {
   const payableRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const businessName = currentUser()?.tenant?.business_name ?? "Business";
   const isGarage = useBusinessProfile().type === "garage";
+  const jobSplitOn = useSyncExternalStore(noopSubscribe, () => currentFeatures().includes("expense_job_split"), () => false) && isGarage;
+  const exportOn = useSyncExternalStore(noopSubscribe, () => currentFeatures().includes("finance_report_export"), () => false) && isGarage;
+  const [exportFormat, setExportFormat] = useState<"xlsx" | "pdf">("xlsx");
+  const [exportType, setExportType] = useState<"full" | "table">("full");
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(() => {
     const params = new URLSearchParams({ month: String(month), year: String(year) });
@@ -176,6 +186,7 @@ function BalanceSheetPageInner() {
             payment_status: formData.get("payment_status") || "paid",
             due_date: formData.get("due_date") || undefined,
             supplier_id: formData.get("supplier_id") || undefined,
+            job_kind: formData.get("job_kind") || undefined,
           }),
         });
       } else {
@@ -188,6 +199,40 @@ function BalanceSheetPageInner() {
       load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not add expense.");
+    }
+  }
+
+  async function downloadReport() {
+    setExporting(true);
+    setError("");
+    try {
+      const params = new URLSearchParams({ month: String(month), year: String(year), format: exportFormat, type: exportType });
+      if (shopFilter) params.set("branch_id", shopFilter);
+      const token = localStorage.getItem("garage_token");
+      const response = await fetch(`${API_URL}/balance-sheet/export?${params}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (response.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({ message: "Could not download the report." }));
+        throw new Error(body.message || "Could not download the report.");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `finance-${year}-${String(month).padStart(2, "0")}-${exportType}.${exportFormat}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not download the report.");
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -383,6 +428,24 @@ function BalanceSheetPageInner() {
             <Panel className="bg-[#242723] p-5 text-white"><TrendingUp className="text-[#f5c842]" /><p className="mt-6 text-xs font-bold uppercase text-white/50">{todayMode ? "Today's net" : "Net profit"}</p><p className="font-display text-3xl font-semibold">{money(todayTotals.net)}</p></Panel>
           </div>
 
+          {sheet.expense_split && (
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              {([
+                ["Repair expenses", sheet.expense_split.repair],
+                ["Service expenses", sheet.expense_split.service],
+                ["Other expenses", sheet.expense_split.other],
+              ] as const).map(([label, amount]) => (
+                <Panel key={label} className="p-4">
+                  <p className="text-xs font-bold uppercase text-[#6f746e]">{label} · {monthLabel}</p>
+                  <p className="mt-1 font-display text-2xl font-semibold text-[#b84837]">{money(amount)}</p>
+                </Panel>
+              ))}
+            </div>
+          )}
+          {sheet.expense_split && (
+            <p className="mt-1 text-[11px] text-[#6f746e]">Other = expenses without a Repair / Service tag (older entries) and salaries.</p>
+          )}
+
           <div className="mt-5 grid gap-5 xl:grid-cols-[1.4fr_0.8fr]">
             <Panel className="p-5">
               <h2 className="font-display text-2xl font-semibold uppercase">Yearly cash trend</h2>
@@ -406,6 +469,16 @@ function BalanceSheetPageInner() {
                 <h2 className="font-display text-2xl font-semibold uppercase">Add expense</h2>
               </div>
               <form onSubmit={expense} className="space-y-4 p-5">
+                {jobSplitOn && (
+                  <label className="block text-xs font-bold uppercase">
+                    Repair or service
+                    <select name="job_kind" required defaultValue="" className={`${inputClass} mt-2`}>
+                      <option value="" disabled>Select repair or service</option>
+                      <option value="repair">Repair</option>
+                      <option value="service">Service</option>
+                    </select>
+                  </label>
+                )}
                 <label className="block text-xs font-bold uppercase">
                   Category
                   <select
@@ -613,6 +686,31 @@ function BalanceSheetPageInner() {
                   ? "Income and expenses for today only. Open the day to see credits and debits."
                   : "Daily profit and expenses for this period. Open a day to see its credits and debits."}
               </p>
+              {exportOn && (
+                <div className="mt-4 flex flex-wrap items-end gap-3">
+                  <label className="text-xs font-bold uppercase">
+                    File
+                    <select value={exportFormat} onChange={(event) => setExportFormat(event.target.value as "xlsx" | "pdf")} className={`${inputClass} mt-2 w-32`}>
+                      <option value="xlsx">Excel</option>
+                      <option value="pdf">PDF</option>
+                    </select>
+                  </label>
+                  <label className="text-xs font-bold uppercase">
+                    Report
+                    <select value={exportType} onChange={(event) => setExportType(event.target.value as "full" | "table")} className={`${inputClass} mt-2 w-44`}>
+                      <option value="full">Full details</option>
+                      <option value="table">Table only</option>
+                    </select>
+                  </label>
+                  <button type="button" onClick={downloadReport} disabled={exporting} className={`${buttonClass} gap-2`}>
+                    <Download size={14} />
+                    {exporting ? "Preparing..." : `Download ${monthLabel}`}
+                  </button>
+                  <p className="basis-full text-[11px] text-[#6f746e]">
+                    Full details adds every day&apos;s lines (what View details shows). Table only is the daily totals table.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="overflow-x-auto">
@@ -704,11 +802,13 @@ function BalanceSheetPageInner() {
               </button>
             </div>
             <div className="overflow-x-auto p-5">
-              <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[960px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="text-[10px] font-bold uppercase tracking-wide">
                     <th className="border border-[#d7d3c8] bg-[#dceef2] px-3 py-2 text-[#2f4f57]">Description</th>
                     <th className="border border-[#d7d3c8] bg-[#dceef2] px-3 py-2 text-[#2f4f57]">Reference / Bill #</th>
+                    <th className="border border-[#d7d3c8] bg-[#dceef2] px-3 py-2 text-[#2f4f57]">Vehicle</th>
+                    <th className="border border-[#d7d3c8] bg-[#dceef2] px-3 py-2 text-[#2f4f57]">Details</th>
                     <th className="border border-[#d7d3c8] bg-[#f3dfc8] px-3 py-2 text-[#6a4a28]">Category</th>
                     <th className="border border-[#d7d3c8] bg-[#f3dfc8] px-3 py-2 text-right text-[#6a4a28]">Debit</th>
                     <th className="border border-[#d7d3c8] bg-[#d7ebe4] px-3 py-2 text-right text-[#1f5a52]">Credit</th>
@@ -719,6 +819,8 @@ function BalanceSheetPageInner() {
                     <tr key={`${row.reference ?? row.description}-${index}`} className="bg-white">
                       <td className="border border-[#e2ded4] px-3 py-2.5">{row.description}</td>
                       <td className="border border-[#e2ded4] px-3 py-2.5 font-medium text-[#4f544e]">{row.reference || "—"}</td>
+                      <td className="border border-[#e2ded4] px-3 py-2.5 whitespace-nowrap font-semibold uppercase">{row.vehicle || "—"}</td>
+                      <td className="border border-[#e2ded4] px-3 py-2.5 text-xs text-[#4f544e]">{row.details || "—"}</td>
                       <td className="border border-[#e2ded4] px-3 py-2.5">
                         <span className={`inline-block px-2 py-0.5 text-[10px] font-bold uppercase ${entryTone(row.type)}`}>
                           {row.category}

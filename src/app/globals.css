@@ -329,11 +329,17 @@ button, a { -webkit-tap-highlight-color: transparent; }
     min-width: 0 !important;
     border-collapse: collapse !important;
   }
-  html.thermal-print .bill-items-table col.bill-col-desc { width: 40% !important; }
+  html.thermal-print .bill-contact-line,
+  html.thermal-print .bill-contact-line span {
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    color: #000 !important;
+  }
+  html.thermal-print .bill-items-table col.bill-col-desc { width: 33% !important; }
   html.thermal-print .bill-items-table col.bill-col-type { width: 0 !important; }
-  html.thermal-print .bill-items-table col.bill-col-qty { width: 10% !important; }
-  html.thermal-print .bill-items-table col.bill-col-rate { width: 25% !important; }
-  html.thermal-print .bill-items-table col.bill-col-total { width: 25% !important; }
+  html.thermal-print .bill-items-table col.bill-col-qty { width: 9% !important; }
+  html.thermal-print .bill-items-table col.bill-col-rate { width: 29% !important; }
+  html.thermal-print .bill-items-table col.bill-col-total { width: 29% !important; }
   html.thermal-print .bill-col-type {
     width: 0 !important;
     max-width: 0 !important;
@@ -374,9 +380,21 @@ button, a { -webkit-tap-highlight-color: transparent; }
     overflow-wrap: normal !important;
     font-variant-numeric: tabular-nums;
   }
-  html.thermal-print .bill-col-rate,
-  html.thermal-print .bill-col-total {
+  html.thermal-print .bill-items-table td.bill-col-desc,
+  html.thermal-print .bill-items-table td.bill-col-desc * {
     font-size: 8px !important;
+    font-weight: 500 !important;
+    line-height: 1.2 !important;
+  }
+  html.thermal-print .bill-items-table td.bill-col-qty,
+  html.thermal-print .bill-items-table td.bill-col-qty *,
+  html.thermal-print .bill-items-table td.bill-col-rate,
+  html.thermal-print .bill-items-table td.bill-col-rate *,
+  html.thermal-print .bill-items-table td.bill-col-total,
+  html.thermal-print .bill-items-table td.bill-col-total * {
+    font-size: 10px !important;
+    font-weight: 700 !important;
+    color: #000 !important;
   }
   html.thermal-print .bill-watermark {
     display: none !important;
