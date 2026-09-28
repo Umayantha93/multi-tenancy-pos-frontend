@@ -115,7 +115,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 @media print {
   @page {
     size: A4;
-    margin: 7mm 8mm 8mm;
+    margin: 8mm 14mm 9mm;
   }
   .no-print, .staff-only { display: none !important; }
   body {
@@ -283,14 +283,27 @@ button, a { -webkit-tap-highlight-color: transparent; }
     margin-bottom: 6px !important;
     border-bottom: 1px dashed #999 !important;
   }
-  html.thermal-print .bill-letterhead img {
-    height: 1.5rem !important;
-    width: 1.5rem !important;
+  html.thermal-print .bill-letterhead-brand {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    gap: 4px !important;
+  }
+  html.thermal-print .bill-letterhead img.bill-logo {
+    align-self: center !important;
+    height: 20mm !important;
+    width: auto !important;
+    max-width: 60mm !important;
+    object-fit: contain !important;
     border: none !important;
     padding: 0 !important;
   }
+  html.thermal-print .bill-logo-placeholder {
+    display: none !important;
+  }
   html.thermal-print .bill-letterhead .font-display {
     font-size: 0.95rem !important;
+    text-align: center !important;
   }
   html.thermal-print .bill-print-date {
     display: block !important;
