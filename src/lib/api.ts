@@ -83,6 +83,8 @@ export type FeatureKey =
   | "owner_bill_sms"
   | "service_ops_report"
   | "station_consumables"
+  | "expense_job_split"
+  | "finance_report_export"
   | "job_videos"
   | "job_photos";
 

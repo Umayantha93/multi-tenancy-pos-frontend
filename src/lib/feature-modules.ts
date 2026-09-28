@@ -47,6 +47,8 @@ const FALLBACK_GROUP: Record<string, string> = {
   cash_up: "Finance",
   reports: "Finance",
   service_ops_report: "Finance",
+  expense_job_split: "Finance",
+  finance_report_export: "Finance",
 };
 
 export const FEATURE_PARENTS: Record<string, string> = {
@@ -60,6 +62,8 @@ export const FEATURE_PARENTS: Record<string, string> = {
   serial_inventory: "parts_inventory",
   station_consumables: "parts_inventory",
   bill_whatsapp: "billing",
+  expense_job_split: "balance_sheet",
+  finance_report_export: "balance_sheet",
 };
 
 /** Full catalog fallback — prefer profileFor(type).moduleCatalog when type is known. */
