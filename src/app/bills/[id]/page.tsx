@@ -1723,16 +1723,16 @@ export default function BillDetailPage() {
         <div className={`min-w-0 space-y-3 print:space-y-2 ${!isClosed && floorPane !== "work" ? "hidden" : "block"} xl:block print:block`}>
           <Panel className="bill-letterhead overflow-hidden p-2.5 sm:p-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="flex min-w-0 items-start gap-2.5">
+              <div className="bill-letterhead-brand flex min-w-0 items-start gap-2.5">
                 {logoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={logoUrl}
                     alt={tenant?.business_name ?? t("bill.business_logo")}
-                    className="h-10 w-10 shrink-0 object-contain border border-[#d7d3c8] bg-white p-0.5"
+                    className="bill-logo h-10 w-10 shrink-0 object-contain border border-[#d7d3c8] bg-white p-0.5"
                   />
                 ) : (
-                  <div className="grid h-10 w-10 shrink-0 place-items-center border border-dashed border-[#c9c5b9] bg-[#fbfaf6] text-center text-[8px] font-bold uppercase text-[#6f746e]">
+                  <div className="bill-logo-placeholder grid h-10 w-10 shrink-0 place-items-center border border-dashed border-[#c9c5b9] bg-[#fbfaf6] text-center text-[8px] font-bold uppercase text-[#6f746e]">
                     {t("bill.no_logo")}
                   </div>
                 )}
