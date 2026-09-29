@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Download, Minus, Plus, TrendingUp, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
-import { API_URL, api, currentFeatures, currentUser, formatDate, money } from "@/lib/api";
+import { API_URL, api, currentBranchId, currentFeatures, currentLocale, currentUser, formatDate, money } from "@/lib/api";
 import { ShopFilter } from "@/components/branch-chip";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 
@@ -209,9 +209,11 @@ function BalanceSheetPageInner() {
       const params = new URLSearchParams({ month: String(month), year: String(year), format: exportFormat, type: exportType });
       if (shopFilter) params.set("branch_id", shopFilter);
       const token = localStorage.getItem("garage_token");
-      const response = await fetch(`${API_URL}/balance-sheet/export?${params}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
+      const headers = new Headers({ Accept: "application/json", "X-Locale": currentLocale() });
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+      const branchId = currentBranchId();
+      if (branchId) headers.set("X-Branch-Id", String(branchId));
+      const response = await fetch(`${API_URL}/balance-sheet/export?${params}`, { headers });
       if (response.status === 401) {
         window.location.href = "/login";
         return;
