@@ -1,7 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Bay 06">
-  <rect width="32" height="32" rx="7" fill="#242723"/>
-  <path d="M0 7h32v5H0z" fill="#f5c842"/>
-  <rect y="0" width="32" height="12" rx="7" fill="#f5c842"/>
-  <rect y="7" width="32" height="5" fill="#f5c842"/>
-  <text x="16" y="24" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="13" font-weight="700" fill="#ffffff">06</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 252" role="img" aria-label="IUBits">
+  <defs>
+    <linearGradient id="iubits-gold" x1="110" y1="8" x2="110" y2="246" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f7e08a"/>
+      <stop offset="0.4" stop-color="#f0c43c"/>
+      <stop offset="1" stop-color="#c89212"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#iubits-gold)" d="M110 8C118 8 170 22 184 30L198 46V122C198 172 162 210 110 244C58 210 22 172 22 122V46L36 30C50 22 102 8 110 8Z"/>
+  <path fill="none" stroke="#1a1814" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" d="M110 32C116 32 154 44 164 50L176 62V118C176 156 150 186 110 212C70 186 44 156 44 118V62L56 50C66 44 104 32 110 32Z"/>
+  <path fill="#1a1814" transform="translate(52.52 93.12) scale(0.6)" d="M35.70 71.40L35.70 80L3.20 80L3.20 71.40L11.90 67.40L11.90 21.20L3.20 17.20L3.20 8.60L35.70 8.60L35.70 17.20L27 21.20L27 67.40M112.10 8.60L112.10 54.80Q112.10 62.20 108.85 68.15Q105.60 74.10 99.05 77.55Q92.50 81 82.50 81Q68.30 81 60.90 73.75Q53.50 66.50 53.50 54.60L53.50 8.60L68.60 8.60L68.60 52.30Q68.60 61.10 72.20 64.70Q75.80 68.30 82.90 68.30Q90.30 68.30 93.65 64.40Q97 60.50 97 52.20L97 8.60M136 8.60L158.20 8.60Q172.50 8.60 179.80 12.60Q187.10 16.60 187.10 26.70Q187.10 32.80 184.25 37Q181.40 41.20 176.10 42.10L176.10 42.60Q179.70 43.30 182.60 45.10Q185.50 46.90 187.20 50.30Q188.90 53.70 188.90 59.30Q188.90 69 181.90 74.50Q174.90 80 162.70 80L136 80L136 8.60M151.10 36.90L159.90 36.90Q166.50 36.90 169.05 34.80Q171.60 32.70 171.60 28.70Q171.60 24.60 168.60 22.80Q165.60 21 159.10 21L151.10 21L151.10 36.90M160.50 48.90L151.10 48.90L151.10 67.50L161 67.50Q167.80 67.50 170.50 64.85Q173.20 62.20 173.20 57.80Q173.20 53.80 170.45 51.35Q167.70 48.90 160.50 48.90"/>
 </svg>

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, LockKeyhole, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, LockKeyhole } from "lucide-react";
+import { IubitsLogo } from "@/components/iubits-logo";
 import { PasswordInput } from "@/components/ui";
 import { LanguageToggle } from "@/components/language-toggle";
 import { api, storeSession, User } from "@/lib/api";
@@ -51,7 +52,7 @@ export default function SuperAdminLoginPage() {
             </Link>
           </div>
           <div className="mb-6"><LanguageToggle tone="light" /></div>
-          <div className="mb-5 grid size-12 place-items-center bg-[#f5c842]"><ShieldCheck size={24} /></div>
+          <div className="mb-5"><IubitsLogo tone="onLight" size="sm" /></div>
           <p className="text-xs font-bold uppercase text-[#167c73]">{t("login.restricted_access")}</p>
           <h1 className="mt-2 font-display text-5xl font-semibold uppercase leading-none">
             {t("login.control_title_1")}<br />{t("login.control_title_2")}
@@ -92,7 +93,7 @@ export default function SuperAdminLoginPage() {
       </section>
       <section className="relative hidden overflow-hidden bg-[#181b19] p-12 text-white lg:flex lg:flex-col lg:justify-between">
         <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "linear-gradient(#f5c842 1px, transparent 1px), linear-gradient(90deg, #f5c842 1px, transparent 1px)", backgroundSize: "64px 64px" }} />
-        <div className="relative font-display text-2xl uppercase">Bay 06 Cloud</div>
+        <div className="relative"><IubitsLogo tone="onDark" size="md" /></div>
         <div className="relative">
           <p className="font-display text-8xl font-semibold uppercase leading-[0.82]">
             {t("login.tenants")}<br />{t("login.plans")}<br />{t("login.access")}

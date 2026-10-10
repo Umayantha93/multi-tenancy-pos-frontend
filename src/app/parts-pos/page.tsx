@@ -13,6 +13,11 @@ import { useBusinessProfile } from "@/lib/use-business-profile";
 import { formatStockNumber, formatStockQty, salePriceLayers, stockAllowsDecimal } from "@/lib/stock-unit";
 import { useT } from "@/lib/locale";
 
+function localToday() {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 type EmployeeOption = { id: number; name: string; position?: string | null };
 type StockItem = {
   id: number;
@@ -243,6 +248,7 @@ function GarageInstantTill() {
         body: JSON.stringify({
           customer_name: form.get("customer_name") || null,
           customer_phone: form.get("customer_phone") || null,
+          admission_date: form.get("admission_date") || localToday(),
           payment_method: form.get("payment_method") || "cash",
           payment_amount: payLater ? 0 : subtotal,
           items: cart.map((line) => (
@@ -407,6 +413,10 @@ function GarageInstantTill() {
           <form onSubmit={checkout} className="mt-4 space-y-3">
             <input name="customer_name" placeholder={t("pos.customer_name")} className={inputClass} />
             <input name="customer_phone" placeholder={t("pos.phone")} className={inputClass} />
+            <label className="block text-[10px] font-bold uppercase text-[#6f746e]">
+              {t("common.date")}
+              <input name="admission_date" type="date" defaultValue={localToday()} max={localToday()} className={`${inputClass} mt-1`} />
+            </label>
             <select name="payment_method" className={inputClass} disabled={payLater}>
               <option value="cash">{t("method.cash")}</option>
               <option value="card">{t("method.card")}</option>
@@ -512,7 +522,8 @@ function PaintCounterForm() {
               <input
                 name="admission_date"
                 type="date"
-                defaultValue={new Date().toISOString().slice(0, 10)}
+                defaultValue={localToday()}
+                max={localToday()}
                 className={inputClass}
               />
             </label>
