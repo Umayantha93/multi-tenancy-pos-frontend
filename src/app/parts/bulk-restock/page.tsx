@@ -419,8 +419,8 @@ export default function BulkRestockPage() {
     for (const [index, row] of filled.entries()) {
       const serials = parseSerials(row.serials);
       if (row.isNew) {
-        if (!row.newItem.name.trim() || !row.newItem.brand.trim() || !row.newItem.category.trim()) {
-          setError(`Row ${index + 1}: new items need a name, brand, and category.`);
+        if (!row.newItem.name.trim() || !row.newItem.brand.trim()) {
+          setError(`Row ${index + 1}: new items need a name and brand.`);
           return;
         }
         if (row.sellPrice === "") {
@@ -455,7 +455,7 @@ export default function BulkRestockPage() {
         body.new_part = {
           name: row.newItem.name.trim(),
           brand: row.newItem.brand.trim(),
-          type: row.newItem.category.trim(),
+          type: row.newItem.category.trim() || null,
           subcategory: row.newItem.subcategory.trim() || null,
           sku: row.newItem.sku.trim() || null,
           model: row.newItem.model.trim() || null,
@@ -833,11 +833,10 @@ export default function BulkRestockPage() {
                                 </label>
                               ))}
                               <label className="text-[9px] font-bold uppercase text-[#6f746e]">
-                                Category *
+                                Category
                                 <select
                                   value={row.newItem.category}
                                   onChange={(event) => patchRow(row.key, { newItem: { ...row.newItem, category: event.target.value, subcategory: "" } })}
-                                  required
                                   className={`${cell} mt-0.5`}
                                 >
                                   <option value="">Select category</option>
