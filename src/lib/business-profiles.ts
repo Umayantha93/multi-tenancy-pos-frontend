@@ -790,8 +790,9 @@ export const PAINT_PANEL_NAMES = [
   "Alloy wheel",
 ] as const;
 
-/** Inventory / parts first, other charges, labor, discount last. Panel groups stay together. */
-export function sortBillItems<T extends { id: number; type: string; panel_group_id?: string | null }>(items: T[]): T[] {
+/** Inventory / parts first, other charges, labor, discount last. Panel groups stay together.
+ *  Two prices for one part stay in the order they were billed: oldest price, then the new price. */
+export function sortBillItems<T extends { id: number; type: string; panel_group_id?: string | null; part_id?: number | null }>(items: T[]): T[] {
   const firstId = new Map<string, number>();
   for (const item of items) {
     const key = item.panel_group_id || `item-${item.id}`;
@@ -807,6 +808,9 @@ export function sortBillItems<T extends { id: number; type: string; panel_group_
   };
 
   return [...items].sort((a, b) => {
+    if (a.part_id != null && a.part_id === b.part_id && !a.panel_group_id && !b.panel_group_id) {
+      return a.id - b.id;
+    }
     const aKey = a.panel_group_id || `item-${a.id}`;
     const bKey = b.panel_group_id || `item-${b.id}`;
     const aFirst = firstId.get(aKey) ?? a.id;

@@ -10,7 +10,7 @@ import { buttonClass, ErrorMessage, inputClass, PageState, Panel, QtyStepper } f
 import { api, currentFeatures, money } from "@/lib/api";
 import { BillingBranchBanner } from "@/components/branch-chip";
 import { useBusinessProfile } from "@/lib/use-business-profile";
-import { formatStockQty } from "@/lib/stock-unit";
+import { formatStockNumber, formatStockQty, salePriceLayers, stockAllowsDecimal } from "@/lib/stock-unit";
 import { useT } from "@/lib/locale";
 
 type EmployeeOption = { id: number; name: string; position?: string | null };
@@ -18,6 +18,8 @@ type StockItem = {
   id: number;
   name: string;
   price: string;
+  pending_price?: string | null;
+  pending_price_at_qty?: string | number | null;
   stock_qty: number;
   stock_unit?: string | null;
   sku?: string | null;
@@ -31,10 +33,21 @@ type CartLine = {
   partId?: number;
   name: string;
   price: number;
+  pendingPrice?: number | null;
+  pendingAtQty?: number | null;
   quantity: number;
   stock_qty?: number;
   stock_unit?: string | null;
 };
+
+function lineLayers(line: CartLine) {
+  if (line.kind !== "stock") return [{ quantity: line.quantity, unitPrice: line.price }];
+  return salePriceLayers(line.quantity, line.price, line.stock_qty ?? line.quantity, line.pendingPrice, line.pendingAtQty);
+}
+
+function lineAmount(line: CartLine): number {
+  return lineLayers(line).reduce((sum, layer) => sum + layer.unitPrice * layer.quantity, 0);
+}
 
 export default function InstantBillPage() {
   const profile = useBusinessProfile();
@@ -110,29 +123,35 @@ function GarageInstantTill() {
   }, []);
 
   const subtotal = useMemo(
-    () => cart.reduce((sum, line) => sum + line.price * line.quantity, 0),
+    () => cart.reduce((sum, line) => sum + lineAmount(line), 0),
     [cart],
   );
   const tenderedAmount = Number(tendered || 0);
   const changeDue = !payLater && tenderedAmount > subtotal ? tenderedAmount - subtotal : 0;
 
   function add(item: StockItem, clearSearch = false) {
-    if (item.stock_qty < 1) return;
+    if (item.stock_qty <= 0) return;
+    const decimal = stockAllowsDecimal(item.stock_unit);
+    const step = decimal ? 0.1 : 1;
     setCart((lines) => {
       const existing = lines.find((line) => line.kind === "stock" && line.partId === item.id);
       if (existing) {
-        if (existing.quantity >= item.stock_qty) return lines;
+        if (existing.quantity + step > item.stock_qty + 0.0001) return lines;
         return lines.map((line) => (
-          line.key === existing.key ? { ...line, quantity: line.quantity + 1 } : line
+          line.key === existing.key ? { ...line, quantity: Number((line.quantity + step).toFixed(3)) } : line
         ));
       }
+      const start = !decimal ? 1 : (item.stock_qty >= 1 ? 1 : item.stock_qty);
+      if (start > item.stock_qty + 0.0001) return lines;
       return [...lines, {
         key: `stock-${item.id}`,
         kind: "stock" as const,
         partId: item.id,
         name: item.name,
         price: Number(item.price),
-        quantity: 1,
+        pendingPrice: item.pending_price == null || item.pending_price === "" ? null : Number(item.pending_price),
+        pendingAtQty: item.pending_price_at_qty == null || item.pending_price_at_qty === "" ? null : Number(item.pending_price_at_qty),
+        quantity: Number(start.toFixed(3)),
         stock_qty: item.stock_qty,
         stock_unit: item.stock_unit,
       }];
@@ -169,8 +188,13 @@ function GarageInstantTill() {
   }
 
   function setQty(key: string, quantity: number, max?: number) {
-    const next = Math.max(1, max != null ? Math.min(max, quantity) : quantity);
-    setCart((lines) => lines.map((line) => (line.key === key ? { ...line, quantity: next } : line)));
+    setCart((lines) => lines.map((line) => {
+      if (line.key !== key) return line;
+      const decimal = line.kind === "stock" && stockAllowsDecimal(line.stock_unit);
+      const min = decimal ? 0.1 : 1;
+      const bounded = max != null ? Math.min(max, Math.max(min, quantity)) : Math.max(min, quantity);
+      return { ...line, quantity: Number(bounded.toFixed(decimal ? 3 : 0)) };
+    }));
   }
 
   async function scanExact(needle: string): Promise<StockItem | null> {
@@ -284,15 +308,20 @@ function GarageInstantTill() {
                     key={item.id}
                     type="button"
                     onClick={() => add(item)}
-                    disabled={item.stock_qty < 1}
+                    disabled={item.stock_qty <= 0}
                     className="border border-[#d7d3c8] bg-[#fbfaf6] p-3 text-left hover:border-[#167c73] disabled:opacity-40"
                   >
                     <p className="font-semibold">{item.name}</p>
                     <p className="text-xs text-[#6f746e]">
                       {[item.barcode, item.sku, item.brand, item.type].filter(Boolean).join(" · ") || t("common.stock")}
                     </p>
-                    <div className="mt-2 flex justify-between text-sm">
-                      <strong className="tabular-nums">{money(item.price)}</strong>
+                    <div className="mt-2 flex justify-between gap-2 text-sm">
+                      <strong className="tabular-nums">
+                        {money(item.price)}
+                        {item.pending_price != null && Number(item.stock_qty) - Number(item.pending_price_at_qty ?? 0) > 0.0001 && (
+                          <span className="mt-0.5 block text-[10px] font-semibold text-[#167c73]">then {money(item.pending_price)}</span>
+                        )}
+                      </strong>
                       <span className="text-[#6f746e]">{formatStockQty(item.stock_qty, item.stock_unit)}</span>
                     </div>
                   </button>
@@ -340,26 +369,33 @@ function GarageInstantTill() {
         <Panel className="p-5 xl:sticky xl:top-4">
           <h2 className="font-display text-2xl font-semibold uppercase">{t("common.bill")}</h2>
           <div className="mt-4 max-h-[40vh] space-y-3 overflow-y-auto">
-            {cart.map((line) => (
+            {cart.map((line) => {
+              const layers = lineLayers(line);
+              return (
               <div key={line.key} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[#e2ded4] pb-2 text-sm">
                 <div className="min-w-0 flex-1 basis-40">
                   <p className="truncate font-semibold">{line.name}</p>
-                  <p className="tabular-nums text-[#6f746e]">
-                    {money(line.price)} × {line.quantity}
-                    {line.kind === "custom" ? ` · ${t("bill.custom_item")}` : ""}
-                  </p>
+                  {layers.map((layer, index) => (
+                    <p key={index} className="tabular-nums text-[#6f746e]">
+                      {money(layer.unitPrice)} × {line.kind === "stock" ? formatStockNumber(layer.quantity, line.stock_unit) : layer.quantity}
+                      {line.kind === "custom" ? ` · ${t("bill.custom_item")}` : ""}
+                    </p>
+                  ))}
                 </div>
                 <div className="ml-auto flex shrink-0 items-center gap-2">
                   <QtyStepper
                     value={line.quantity}
+                    min={line.kind === "stock" && stockAllowsDecimal(line.stock_unit) ? 0.1 : 1}
+                    step={line.kind === "stock" && stockAllowsDecimal(line.stock_unit) ? 0.1 : 1}
                     max={line.kind === "stock" ? line.stock_qty : undefined}
                     onChange={(qty) => setQty(line.key, qty, line.kind === "stock" ? line.stock_qty : undefined)}
                   />
-                  <strong className="shrink-0 whitespace-nowrap text-right text-sm tabular-nums">{money(line.price * line.quantity)}</strong>
+                  <strong className="shrink-0 whitespace-nowrap text-right text-sm tabular-nums">{money(lineAmount(line))}</strong>
                   <button type="button" className="grid size-7 shrink-0 place-items-center text-[#b84837]" onClick={() => setCart((rows) => rows.filter((row) => row.key !== line.key))} aria-label={t("common.remove")}><Trash2 size={14} /></button>
                 </div>
               </div>
-            ))}
+              );
+            })}
             {cart.length === 0 && <p className="text-sm text-[#6f746e]">{t("instant.empty_cart")}</p>}
           </div>
 

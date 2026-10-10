@@ -98,6 +98,7 @@ export type Tenant = {
   business_type: BusinessType;
   status: "active" | "inactive";
   dual_financial_view_enabled?: boolean;
+  inventory_cost_method?: "average" | "latest" | null;
   plan?: string | null;
   payment_plan?: "monthly" | "yearly" | null;
   plan_amount?: number | string | null;

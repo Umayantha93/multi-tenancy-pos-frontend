@@ -2,7 +2,7 @@
 
 import { FormEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
-import { Download, Minus, Plus, TrendingUp, X } from "lucide-react";
+import { Download, Minus, Plus, Search, TrendingUp, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { API_URL, api, currentBranchId, currentFeatures, currentLocale, currentUser, formatDate, money } from "@/lib/api";
@@ -37,6 +37,7 @@ type PayableItem = {
   description: string;
   supplier?: string | null;
   supplier_phone?: string | null;
+  invoice_number?: string | null;
   amount: number;
   amount_paid?: number;
   remaining?: number;
@@ -54,7 +55,7 @@ type Sheet = {
   expenses: number;
   net_profit: number;
   expense_breakdown: Record<string, number>;
-  expense_split?: { repair: number; service: number; other: number };
+  expense_split?: { repair: number; service: number; inventory: number; other: number };
   accounts: AccountRow[];
   yearly_trend: Array<{ month: number; income: number; expenses: number; net_profit: number }>;
   period?: { month: number; year: number };
@@ -107,6 +108,8 @@ function BalanceSheetPageInner() {
   const [chequeNumber, setChequeNumber] = useState("");
   const [chequeBusyId, setChequeBusyId] = useState<number | null>(null);
   const [highlightPayableId, setHighlightPayableId] = useState<number | null>(null);
+  const [payableQuery, setPayableQuery] = useState("");
+  const [payablePage, setPayablePage] = useState(1);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const payableRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const businessName = currentUser()?.tenant?.business_name ?? "Business";
@@ -150,9 +153,13 @@ function BalanceSheetPageInner() {
 
   useEffect(() => {
     if (!highlightPayableId || !sheet) return;
-    const node = payableRefs.current[highlightPayableId];
-    if (!node) return;
-    node.scrollIntoView({ behavior: "smooth", block: "center" });
+    const items = sheet.inventory_payables?.items ?? [];
+    const index = items.findIndex((item) => item.id === highlightPayableId);
+    if (index >= 0) setPayablePage(Math.floor(index / 5) + 1);
+    const timer = window.setTimeout(() => {
+      payableRefs.current[highlightPayableId]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+    return () => window.clearTimeout(timer);
   }, [highlightPayableId, sheet]);
 
   useEffect(() => {
@@ -186,7 +193,6 @@ function BalanceSheetPageInner() {
             payment_status: formData.get("payment_status") || "paid",
             due_date: formData.get("due_date") || undefined,
             supplier_id: formData.get("supplier_id") || undefined,
-            job_kind: formData.get("job_kind") || undefined,
           }),
         });
       } else {
@@ -207,6 +213,8 @@ function BalanceSheetPageInner() {
     setError("");
     try {
       const params = new URLSearchParams({ month: String(month), year: String(year), format: exportFormat, type: exportType });
+      const today = todayMode ? localToday() : "";
+      if (today) params.set("date", today);
       if (shopFilter) params.set("branch_id", shopFilter);
       const token = localStorage.getItem("garage_token");
       const headers = new Headers({ Accept: "application/json", "X-Locale": currentLocale() });
@@ -226,7 +234,9 @@ function BalanceSheetPageInner() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `finance-${year}-${String(month).padStart(2, "0")}-${exportType}.${exportFormat}`;
+      link.download = today
+        ? `finance-${today}-${exportType}.${exportFormat}`
+        : `finance-${year}-${String(month).padStart(2, "0")}-${exportType}.${exportFormat}`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -246,6 +256,15 @@ function BalanceSheetPageInner() {
   );
   const accounts = sheet?.accounts ?? [];
   const payables = sheet?.inventory_payables?.items ?? [];
+  const payableNeedle = payableQuery.trim().toLowerCase();
+  const visiblePayables = payableNeedle
+    ? payables.filter((item) =>
+      (item.supplier || "").toLowerCase().includes(payableNeedle)
+      || (item.invoice_number || "").toLowerCase().includes(payableNeedle))
+    : payables;
+  const payableLastPage = Math.max(1, Math.ceil(visiblePayables.length / 5));
+  const payablePageSafe = Math.min(Math.max(1, payablePage), payableLastPage);
+  const pagedPayables = visiblePayables.slice((payablePageSafe - 1) * 5, payablePageSafe * 5);
   const dailyAccounts = useMemo(() => {
     const days = new Map<string, { date: string; debit: number; credit: number; balance: number; entries: AccountRow[] }>();
     for (const row of accounts) {
@@ -431,10 +450,11 @@ function BalanceSheetPageInner() {
           </div>
 
           {sheet.expense_split && (
-            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {([
                 ["Repair expenses", sheet.expense_split.repair],
                 ["Service expenses", sheet.expense_split.service],
+                ["Inventory purchases", sheet.expense_split.inventory ?? 0],
                 ["Other expenses", sheet.expense_split.other],
               ] as const).map(([label, amount]) => (
                 <Panel key={label} className="p-4">
@@ -445,7 +465,7 @@ function BalanceSheetPageInner() {
             </div>
           )}
           {sheet.expense_split && (
-            <p className="mt-1 text-[11px] text-[#6f746e]">Other = expenses without a Repair / Service tag (older entries) and salaries.</p>
+            <p className="mt-1 text-[11px] text-[#6f746e]">Inventory purchases are shared stock, so they are never split. Other = expenses without a Repair / Service tag (older entries) and salaries.</p>
           )}
 
           <div className="mt-5 grid gap-5 xl:grid-cols-[1.4fr_0.8fr]">
@@ -471,16 +491,6 @@ function BalanceSheetPageInner() {
                 <h2 className="font-display text-2xl font-semibold uppercase">Add expense</h2>
               </div>
               <form onSubmit={expense} className="space-y-4 p-5">
-                {jobSplitOn && (
-                  <label className="block text-xs font-bold uppercase">
-                    Repair or service
-                    <select name="job_kind" required defaultValue="" className={`${inputClass} mt-2`}>
-                      <option value="" disabled>Select repair or service</option>
-                      <option value="repair">Repair</option>
-                      <option value="service">Service</option>
-                    </select>
-                  </label>
-                )}
                 <label className="block text-xs font-bold uppercase">
                   Category
                   <select
@@ -496,6 +506,16 @@ function BalanceSheetPageInner() {
                     <option value="misc">Miscellaneous</option>
                   </select>
                 </label>
+                {jobSplitOn && category !== "inventory" && (
+                  <label className="block text-xs font-bold uppercase">
+                    Repair or service
+                    <select name="job_kind" required defaultValue="" className={`${inputClass} mt-2`}>
+                      <option value="" disabled>Select repair or service</option>
+                      <option value="repair">Repair</option>
+                      <option value="service">Service</option>
+                    </select>
+                  </label>
+                )}
 
                 {category === "inventory" && (
                   <>
@@ -587,8 +607,21 @@ function BalanceSheetPageInner() {
                 <p className="mt-1 text-sm text-[#6f746e]">
                   Outstanding {money(sheet.inventory_payables?.payables_total ?? 0)}. These do not reduce profit until you pay the supplier or a cheque clears.
                 </p>
+                <label className="relative mt-3 block">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f746e]" size={14} />
+                  <input
+                    value={payableQuery}
+                    onChange={(event) => {
+                      setPayableQuery(event.target.value);
+                      setPayablePage(1);
+                    }}
+                    className={`${inputClass} pl-9`}
+                    placeholder="Invoice number or supplier"
+                    aria-label="Search inventory on credit"
+                  />
+                </label>
                 <div className="mt-4 divide-y divide-[#e2ded4]">
-                  {payables.map((item) => {
+                  {pagedPayables.map((item) => {
                     const remaining = item.remaining ?? item.amount;
                     const paid = item.amount_paid ?? 0;
                     const pendingTotal = item.pending_cheque_total ?? 0;
@@ -604,6 +637,7 @@ function BalanceSheetPageInner() {
                         <div className="flex flex-wrap items-center gap-3">
                           <div className="min-w-0 flex-1">
                             <p className="font-semibold">{item.supplier || "No supplier"}</p>
+                            {item.invoice_number && <p className="text-xs font-semibold text-[#20221f]">Invoice {item.invoice_number}</p>}
                             <p className="text-xs text-[#6f746e]">{item.description}</p>
                             <p className="text-xs text-[#6f746e]">
                               Due {item.due_date ? formatDate(item.due_date) : "—"} · Paid {money(paid)} of {money(item.amount)}
@@ -662,8 +696,33 @@ function BalanceSheetPageInner() {
                       </div>
                     );
                   })}
-                  {payables.length === 0 && <p className="py-4 text-sm text-[#6f746e]">No supplier credit purchases open.</p>}
+                  {visiblePayables.length === 0 && (
+                    <p className="py-4 text-sm text-[#6f746e]">
+                      {payableNeedle ? "No credit purchases match that invoice or supplier." : "No supplier credit purchases open."}
+                    </p>
+                  )}
                 </div>
+                {visiblePayables.length > 5 && (
+                  <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      disabled={payablePageSafe <= 1}
+                      onClick={() => setPayablePage(payablePageSafe - 1)}
+                      className="h-8 border border-[#c9c5b9] bg-white px-3 text-[11px] font-semibold disabled:opacity-40"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-xs text-[#6f746e]">Page {payablePageSafe} of {payableLastPage}</span>
+                    <button
+                      type="button"
+                      disabled={payablePageSafe >= payableLastPage}
+                      onClick={() => setPayablePage(payablePageSafe + 1)}
+                      className="h-8 border border-[#c9c5b9] bg-white px-3 text-[11px] font-semibold disabled:opacity-40"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
               </Panel>
               <Panel className="p-5">
                 <h2 className="font-display text-2xl font-semibold uppercase">Customer owe in</h2>
@@ -706,7 +765,7 @@ function BalanceSheetPageInner() {
                   </label>
                   <button type="button" onClick={downloadReport} disabled={exporting} className={`${buttonClass} gap-2`}>
                     <Download size={14} />
-                    {exporting ? "Preparing..." : `Download ${monthLabel}`}
+                    {exporting ? "Preparing..." : todayMode ? "Download today" : `Download ${monthLabel}`}
                   </button>
                   <p className="basis-full text-[11px] text-[#6f746e]">
                     Full details adds every day&apos;s lines (what View details shows). Table only is the daily totals table.
