@@ -13,7 +13,6 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [lockingBills, setLockingBills] = useState(false);
   const [billPrefix, setBillPrefix] = useState("");
-  const [costMethod, setCostMethod] = useState<"average" | "latest">("average");
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   useEffect(() => {
@@ -21,7 +20,6 @@ export default function ProfilePage() {
     api<{ user: User }>("/user").then((result) => {
       setUser(result.user);
       setBillPrefix(result.user.tenant?.bill_prefix ?? "");
-      setCostMethod(result.user.tenant?.inventory_cost_method === "latest" ? "latest" : "average");
     }).catch((caught) => setError(caught.message));
   }, []);
 
@@ -135,21 +133,6 @@ export default function ProfilePage() {
             <label className="text-xs font-bold uppercase">
               Contact email
               <input name="contact_email" type="email" defaultValue={tenant.contact_email ?? tenant.owner_email ?? ""} className={`${inputClass} mt-2`} />
-            </label>
-            <label className="text-xs font-bold uppercase">
-              Inventory cost
-              <select
-                name="inventory_cost_method"
-                value={costMethod}
-                onChange={(event) => setCostMethod(event.target.value === "latest" ? "latest" : "average")}
-                className={`${inputClass} mt-2`}
-              >
-                <option value="average">Default — average cost (old stock + new stock)</option>
-                <option value="latest">Recent cost price</option>
-              </select>
-              <span className="mt-1 block text-[11px] font-normal normal-case text-[#6f746e]">
-                Default blends the old cost and the new cost by quantity. Recent cost shows the latest purchase price on the item.
-              </span>
             </label>
             <AddressField name="address" defaultValue={tenant.address ?? ""} />
             <label className="text-xs font-bold uppercase">

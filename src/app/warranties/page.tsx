@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Search } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
+import { buttonClass, ErrorMessage, inputClass, ListPager, LIST_PAGE_SIZE, PageState, Panel } from "@/components/ui";
 import { api, formatDate } from "@/lib/api";
 import { usesVehicleJobs } from "@/lib/business-profiles";
 import { useBusinessProfile } from "@/lib/use-business-profile";
@@ -28,22 +28,32 @@ export default function WarrantiesPage() {
   const [search, setSearch] = useState("");
   const [includeExpired, setIncludeExpired] = useState(false);
   const [rows, setRows] = useState<WarrantyRow[]>([]);
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback((term: string, expired: boolean) => {
+  const load = useCallback((term: string, expired: boolean, pageNum: number) => {
     setLoading(true);
     setError("");
-    const params = new URLSearchParams({ search: term, per_page: "50" });
+    const params = new URLSearchParams({
+      search: term,
+      per_page: String(LIST_PAGE_SIZE),
+      page: String(Math.max(1, pageNum)),
+    });
     if (expired) params.set("include_expired", "1");
-    api<{ data: WarrantyRow[] }>(`/warranties?${params}`)
-      .then((result) => setRows(result.data))
+    api<{ data: WarrantyRow[]; current_page: number; last_page: number }>(`/warranties?${params}`)
+      .then((result) => {
+        setRows(result.data);
+        setPage(result.current_page || 1);
+        setLastPage(Math.max(1, result.last_page || 1));
+      })
       .catch((caught) => setError(caught instanceof Error ? caught.message : t("warranties.load_failed")))
       .finally(() => setLoading(false));
   }, [t]);
 
   useEffect(() => {
-    const timer = setTimeout(() => load(search, includeExpired), 200);
+    const timer = setTimeout(() => load(search, includeExpired, 1), 200);
     return () => clearTimeout(timer);
   }, [search, includeExpired, load]);
 
@@ -62,7 +72,7 @@ export default function WarrantiesPage() {
             placeholder={t(vehicleJobs ? "warranties.search_placeholder" : "warranties.search_placeholder_sale")}
           />
         </label>
-        <button type="button" onClick={() => load(search, includeExpired)} className={buttonClass}>{t("warranties.look_up")}</button>
+        <button type="button" onClick={() => load(search, includeExpired, 1)} className={buttonClass}>{t("warranties.look_up")}</button>
         <label className="flex h-8 items-center gap-2 text-sm">
           <input type="checkbox" checked={includeExpired} onChange={(event) => setIncludeExpired(event.target.checked)} className="size-4 accent-[#167c73]" />
           {t("warranties.include_expired")}
@@ -109,6 +119,7 @@ export default function WarrantiesPage() {
           {rows.length === 0 && (
             <p className="p-8 text-center text-sm text-[#6f746e]">{t(vehicleJobs ? "warranties.empty" : "warranties.empty_sale")}</p>
           )}
+          <ListPager page={page} lastPage={lastPage} disabled={loading} onPage={(next) => load(search, includeExpired, next)} />
         </Panel>
       )}
     </AppShell>

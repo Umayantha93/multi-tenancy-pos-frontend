@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { MessageCircle, Search } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
+import { buttonClass, ErrorMessage, inputClass, ListPager, LIST_PAGE_SIZE, PageState, Panel } from "@/components/ui";
 import { api, currentFeatures, formatDate, money } from "@/lib/api";
 import { billShareUrl, whatsappHref } from "@/lib/whatsapp";
 import { useT } from "@/lib/locale";
@@ -31,6 +31,8 @@ export default function OutstandingPage() {
   const [canWhatsapp, setCanWhatsapp] = useState(false);
   const [search, setSearch] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -41,21 +43,25 @@ export default function OutstandingPage() {
     setCanWhatsapp(features.includes("bill_whatsapp"));
   }, []);
 
-  const load = useCallback((term: string) => {
+  const load = useCallback((term: string, pageNum: number) => {
     if (!allowed) return;
     setLoading(true);
     setError("");
-    const params = new URLSearchParams({ per_page: "50" });
+    const params = new URLSearchParams({ per_page: String(LIST_PAGE_SIZE), page: String(Math.max(1, pageNum)) });
     if (term) params.set("search", term);
-    api<{ data: Row[] }>(`/customers/outstanding?${params}`)
-      .then((result) => setRows(result.data))
+    api<{ data: Row[]; current_page: number; last_page: number }>(`/customers/outstanding?${params}`)
+      .then((result) => {
+        setRows(result.data);
+        setPage(result.current_page || 1);
+        setLastPage(Math.max(1, result.last_page || 1));
+      })
       .catch((caught) => setError(caught instanceof Error ? caught.message : t("outstanding.load_failed")))
       .finally(() => setLoading(false));
   }, [allowed, t]);
 
   useEffect(() => {
     if (!sessionReady || !allowed) return;
-    const timer = setTimeout(() => load(search), 200);
+    const timer = setTimeout(() => load(search, 1), 200);
     return () => clearTimeout(timer);
   }, [search, sessionReady, allowed, load]);
 
@@ -137,6 +143,7 @@ export default function OutstandingPage() {
                 </table>
                 {rows.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">{t("outstanding.empty")}</p>}
               </div>
+              <ListPager page={page} lastPage={lastPage} disabled={loading} onPage={(next) => load(search, next)} />
             </Panel>
           )}
         </>
