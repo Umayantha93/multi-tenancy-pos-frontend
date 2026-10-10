@@ -18,10 +18,16 @@ import { WarrantyFields, warrantyFromForm } from "@/components/warranty-fields";
 import { JobPhotos } from "@/components/job-photos";
 import { JobVideos } from "@/components/job-videos";
 import { useLocale, useT } from "@/lib/locale";
-import { formatStockQty, stockUnitLabel } from "@/lib/stock-unit";
+import { formatStockQty, stockAllowsDecimal, stockUnitLabel } from "@/lib/stock-unit";
 import { billShareUrl, whatsappHref } from "@/lib/whatsapp";
 
-type Part = { id: number; name: string; price: string; stock_qty: number; stock_unit?: string | null; sku?: string | null; barcode?: string | null; brand?: string; serialized?: boolean };
+type Part = { id: number; name: string; price: string; pending_price?: string | null; pending_price_at_qty?: string | number | null; stock_qty: number; stock_unit?: string | null; sku?: string | null; barcode?: string | null; brand?: string; serialized?: boolean };
+
+function partPriceLabel(part: Part): string {
+  const oldLeft = Math.max(0, Number(part.stock_qty) - Number(part.pending_price_at_qty ?? 0));
+  if (part.pending_price == null || oldLeft <= 0.0001) return money(part.pending_price ?? part.price);
+  return `${money(part.price)} · then ${money(part.pending_price)}`;
+}
 type ComposerLabor = { key: string; laborItemId: string; name: string; hours: string; rate: number };
 type ComposerMaterial = { key: string; partId: number; name: string; qty: string; unitPrice: number; stock: number };
 type ServiceAddon = {
@@ -199,6 +205,7 @@ export default function BillDetailPage() {
   const [clearingPaymentId, setClearingPaymentId] = useState<number | null>(null);
   const [mileageDraft, setMileageDraft] = useState("");
   const [driverNameDraft, setDriverNameDraft] = useState("");
+  const [plateDraft, setPlateDraft] = useState("");
   const [driverPhoneDraft, setDriverPhoneDraft] = useState("");
   const [nextServiceMileageDraft, setNextServiceMileageDraft] = useState("");
   const [nextServiceDueDraft, setNextServiceDueDraft] = useState("");
@@ -552,6 +559,7 @@ export default function BillDetailPage() {
         setBill(result);
         setDriverNameDraft(result.driver_name ?? "");
         setDriverPhoneDraft(result.driver_phone ?? "");
+        setPlateDraft(result.vehicle?.number_plate ?? "");
         setMileageDraft(result.mileage != null && result.mileage !== "" ? String(result.mileage) : "");
         setNextServiceMileageDraft(result.next_service_mileage != null && result.next_service_mileage !== "" ? String(result.next_service_mileage) : "");
         setNextServiceDueDraft(result.next_service_due_on ? String(result.next_service_due_on).slice(0, 10) : "");
@@ -1136,6 +1144,27 @@ export default function BillDetailPage() {
       setDriverPhoneDraft(updated.driver_phone ?? "");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("bill.err_driver"));
+    }
+  }
+
+  async function savePlate() {
+    if (isLocked || !bill?.vehicle) return;
+    const plate = plateDraft.trim().toUpperCase();
+    if (!plate || plate === bill.vehicle.number_plate) {
+      setPlateDraft(bill.vehicle.number_plate);
+      return;
+    }
+    setError("");
+    try {
+      const updated = await api<Bill>(`/bills/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ number_plate: plate }),
+      });
+      setBill(updated);
+      setPlateDraft(updated.vehicle?.number_plate ?? plate);
+    } catch (caught) {
+      setPlateDraft(bill.vehicle.number_plate);
+      setError(caught instanceof Error ? caught.message : "Could not save the vehicle number.");
     }
   }
 
@@ -1815,7 +1844,23 @@ export default function BillDetailPage() {
                 <>
                   <div className="min-w-0">
                     <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{profile.type === "device_repair" ? t("admit.device") : t("common.vehicle")}</p>
-                    <p className="mt-0.5 text-[13px] font-semibold leading-tight tracking-wide">{bill.vehicle.number_plate}</p>
+                    {isLocked ? (
+                      <p className="mt-0.5 text-[13px] font-semibold leading-tight tracking-wide">{bill.vehicle.number_plate}</p>
+                    ) : (
+                      <input
+                        value={plateDraft}
+                        onChange={(event) => setPlateDraft(event.target.value.toUpperCase())}
+                        onBlur={() => void savePlate()}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") event.currentTarget.blur();
+                        }}
+                        className="no-print mt-0.5 h-7 w-full max-w-[12rem] border border-[#c9c5b9] bg-white px-1.5 text-[13px] font-semibold uppercase tracking-wide outline-none focus:border-[#167c73]"
+                        aria-label={profile.type === "device_repair" ? t("admit.device") : t("common.vehicle")}
+                      />
+                    )}
+                    {!isLocked && (
+                      <p className="mt-0.5 hidden text-[13px] font-semibold leading-tight tracking-wide print:block">{bill.vehicle.number_plate}</p>
+                    )}
                     <p className="text-[11px] leading-tight text-[#6f746e]">{bill.vehicle.make} {bill.vehicle.model}</p>
                   </div>
                   <div className="min-w-0">
@@ -2587,7 +2632,7 @@ export default function BillDetailPage() {
                                       <span className="mt-0.5 block text-[10px] text-[#6f746e]">{t("common.barcode", { code: part.barcode })}</span>
                                     )}
                                   </span>
-                                  <span className="text-xs text-[#6f746e]">{formatStockQty(part.stock_qty, part.stock_unit, isPaint)} · {money(part.price)}</span>
+                                  <span className="text-xs text-[#6f746e]">{formatStockQty(part.stock_qty, part.stock_unit, isPaint)} · {partPriceLabel(part)}</span>
                                 </button>
                               ))
                             )}
@@ -2768,7 +2813,7 @@ export default function BillDetailPage() {
                               className="flex w-full items-center justify-between border-b border-[#eeeae1] px-3 py-2 text-left text-sm hover:bg-[#f7f5ef]"
                             >
                               <span className="font-semibold">{part.name}</span>
-                              <span className="text-xs text-[#6f746e]">{part.stock_qty} {t("common.ml")} · {money(part.price)}</span>
+                              <span className="text-xs text-[#6f746e]">{part.stock_qty} {t("common.ml")} · {partPriceLabel(part)}</span>
                             </button>
                           ))}
                         </div>
@@ -2948,14 +2993,14 @@ export default function BillDetailPage() {
                 {isStockType && showQuantity && (selectedPartId || outsidePart || customerPart) && !(canSerial && selectedPart?.serialized && !outsidePart && !customerPart) && (
                   <div key={`qty-${outsidePart ? "outside" : customerPart ? "customer" : "stock"}`} className={`grid gap-2 ${(selectedPartId || outsidePart) && !customerPart ? "grid-cols-[1fr_5.5rem]" : ""}`}>
                     <label className="block text-xs font-bold uppercase">
-                      {isPaint ? t("bill.qty_ml") : selectedPart?.stock_unit && selectedPart.stock_unit !== "qty"
-                        ? `${t("common.quantity")} (${stockUnitLabel(selectedPart.stock_unit)})`
-                        : t("common.quantity")}
+                      {selectedPart
+                        ? `${t("common.quantity")} (${stockUnitLabel(selectedPart.stock_unit, isPaint)})`
+                        : isPaint ? t("bill.qty_ml") : t("common.quantity")}
                       <input
                         name="quantity"
                         type="number"
-                        min={selectedPart?.stock_unit && selectedPart.stock_unit !== "qty" ? "0.001" : "1"}
-                        step={selectedPart?.stock_unit && selectedPart.stock_unit !== "qty" ? "0.001" : "1"}
+                        min={(selectedPart ? stockAllowsDecimal(selectedPart.stock_unit, isPaint) : isPaint) ? "0.001" : "1"}
+                        step={(selectedPart ? stockAllowsDecimal(selectedPart.stock_unit, isPaint) : isPaint) ? "0.001" : "1"}
                         value={itemQty}
                         onChange={(event) => setItemQty(event.target.value)}
                         required

@@ -9,7 +9,7 @@ import { API_URL, api, currentFeatures, currentUser, mediaUrl, money } from "@/l
 import { useBusinessProfile } from "@/lib/use-business-profile";
 import { usesStoreCounter } from "@/lib/business-profiles";
 import { StickerPrintButton } from "@/components/sticker-print";
-import { formatStockQty, formatStockNumber, normalizeStockUnit, stockAllowsDecimal, stockUnitLabel, type StockUnit } from "@/lib/stock-unit";
+import { formatStockQty, formatStockNumber, normalizeStockUnit, STOCK_UNIT_OPTIONS, stockAllowsDecimal, stockUnitLabel, type StockUnit } from "@/lib/stock-unit";
 
 type Part = {
   id: number;
@@ -18,6 +18,7 @@ type Part = {
   barcode?: string | null;
   brand: string;
   type: string;
+  subcategory?: string | null;
   model?: string;
   year?: number;
   price: string;
@@ -32,6 +33,7 @@ type Part = {
   serialized?: boolean;
 };
 
+type CatalogCategory = { id: number | null; name: string; subcategories: Array<{ id: number | null; name: string }> };
 type Mode = "add" | "edit" | "restock" | null;
 type Supplier = { id: number; name: string; is_system?: boolean };
 
@@ -78,6 +80,9 @@ export default function PartsPage() {
   const [importSupplierId, setImportSupplierId] = useState("");
   const [canSerial, setCanSerial] = useState(false);
   const [stockUnit, setStockUnit] = useState<StockUnit>("qty");
+  const [catalog, setCatalog] = useState<CatalogCategory[]>([]);
+  const [categoryDraft, setCategoryDraft] = useState("");
+  const [subcategoryDraft, setSubcategoryDraft] = useState("");
   const importInputRef = useRef<HTMLInputElement>(null);
   const loadSeq = useRef(0);
   const profile = useBusinessProfile();
@@ -152,9 +157,21 @@ export default function PartsPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [mode, saving]);
 
+  const loadCatalog = useCallback(() => {
+    api<{ data: CatalogCategory[] }>("/part-categories")
+      .then((result) => setCatalog(result.data))
+      .catch(() => setCatalog([]));
+  }, []);
+
+  useEffect(() => {
+    loadCatalog();
+  }, [loadCatalog]);
+
   function openAdd() {
     setSelected(null);
     setStockUnit(isPaint ? "ml" : "qty");
+    setCategoryDraft("");
+    setSubcategoryDraft("");
     setMode("add");
     setError("");
     setNotice("");
@@ -164,6 +181,8 @@ export default function PartsPage() {
     if (!admin) return;
     setSelected(part);
     setStockUnit(normalizeStockUnit(part.stock_unit, isPaint));
+    setCategoryDraft(part.type ?? "");
+    setSubcategoryDraft(part.subcategory ?? "");
     setMode("edit");
     setError("");
     setNotice("");
@@ -270,6 +289,9 @@ export default function PartsPage() {
         await api("/parts", { method: "POST", body: formData });
       }
       form.reset();
+      setCategoryDraft("");
+      setSubcategoryDraft("");
+      loadCatalog();
       setMode(null);
       setSelected(null);
       load(search, 1);
@@ -356,6 +378,19 @@ export default function PartsPage() {
     }
   }
 
+  const savedCategories = catalog.filter((row) => row.id != null);
+  const selectedCategory = savedCategories.find((row) => row.name.toLowerCase() === categoryDraft.trim().toLowerCase());
+  const categoryOptions = categoryDraft && !savedCategories.some((row) => row.name.toLowerCase() === categoryDraft.trim().toLowerCase())
+    ? [categoryDraft, ...savedCategories.map((row) => row.name)]
+    : savedCategories.map((row) => row.name);
+  const subcategoryOptions = (() => {
+    const saved = selectedCategory?.subcategories.map((row) => row.name) ?? [];
+    if (subcategoryDraft && !saved.some((name) => name.toLowerCase() === subcategoryDraft.trim().toLowerCase())) {
+      return [subcategoryDraft, ...saved];
+    }
+    return saved;
+  })();
+
   return (
     <AppShell
       title={isPaint ? "Color stock" : isStore ? "Stock" : "Inventory"}
@@ -367,6 +402,12 @@ export default function PartsPage() {
             className="flex h-8 items-center gap-2 border border-[#167c73] bg-white px-2.5 text-[11px] font-semibold text-[#167c73]"
           >
             <TableProperties size={16} /><span className="hidden sm:inline">Bulk restock</span>
+          </Link>
+          <Link
+            href="/parts/categories"
+            className="flex h-8 items-center gap-2 border border-[#20221f] bg-white px-2.5 text-[11px] font-semibold"
+          >
+            <Boxes size={16} /><span className="hidden sm:inline">Categories</span>
           </Link>
           <button
             type="button"
@@ -480,7 +521,7 @@ export default function PartsPage() {
                   <div className="p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="text-[10px] font-bold uppercase text-[#167c73]">{part.brand} · {part.type}</p>
+                        <p className="text-[10px] font-bold uppercase text-[#167c73]">{[part.brand, part.type, part.subcategory].filter(Boolean).join(" · ")}</p>
                         <h2 className="mt-1 truncate font-display text-lg font-semibold uppercase leading-none">{part.name}</h2>
                       </div>
                       <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-bold ${part.stock_qty <= lowStockAt ? "bg-[#b84837]/10 text-[#b84837]" : "bg-[#167c73]/10 text-[#167c73]"}`}>
@@ -575,7 +616,6 @@ export default function PartsPage() {
                 ["sku", isPaint ? "Paint / formula code" : "SKU", selected?.sku ?? ""],
                 ["barcode", "Barcode (optional — auto if blank)", selected?.barcode ?? ""],
                 ["brand", isPaint ? "Paint system brand" : "Brand", selected?.brand ?? ""],
-                ["type", isPaint ? "Class" : isStore ? "Category" : "Category", selected?.type ?? ""],
                 ["model", isPaint ? "Vehicle fitment (optional)" : isStore ? "Model" : "Compatible model", selected?.model ?? ""],
                 ["year", isStore ? "Year" : "Compatible year", selected?.year ? String(selected.year) : ""],
                 ["price", isPaint ? "Selling price per ml" : "Selling price", selected?.price ?? ""],
@@ -588,12 +628,40 @@ export default function PartsPage() {
                     defaultValue={value}
                     type={["year", "price", "cost_price"].includes(name) ? "number" : "text"}
                     step={name.includes("price") ? "0.01" : undefined}
-                    required={!["sku", "barcode", "model", "year"].includes(name)}
+                    required={!["sku", "barcode", "model", "year", "subcategory"].includes(name)}
                     list={name === "type" && isPaint ? "paint-material-classes" : undefined}
                     className={`${inputClass} mt-2`}
                   />
                 </label>
               ))}
+              <label className="text-xs font-bold uppercase">
+                Category
+                <select
+                  name="type"
+                  value={categoryDraft}
+                  onChange={(event) => {
+                    setCategoryDraft(event.target.value);
+                    setSubcategoryDraft("");
+                  }}
+                  required
+                  className={`${inputClass} mt-2`}
+                >
+                  <option value="">Select category</option>
+                  {categoryOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+                </select>
+              </label>
+              <label className="text-xs font-bold uppercase">
+                Sub category
+                <select
+                  name="subcategory"
+                  value={subcategoryDraft}
+                  onChange={(event) => setSubcategoryDraft(event.target.value)}
+                  className={`${inputClass} mt-2`}
+                >
+                  <option value="">None</option>
+                  {subcategoryOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+                </select>
+              </label>
               {isPaint && (
                 <datalist id="paint-material-classes">
                   {["Primer", "Base", "Clear", "Thinner", "Hardener", "Putty", "Tape", "Consumable"].map((option) => (
@@ -604,7 +672,7 @@ export default function PartsPage() {
               {mode === "add" && (
                 <>
                   <label className="text-xs font-bold uppercase">
-                    {isPaint ? "Opening stock (ML)" : "Opening stock"}
+                    {`Opening stock (${stockUnitLabel(stockUnit, isPaint)})`}
                     <input
                       key={stockUnit}
                       name="stock_qty"
@@ -616,22 +684,19 @@ export default function PartsPage() {
                       className={`${inputClass} mt-2`}
                     />
                   </label>
-                  {isGarage && (
-                    <label className="text-xs font-bold uppercase">
-                      Unit
-                      <select
-                        name="stock_unit"
-                        value={stockUnit}
-                        onChange={(event) => setStockUnit(normalizeStockUnit(event.target.value))}
-                        className={`${inputClass} mt-2`}
-                      >
-                        <option value="qty">ITEM</option>
-                        <option value="ml">ML</option>
-                        <option value="l">L</option>
-                      </select>
-                    </label>
-                  )}
-                  {isPaint && <input type="hidden" name="stock_unit" value="ml" />}
+                  <label className="text-xs font-bold uppercase">
+                    Unit
+                    <select
+                      name="stock_unit"
+                      value={stockUnit}
+                      onChange={(event) => setStockUnit(normalizeStockUnit(event.target.value, isPaint))}
+                      className={`${inputClass} mt-2`}
+                    >
+                      {STOCK_UNIT_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
                 </>
               )}
               {mode === "edit" && selected && (
@@ -726,8 +791,10 @@ export default function PartsPage() {
               <p className="text-sm text-[#6f746e]">
                 Adding stock for <strong>{selected.name}</strong> (now {formatStockQty(selected.stock_qty, selected.stock_unit, isPaint)} @ cost {selected.cost_price || "0"}).
                 {restockFree
-                  ? " Free / gift stock: no purchase expense; average cost blends with unit cost 0."
-                  : " New unit cost is blended as a weighted average with existing stock. The purchase expense still uses this restock’s unit cost × qty. Paid hits finance now; credit stays as a payable until settled."}
+                  ? " Free / gift stock: no purchase expense. Average costing blends this in at unit cost 0. Recent costing leaves the catalogue cost unchanged."
+                  : currentUser()?.tenant?.inventory_cost_method === "latest"
+                    ? " Catalogue cost becomes this restock’s unit cost. The purchase expense still uses this restock’s unit cost × qty. Paid hits finance now; credit stays as a payable until settled."
+                    : " New unit cost is blended as a weighted average with existing stock. The purchase expense still uses this restock’s unit cost × qty. Paid hits finance now; credit stays as a payable until settled."}
               </p>
               <label className="flex items-center gap-2 text-sm font-semibold">
                 <input
@@ -739,7 +806,7 @@ export default function PartsPage() {
                 Free / gift from supplier (no cost)
               </label>
               <label className="block text-xs font-bold uppercase">
-                Quantity to add{isPaint ? " (ML)" : isGarage ? ` (${stockUnitLabel(selected.stock_unit)})` : ""}
+                Quantity to add ({stockUnitLabel(selected.stock_unit, isPaint)})
                 <input
                   name="quantity"
                   type="number"
@@ -774,6 +841,26 @@ export default function PartsPage() {
                   defaultValue={restockFree ? "0" : (selected.cost_price || "")}
                   disabled={restockFree}
                   className={`${inputClass} mt-2 disabled:bg-[#eeece5]`}
+                />
+              </label>
+              <label className="block text-xs font-bold uppercase">
+                Markup % (0–100)
+                <input
+                  name="markup_percent"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  className={`${inputClass} mt-2`}
+                  placeholder="Sets selling price from cost"
+                  onChange={(event) => {
+                    const form = event.currentTarget.form;
+                    const cost = Number((form?.elements.namedItem("unit_cost") as HTMLInputElement | null)?.value);
+                    const percent = Number(event.target.value);
+                    const price = form?.elements.namedItem("price") as HTMLInputElement | null;
+                    if (!price || event.target.value === "" || !Number.isFinite(cost) || !Number.isFinite(percent) || percent < 0 || percent > 100) return;
+                    price.value = (Math.round(cost * (1 + percent / 100) * 100) / 100).toFixed(2);
+                  }}
                 />
               </label>
               <label className="block text-xs font-bold uppercase">
@@ -845,7 +932,7 @@ export default function PartsPage() {
           <div className="w-full max-w-md bg-[#f3f0e8] p-5" onClick={(event) => event.stopPropagation()}>
             <h2 className="font-display text-2xl font-semibold uppercase">Import parts</h2>
             <p className="mt-2 text-sm text-[#6f746e]">
-              Name is the only required column. After stock_qty add unit: ITEM, L, or ML. Qty is a number (decimals allowed, e.g. 1.5 L). Blank brand becomes Generic, blank category becomes General. Credit also needs a due date.
+              Name is the only required column. After stock_qty add unit: ITEM, L, ML, G, KG, and the other units on the template. Measured units may be decimal (0.2 L). ITEM, PACK, BOX, PAIR, and DOZEN stay whole numbers. Blank brand becomes Generic, blank category becomes General. Credit also needs a due date.
             </p>
             {suppliers.length > 0 && (
               <label className="mt-4 block text-xs font-bold uppercase">

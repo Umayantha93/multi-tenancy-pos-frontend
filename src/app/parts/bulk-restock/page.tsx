@@ -1,14 +1,14 @@
 "use client";
 
-import { CSSProperties, FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CSSProperties, FormEvent, Fragment, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ArrowLeft, ChevronDown, ChevronRight, Loader2, Plus, ScanBarcode, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Loader2, Pencil, Plus, ScanBarcode, Search, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, Panel, SuccessMessage } from "@/components/ui";
-import { api, currentFeatures, formatDate, money } from "@/lib/api";
+import { api, currentFeatures, currentUser, formatDate, money } from "@/lib/api";
 import { useBusinessProfile } from "@/lib/use-business-profile";
-import { formatStockQty, stockAllowsDecimal, stockUnitLabel } from "@/lib/stock-unit";
+import { formatStockQty, sellPriceFromMarkup, STOCK_UNIT_OPTIONS, stockAllowsDecimal, stockUnitLabel } from "@/lib/stock-unit";
 
 type Supplier = { id: number; name: string; is_system?: boolean };
 
@@ -26,12 +26,27 @@ type PartHit = {
   serialized?: boolean;
 };
 
+type NewItemDraft = {
+  name: string;
+  brand: string;
+  category: string;
+  subcategory: string;
+  sku: string;
+  model: string;
+  year: string;
+  unit: string;
+  description: string;
+};
+
 type SheetRow = {
   key: string;
   part: PartHit | null;
+  isNew: boolean;
+  newItem: NewItemDraft;
   query: string;
   quantity: string;
   unitCost: string;
+  markupPercent: string;
   sellPrice: string;
   afterOldStock: boolean;
   isFree: boolean;
@@ -60,11 +75,38 @@ type Receipt = {
 };
 
 type ReceiptsPage = { data: Receipt[]; current_page: number; last_page: number; total: number };
+type CatalogCategory = { id: number | null; name: string; subcategories: Array<{ id: number | null; name: string }> };
 
 const SEARCH_LIMIT = 50;
 
+function blankNewItem(name = "", unit = "qty"): NewItemDraft {
+  return { name, brand: "", category: "", subcategory: "", sku: "", model: "", year: "", unit, description: "" };
+}
+
 function emptyRow(key: string): SheetRow {
-  return { key, part: null, query: "", quantity: "", unitCost: "", sellPrice: "", afterOldStock: true, isFree: false, savedUnitCost: "", serials: "" };
+  return {
+    key,
+    part: null,
+    isNew: false,
+    newItem: blankNewItem(),
+    query: "",
+    quantity: "",
+    unitCost: "",
+    markupPercent: "",
+    sellPrice: "",
+    afterOldStock: true,
+    isFree: false,
+    savedUnitCost: "",
+    serials: "",
+  };
+}
+
+function pricedSell(cost: string, percent: string): string | null {
+  if (percent.trim() === "") return null;
+  const amount = Number(cost);
+  const markup = Number(percent);
+  if (!Number.isFinite(amount) || !Number.isFinite(markup) || markup < 0 || markup > 100) return null;
+  return sellPriceFromMarkup(amount, markup).toFixed(2);
 }
 
 function sellPriceChanged(row: SheetRow): boolean {
@@ -106,7 +148,19 @@ export default function BulkRestockPage() {
   const [receiptLastPage, setReceiptLastPage] = useState(1);
   const [receiptsLoading, setReceiptsLoading] = useState(false);
   const [openReceiptId, setOpenReceiptId] = useState<number | null>(null);
+  const [editingReceiptId, setEditingReceiptId] = useState<number | null>(null);
+  const [editInvoice, setEditInvoice] = useState("");
+  const [editStatus, setEditStatus] = useState<"paid" | "credit">("paid");
+  const [editDue, setEditDue] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [catalog, setCatalog] = useState<CatalogCategory[]>([]);
   const receiptSeq = useRef(0);
+
+  useEffect(() => {
+    api<{ data: CatalogCategory[] }>("/part-categories")
+      .then((result) => setCatalog(result.data))
+      .catch(() => setCatalog([]));
+  }, []);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -202,7 +256,44 @@ export default function BulkRestockPage() {
     return () => window.clearTimeout(handle);
   }, [receiptSearch, loadReceipts]);
 
-  const filled = useMemo(() => rows.filter((row) => row.part), [rows]);
+  function beginEditReceipt(receipt: Receipt) {
+    setOpenReceiptId(receipt.id);
+    setEditingReceiptId(receipt.id);
+    setEditInvoice(receipt.invoice_number);
+    setEditStatus(receipt.payment_status === "credit" ? "credit" : "paid");
+    setEditDue(receipt.due_date ? String(receipt.due_date).slice(0, 10) : "");
+    setError("");
+  }
+
+  async function saveReceipt(event: FormEvent) {
+    event.preventDefault();
+    if (editingReceiptId == null) return;
+    if (editStatus === "credit" && !editDue) {
+      setError("Due date is required when the GRN is on credit.");
+      return;
+    }
+    setEditSaving(true);
+    setError("");
+    try {
+      const updated = await api<Receipt>(`/stock-receipts/${editingReceiptId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          invoice_number: editInvoice.trim(),
+          payment_status: editStatus,
+          due_date: editStatus === "credit" ? editDue : null,
+        }),
+      });
+      setReceipts((current) => current.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)));
+      setEditingReceiptId(null);
+      setNotice(`Updated invoice ${updated.invoice_number}.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not update this GRN.");
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  const filled = useMemo(() => rows.filter((row) => row.part || row.isNew), [rows]);
   const grandTotal = useMemo(
     () => filled.reduce((sum, row) => sum + (Number(row.quantity) || 0) * (row.isFree ? 0 : Number(row.unitCost) || 0), 0),
     [filled],
@@ -219,8 +310,10 @@ export default function BulkRestockPage() {
         ...row,
         part,
         query: part.name,
+        isNew: false,
         unitCost: row.isFree ? "0" : cost,
         savedUnitCost: cost,
+        markupPercent: "",
         sellPrice: part.price ? String(Number(part.price)) : "",
       }));
       return next.at(-1)?.part ? [...next, emptyRow(nextKey())] : next;
@@ -231,7 +324,7 @@ export default function BulkRestockPage() {
   }
 
   function clearPart(key: string) {
-    patchRow(key, { part: null, query: "", unitCost: "", sellPrice: "", quantity: "", serials: "", isFree: false, savedUnitCost: "" });
+    patchRow(key, { part: null, isNew: false, newItem: blankNewItem(), query: "", unitCost: "", markupPercent: "", sellPrice: "", quantity: "", serials: "", isFree: false, savedUnitCost: "" });
     setActiveKey(key);
   }
 
@@ -264,7 +357,25 @@ export default function BulkRestockPage() {
     if (!needle) return;
     const match = await resolveExact(needle);
     if (match) selectPart(key, match);
-    else setError("No inventory match for that barcode / SKU / name.");
+    else startNewItem(key, needle);
+  }
+
+  function startNewItem(key: string, name: string) {
+    setRows((current) => current.map((row) => (row.key !== key ? row : {
+      ...row,
+      part: null,
+      isNew: true,
+      query: name,
+      newItem: { ...blankNewItem(name, isPaint ? "ml" : "qty"), name },
+    })));
+    setSuggestions((current) => ({ ...current, [key]: [] }));
+    setActiveKey(null);
+    setError("");
+  }
+
+  function applyCost(key: string, unitCost: string, markupPercent: string) {
+    const sell = pricedSell(unitCost, markupPercent);
+    patchRow(key, { unitCost, savedUnitCost: unitCost, ...(sell != null ? { sellPrice: sell } : {}) });
   }
 
   function addRow() {
@@ -307,6 +418,16 @@ export default function BulkRestockPage() {
     }
     for (const [index, row] of filled.entries()) {
       const serials = parseSerials(row.serials);
+      if (row.isNew) {
+        if (!row.newItem.name.trim() || !row.newItem.brand.trim() || !row.newItem.category.trim()) {
+          setError(`Row ${index + 1}: new items need a name, brand, and category.`);
+          return;
+        }
+        if (row.sellPrice === "") {
+          setError(`Row ${index + 1}: enter a selling price, or a markup percent on the cost.`);
+          return;
+        }
+      }
       if (canSerial && row.part?.serialized && serials.length === 0) {
         setError(`Row ${index + 1}: enter IMEIs / serials.`);
         return;
@@ -315,17 +436,36 @@ export default function BulkRestockPage() {
         setError(`Row ${index + 1}: enter quantity to add.`);
         return;
       }
+      const markup = Number(row.markupPercent);
+      if (row.markupPercent.trim() !== "" && (!Number.isFinite(markup) || markup < 0 || markup > 100)) {
+        setError(`Row ${index + 1}: markup percent must be between 0 and 100.`);
+        return;
+      }
     }
 
     const items = filled.map((row) => {
       const serials = parseSerials(row.serials);
       const body: Record<string, unknown> = {
-        part_id: row.part!.id,
         unit_cost: row.isFree ? 0 : (row.unitCost === "" ? undefined : Number(row.unitCost)),
         price: row.sellPrice === "" ? undefined : Number(row.sellPrice),
         price_after_old_stock: (sellPriceChanged(row) && row.afterOldStock) || undefined,
         is_free: row.isFree || undefined,
       };
+      if (row.isNew) {
+        body.new_part = {
+          name: row.newItem.name.trim(),
+          brand: row.newItem.brand.trim(),
+          type: row.newItem.category.trim(),
+          subcategory: row.newItem.subcategory.trim() || null,
+          sku: row.newItem.sku.trim() || null,
+          model: row.newItem.model.trim() || null,
+          year: row.newItem.year.trim() ? Number(row.newItem.year) : null,
+          stock_unit: row.newItem.unit,
+          description: row.newItem.description.trim() || null,
+        };
+      } else {
+        body.part_id = row.part!.id;
+      }
       if (serials.length) body.serials = serials;
       else body.quantity = Number(row.quantity);
       return body;
@@ -433,16 +573,17 @@ export default function BulkRestockPage() {
 
           <Panel className="p-2">
             <div className="overflow-x-auto border border-[#d7d3c8] bg-white">
-              <table className="w-full min-w-[820px] border-collapse text-left text-[11px]">
+              <table className="w-full min-w-[1120px] border-collapse text-left text-[11px]">
                 <thead className="bg-[#eeece5] text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">
                   <tr>
                     <th className={`${th} w-7`}>#</th>
                     <th className={`${th} w-full min-w-[240px]`}>Item</th>
                     <th className={`${th} w-10 text-center`}>Free</th>
                     <th className={`${th} w-28 min-w-28`}>Qty</th>
-                    <th className={`${th} w-12`}>Unit</th>
-                    <th className={`${th} w-32 min-w-32`}>Cost</th>
-                    <th className={`${th} w-32 min-w-32`}>Sell</th>
+                    <th className={`${th} w-28 min-w-28`}>Unit</th>
+                    <th className={`${th} w-28 min-w-28`}>Cost</th>
+                    <th className={`${th} w-28 min-w-28`}>Markup %</th>
+                    <th className={`${th} w-28 min-w-28`}>Sell</th>
                     {canSerial && <th className={`${th} min-w-[120px]`}>Serials</th>}
                     <th className={`${th} w-24 text-right`}>Total</th>
                     <th className={`${th} w-7`} />
@@ -452,12 +593,24 @@ export default function BulkRestockPage() {
                   {rows.map((row, index) => {
                     const lineTotal = (Number(row.quantity) || 0) * (row.isFree ? 0 : Number(row.unitCost) || 0);
                     const hits = suggestions[row.key] ?? [];
-                    const decimal = row.part ? stockAllowsDecimal(row.part.stock_unit, isPaint) : false;
+                    const unit = row.isNew ? row.newItem.unit : row.part?.stock_unit;
+                    const decimal = unit ? stockAllowsDecimal(unit, isPaint) : false;
+                    const ready = Boolean(row.part || row.isNew);
+                    const colSpan = (canSerial ? 11 : 10);
                     return (
-                      <tr key={row.key} className={row.isFree ? "bg-[#e8f5f3]" : "odd:bg-[#fbfaf6]"}>
+                      <Fragment key={row.key}>
+                      <tr className={row.isFree ? "bg-[#e8f5f3]" : row.isNew ? "bg-[#f7f3e4]" : "odd:bg-[#fbfaf6]"}>
                         <td className={`${td} tabular-nums text-[#6f746e]`}>{index + 1}</td>
                         <td className={td}>
-                          {row.part ? (
+                          {row.isNew ? (
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="truncate text-[11px] font-semibold leading-tight">{row.newItem.name || "New item"}</p>
+                                <p className="text-[9px] font-bold uppercase text-[#8a6a12]">New item — fill the fields below</p>
+                              </div>
+                              <button type="button" className="shrink-0 text-[10px] text-[#167c73] underline" onClick={() => clearPart(row.key)}>Change</button>
+                            </div>
+                          ) : row.part ? (
                             <div className="flex items-center justify-between gap-2">
                               <div className="min-w-0">
                                 <p className="truncate text-[11px] font-semibold leading-tight">
@@ -496,7 +649,7 @@ export default function BulkRestockPage() {
                               {searchingKey === row.key && (
                                 <Loader2 className="absolute right-1.5 top-1/2 -translate-y-1/2 animate-spin text-[#6f746e]" size={12} />
                               )}
-                              {activeKey === row.key && row.query.trim() !== "" && hits.length > 0 && dropdown && createPortal(
+                              {activeKey === row.key && row.query.trim() !== "" && dropdown && (hits.length > 0 || searchingKey !== row.key) && createPortal(
                                 <ul
                                   style={dropdown}
                                   className="fixed z-[60] overflow-auto border border-[#d7d3c8] bg-white text-[11px] shadow-lg"
@@ -525,6 +678,17 @@ export default function BulkRestockPage() {
                                   {hits.length >= SEARCH_LIMIT && (
                                     <li className="px-2 py-1 text-[9px] text-[#6f746e]">Showing first {SEARCH_LIMIT} matches — type more to narrow.</li>
                                   )}
+                                  {searchingKey !== row.key && (
+                                    <li className="border-t border-[#e8e4da]">
+                                      <button
+                                        type="button"
+                                        className="w-full px-2 py-1.5 text-left text-[11px] font-semibold text-[#167c73] hover:bg-[#eeece5]"
+                                        onClick={() => startNewItem(row.key, row.query.trim())}
+                                      >
+                                        Add “{row.query.trim()}” as a new item
+                                      </button>
+                                    </li>
+                                  )}
                                 </ul>,
                                 document.body,
                               )}
@@ -535,7 +699,7 @@ export default function BulkRestockPage() {
                           <input
                             type="checkbox"
                             checked={row.isFree}
-                            disabled={!row.part}
+                            disabled={!ready}
                             onChange={(event) => toggleFree(row.key, event.target.checked)}
                             className="size-3.5 accent-[#167c73]"
                             title="Supplier free / gift — no cost"
@@ -550,12 +714,22 @@ export default function BulkRestockPage() {
                             step={decimal ? "0.001" : "1"}
                             value={row.quantity}
                             onChange={(event) => patchRow(row.key, { quantity: event.target.value })}
-                            disabled={!row.part || (canSerial && Boolean(row.part.serialized))}
+                            disabled={!ready || (canSerial && Boolean(row.part?.serialized))}
                             className={cellNum}
                           />
                         </td>
-                        <td className={`${td} text-[9px] font-semibold uppercase text-[#6f746e]`}>
-                          {row.part ? stockUnitLabel(row.part.stock_unit, isPaint) : "—"}
+                        <td className={`${td} min-w-28 text-[9px] font-semibold uppercase text-[#6f746e]`}>
+                          {row.isNew ? (
+                            <select
+                              value={row.newItem.unit}
+                              onChange={(event) => patchRow(row.key, { newItem: { ...row.newItem, unit: event.target.value } })}
+                              className={`${cell} min-w-24`}
+                            >
+                              {STOCK_UNIT_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>{option.label}</option>
+                              ))}
+                            </select>
+                          ) : row.part ? stockUnitLabel(row.part.stock_unit, isPaint) : "—"}
                         </td>
                         <td className={td}>
                           <input
@@ -563,8 +737,26 @@ export default function BulkRestockPage() {
                             min="0"
                             step="0.01"
                             value={row.unitCost}
-                            onChange={(event) => patchRow(row.key, { unitCost: event.target.value, savedUnitCost: event.target.value })}
-                            disabled={!row.part || row.isFree}
+                            onChange={(event) => applyCost(row.key, event.target.value, row.markupPercent)}
+                            disabled={!ready || row.isFree}
+                            className={cellNum}
+                          />
+                        </td>
+                        <td className={`${td} min-w-28`}>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            value={row.markupPercent}
+                            onChange={(event) => {
+                              const markupPercent = event.target.value;
+                              const sell = pricedSell(row.unitCost, markupPercent);
+                              patchRow(row.key, { markupPercent, ...(sell != null ? { sellPrice: sell } : {}) });
+                            }}
+                            disabled={!ready || row.isFree}
+                            placeholder="0–100"
+                            title="Markup on cost, 0 to 100. Selling price updates from this."
                             className={cellNum}
                           />
                         </td>
@@ -575,7 +767,7 @@ export default function BulkRestockPage() {
                             step="0.01"
                             value={row.sellPrice}
                             onChange={(event) => patchRow(row.key, { sellPrice: event.target.value })}
-                            disabled={!row.part}
+                            disabled={!ready}
                             className={cellNum}
                           />
                           {sellPriceChanged(row) && (
@@ -610,7 +802,7 @@ export default function BulkRestockPage() {
                           </td>
                         )}
                         <td className={`${td} whitespace-nowrap text-right font-semibold tabular-nums`}>
-                          {row.part ? money(lineTotal) : "—"}
+                          {ready ? money(lineTotal) : "—"}
                         </td>
                         <td className={td}>
                           <button type="button" className="grid size-6 place-items-center text-[#b84837]" onClick={() => removeRow(row.key)} aria-label="Remove row">
@@ -618,15 +810,85 @@ export default function BulkRestockPage() {
                           </button>
                         </td>
                       </tr>
+                      {row.isNew && (
+                        <tr className="bg-[#f7f3e4]">
+                          <td className={td} />
+                          <td className={td} colSpan={colSpan - 1}>
+                            <div className="grid gap-2 py-1 sm:grid-cols-3 lg:grid-cols-4">
+                              {([
+                                ["name", "Name", true],
+                                ["brand", "Brand", true],
+                                ["sku", "SKU", false],
+                                ["model", "Model", false],
+                                ["year", "Year", false],
+                              ] as const).map(([field, label, required]) => (
+                                <label key={field} className="text-[9px] font-bold uppercase text-[#6f746e]">
+                                  {label}{required ? " *" : ""}
+                                  <input
+                                    value={row.newItem[field]}
+                                    onChange={(event) => patchRow(row.key, { newItem: { ...row.newItem, [field]: event.target.value }, ...(field === "name" ? { query: event.target.value } : {}) })}
+                                    required={required}
+                                    className={`${cell} mt-0.5`}
+                                  />
+                                </label>
+                              ))}
+                              <label className="text-[9px] font-bold uppercase text-[#6f746e]">
+                                Category *
+                                <select
+                                  value={row.newItem.category}
+                                  onChange={(event) => patchRow(row.key, { newItem: { ...row.newItem, category: event.target.value, subcategory: "" } })}
+                                  required
+                                  className={`${cell} mt-0.5`}
+                                >
+                                  <option value="">Select category</option>
+                                  {catalog.filter((category) => category.id != null).map((category) => (
+                                    <option key={category.id} value={category.name}>{category.name}</option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="text-[9px] font-bold uppercase text-[#6f746e]">
+                                Sub category
+                                <select
+                                  value={row.newItem.subcategory}
+                                  onChange={(event) => patchRow(row.key, { newItem: { ...row.newItem, subcategory: event.target.value } })}
+                                  className={`${cell} mt-0.5`}
+                                >
+                                  <option value="">None</option>
+                                  {(catalog.find((category) => category.name.toLowerCase() === row.newItem.category.trim().toLowerCase())?.subcategories ?? []).map((sub) => (
+                                    <option key={`${sub.id ?? sub.name}`} value={sub.name}>{sub.name}</option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="text-[9px] font-bold uppercase text-[#6f746e] sm:col-span-3 lg:col-span-4">
+                                Description
+                                <input
+                                  value={row.newItem.description}
+                                  onChange={(event) => patchRow(row.key, { newItem: { ...row.newItem, description: event.target.value } })}
+                                  className={`${cell} mt-0.5`}
+                                />
+                              </label>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     );
                   })}
                 </tbody>
               </table>
             </div>
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-              <button type="button" onClick={addRow} className="flex items-center gap-1 text-xs font-semibold text-[#167c73]">
-                <Plus size={14} /> Add row
-              </button>
+              <div>
+                <button type="button" onClick={addRow} className="flex items-center gap-1 text-xs font-semibold text-[#167c73]">
+                  <Plus size={14} /> Add row
+                </button>
+                <p className="mt-1 max-w-xl text-[10px] text-[#6f746e]">
+                  Markup % sits after cost. Enter 0–100 and the selling price becomes cost plus that percent. A name that is not already in stock can be added as a new item.
+                  {currentUser()?.tenant?.inventory_cost_method === "latest"
+                    ? " Catalogue cost uses the latest purchase price."
+                    : " Catalogue cost stays the average of old and new stock."}
+                </p>
+              </div>
               <div className="flex items-center gap-4">
                 <div className="text-right">
                   <p className="text-[9px] font-bold uppercase text-[#6f746e]">
@@ -666,27 +928,62 @@ export default function BulkRestockPage() {
               const open = openReceiptId === receipt.id;
               return (
                 <div key={receipt.id}>
-                  <button
-                    type="button"
-                    onClick={() => setOpenReceiptId(open ? null : receipt.id)}
-                    className="flex w-full items-center gap-2 px-2 py-2 text-left text-[11px] hover:bg-[#fbfaf6]"
-                  >
-                    {open ? <ChevronDown size={14} className="shrink-0" /> : <ChevronRight size={14} className="shrink-0" />}
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-semibold">
-                        Invoice {receipt.invoice_number}
+                  <div className="flex items-center gap-1 pr-1">
+                    <button
+                      type="button"
+                      onClick={() => setOpenReceiptId(open ? null : receipt.id)}
+                      className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left text-[11px] hover:bg-[#fbfaf6]"
+                    >
+                      {open ? <ChevronDown size={14} className="shrink-0" /> : <ChevronRight size={14} className="shrink-0" />}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-semibold">
+                          Invoice {receipt.invoice_number}
+                        </span>
+                        <span className="block truncate text-[10px] text-[#6f746e]">
+                          {[receipt.receipt_number, receipt.supplier?.name, formatDate(receipt.received_at), `${receipt.items.length} item${receipt.items.length === 1 ? "" : "s"}`]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
                       </span>
-                      <span className="block truncate text-[10px] text-[#6f746e]">
-                        {[receipt.receipt_number, receipt.supplier?.name, formatDate(receipt.received_at), `${receipt.items.length} item${receipt.items.length === 1 ? "" : "s"}`]
-                          .filter(Boolean)
-                          .join(" · ")}
+                      <span className={`shrink-0 px-1.5 py-0.5 text-[9px] font-bold uppercase ${receipt.payment_status === "credit" ? "bg-[#2b6cb0]/15 text-[#2b6cb0]" : "bg-[#167c73]/10 text-[#167c73]"}`}>
+                        {receipt.payment_status === "credit" ? `Credit${receipt.due_date ? ` · ${formatDate(receipt.due_date)}` : ""}` : "Paid"}
                       </span>
-                    </span>
-                    <span className={`shrink-0 px-1.5 py-0.5 text-[9px] font-bold uppercase ${receipt.payment_status === "credit" ? "bg-[#2b6cb0]/15 text-[#2b6cb0]" : "bg-[#167c73]/10 text-[#167c73]"}`}>
-                      {receipt.payment_status === "credit" ? `Credit${receipt.due_date ? ` · ${formatDate(receipt.due_date)}` : ""}` : "Paid"}
-                    </span>
-                    <span className="w-24 shrink-0 text-right font-semibold tabular-nums">{money(receipt.total)}</span>
-                  </button>
+                      <span className="w-24 shrink-0 text-right font-semibold tabular-nums">{money(receipt.total)}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => beginEditReceipt(receipt)}
+                      className="grid size-7 shrink-0 place-items-center text-[#167c73]"
+                      aria-label={`Edit invoice ${receipt.invoice_number}`}
+                    >
+                      <Pencil size={12} />
+                    </button>
+                  </div>
+                  {open && editingReceiptId === receipt.id && (
+                    <form onSubmit={saveReceipt} className="grid gap-2 border-t border-[#e8e4da] bg-[#f7f3e4] px-3 py-2 sm:grid-cols-[1fr_8rem_9rem_auto]">
+                      <label className="text-[9px] font-bold uppercase text-[#6f746e]">
+                        Invoice number
+                        <input value={editInvoice} onChange={(event) => setEditInvoice(event.target.value)} required className={`${cell} mt-0.5`} />
+                      </label>
+                      <label className="text-[9px] font-bold uppercase text-[#6f746e]">
+                        Payment
+                        <select value={editStatus} onChange={(event) => setEditStatus(event.target.value as "paid" | "credit")} className={`${cell} mt-0.5`}>
+                          <option value="paid">Paid</option>
+                          <option value="credit">Credit</option>
+                        </select>
+                      </label>
+                      <label className="text-[9px] font-bold uppercase text-[#6f746e]">
+                        Due date
+                        <input type="date" value={editDue} onChange={(event) => setEditDue(event.target.value)} required={editStatus === "credit"} disabled={editStatus !== "credit"} className={`${cell} mt-0.5 disabled:bg-[#eeece5]`} />
+                      </label>
+                      <div className="flex items-end gap-1">
+                        <button type="submit" disabled={editSaving} className={`${buttonClass} h-7 px-2 text-[10px]`}>
+                          {editSaving ? "Saving…" : "Save"}
+                        </button>
+                        <button type="button" onClick={() => setEditingReceiptId(null)} className="h-7 border border-[#c9c5b9] bg-white px-2 text-[10px] font-semibold">Cancel</button>
+                      </div>
+                    </form>
+                  )}
                   {open && (
                     <table className="w-full border-t border-[#e8e4da] bg-[#fbfaf6] text-[11px]">
                       <tbody>

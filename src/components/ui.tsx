@@ -152,21 +152,28 @@ export function QtyStepper({
   value,
   min = 1,
   max,
+  step = 1,
   onChange,
 }: {
   value: number;
   min?: number;
   max?: number;
+  step?: number;
   onChange: (value: number) => void;
 }) {
   const t = useT();
-  const atMax = max != null && value >= max;
+  const atMax = max != null && value >= max - 0.0001;
+  const places = step < 1 ? 3 : 0;
+  const clamp = (next: number) => {
+    const bounded = max != null ? Math.min(max, Math.max(min, next)) : Math.max(min, next);
+    return Number(bounded.toFixed(places));
+  };
   return (
     <div className="inline-flex h-7 shrink-0 items-stretch overflow-hidden border border-[#c9c5b9] bg-white">
       <button
         type="button"
-        disabled={value <= min}
-        onClick={() => onChange(value - 1)}
+        disabled={value <= min + 0.0001}
+        onClick={() => onChange(clamp(value - step))}
         className="grid w-7 place-items-center text-[#6f746e] hover:bg-[#eeece5] disabled:opacity-30"
         aria-label={`− ${t("common.qty")}`}
       >
@@ -176,19 +183,20 @@ export function QtyStepper({
         type="number"
         min={min}
         max={max}
+        step={step}
         value={value}
         onChange={(event) => {
           const next = Number(event.target.value);
           if (!Number.isFinite(next)) return;
-          onChange(max != null ? Math.min(max, Math.max(min, next)) : Math.max(min, next));
+          onChange(clamp(next));
         }}
-        className="w-8 border-x border-[#c9c5b9] bg-white text-center text-xs tabular-nums outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        className={`${step < 1 ? "w-14" : "w-8"} border-x border-[#c9c5b9] bg-white text-center text-xs tabular-nums outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
         aria-label={t("common.quantity")}
       />
       <button
         type="button"
         disabled={atMax}
-        onClick={() => onChange(value + 1)}
+        onClick={() => onChange(clamp(value + step))}
         className="grid w-7 place-items-center text-[#6f746e] hover:bg-[#eeece5] disabled:opacity-30"
         aria-label={`+ ${t("common.qty")}`}
       >
