@@ -643,7 +643,6 @@ export default function PartsPage() {
                     setCategoryDraft(event.target.value);
                     setSubcategoryDraft("");
                   }}
-                  required
                   className={`${inputClass} mt-2`}
                 >
                   <option value="">Select category</option>
