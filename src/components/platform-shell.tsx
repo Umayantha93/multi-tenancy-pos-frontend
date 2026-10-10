@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
-import { Banknote, Building2, Boxes, CircleUser, Gauge, LogOut, Menu, Plus, ReceiptText, ShieldCheck, X } from "lucide-react";
+import { Banknote, Building2, Boxes, CircleUser, Gauge, LogOut, Menu, Plus, ReceiptText, X } from "lucide-react";
+import { IubitsLogo } from "@/components/iubits-logo";
 import { api, clearSession, currentUser, type User } from "@/lib/api";
 import { LanguageToggle } from "@/components/language-toggle";
 import { useT } from "@/lib/locale";
@@ -44,11 +45,7 @@ export function PlatformShell({ children, title, eyebrow, action }: { children: 
     <aside className={`fixed inset-y-0 left-0 z-40 flex w-[252px] flex-col bg-[#181b19] text-white transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>
       <div className="flex h-20 items-center justify-between border-b border-white/10 px-5">
         <Link href="/super-admin/dashboard" className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center bg-[#f5c842] text-[#181b19]"><ShieldCheck size={21} /></span>
-          <div>
-            <strong className="font-display text-xl uppercase">Bay 06 Cloud</strong>
-            <p className="text-[10px] uppercase text-white/40">{t("shell.saas_operations")}</p>
-          </div>
+          <IubitsLogo tone="onDark" size="sm" />
         </Link>
         <button onClick={() => setOpen(false)} className="lg:hidden" aria-label={t("shell.close_nav")}><X /></button>
       </div>

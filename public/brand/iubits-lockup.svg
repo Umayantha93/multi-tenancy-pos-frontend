@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 180" role="img" aria-label="IUBits POS">
+  <rect width="760" height="180" fill="#1c1914"/>
+  <image href="iubits-mark.svg" x="24" y="22" width="118" height="136"/>
+  <text x="168" y="112" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="800">IUBits</text>
+  <text x="392" y="112" fill="#e2b43a" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="800">POS</text>
+</svg>
