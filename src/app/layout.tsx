@@ -37,16 +37,17 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: "website",
+    url: "./",
     siteName: "IUBits POS",
     title: "IUBits POS",
     description,
     images: [
       {
-        url: "/brand/iubits-og.png",
+        url: "/brand/iubits-og.jpg",
         width: 1200,
         height: 630,
         alt: "IUBits POS",
-        type: "image/png",
+        type: "image/jpeg",
       },
     ],
   },
@@ -54,7 +55,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "IUBits POS",
     description,
-    images: ["/brand/iubits-og.png"],
+    images: ["/brand/iubits-og.jpg"],
   },
 };
 
