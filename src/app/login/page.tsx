@@ -2,7 +2,8 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Building2, LockKeyhole, Store } from "lucide-react";
+import { ArrowRight, LockKeyhole, Store } from "lucide-react";
+import { IubitsLogo } from "@/components/iubits-logo";
 import { PasswordInput } from "@/components/ui";
 import { LanguageToggle } from "@/components/language-toggle";
 import { api, mediaUrl, SessionPayload, storeSession } from "@/lib/api";
@@ -73,13 +74,20 @@ export default function LoginPage() {
           {logo ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={logo} alt="" className="h-12 w-auto max-w-[180px] object-contain bg-white/95 p-1" />
+          ) : businessLabel ? (
+            <IubitsLogo tone="onDark" size="md" markOnly />
           ) : (
-            <span className="grid size-11 place-items-center bg-[#f5c842] text-[#20221f]"><Building2 size={23} /></span>
+            <div>
+              <IubitsLogo tone="onDark" size="md" />
+              <p className="mt-2 text-xs text-white/55">{t("login.multi_business_pos")}</p>
+            </div>
           )}
-          <div>
-            <strong className="font-display text-2xl uppercase">{businessLabel || "Bay 06"}</strong>
-            <p className="text-xs text-white/55">{businessLabel ? t("login.business_login") : t("login.multi_business_pos")}</p>
-          </div>
+          {(logo || businessLabel) && (
+            <div>
+              <strong className="font-display text-2xl uppercase">{businessLabel}</strong>
+              <p className="text-xs text-white/55">{t("login.business_login")}</p>
+            </div>
+          )}
         </div>
         <div className="relative max-w-xl">
           <p className="mb-4 font-display text-lg uppercase text-[#f5c842]">{t("login.one_platform")}</p>
@@ -110,9 +118,9 @@ export default function LoginPage() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={logo} alt="" className="h-10 w-auto max-w-[140px] object-contain" />
               ) : (
-                <span className="grid size-10 place-items-center bg-[#f5c842]"><Building2 size={21} /></span>
+                <IubitsLogo tone="onLight" size="sm" markOnly={Boolean(businessLabel)} />
               )}
-              <strong className="font-display text-2xl uppercase">{businessLabel || "Bay 06"}</strong>
+              {businessLabel && <strong className="font-display text-2xl uppercase">{businessLabel}</strong>}
             </div>
           </div>
           <div className="mb-6 lg:hidden"><LanguageToggle tone="light" /></div>

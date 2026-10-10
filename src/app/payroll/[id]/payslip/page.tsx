@@ -159,7 +159,7 @@ export default function PayslipPage() {
             <p className="mt-2 uppercase tracking-wide">Employer / authorised</p>
           </div>
         </div>
-        <p className="mt-6 text-[10px] text-[#6f746e]">This is a computer-generated payslip from Bay 06 Cloud. Keep it with your wage records.</p>
+        <p className="mt-6 text-[10px] text-[#6f746e]">This is a computer-generated payslip from IUBits POS. Keep it with your wage records.</p>
       </div>
     </AppShell>
   );

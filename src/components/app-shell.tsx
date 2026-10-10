@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { LogOut, Menu, Store, X } from "lucide-react";
+import { LogOut, Menu, X } from "lucide-react";
 import { api, clearSession, currentFeatures, currentUser, mediaUrl, money, SessionPayload, storeSession, User } from "@/lib/api";
 import { profileFor } from "@/lib/business-profiles";
 import { BranchChip } from "@/components/branch-chip";
@@ -153,7 +153,8 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
               // eslint-disable-next-line @next/next/no-img-element
               <img src={logoUrl} alt="" className="size-10 shrink-0 object-contain bg-white/95 p-0.5" />
             ) : (
-              <span className="grid size-10 shrink-0 place-items-center bg-[#f5c842] text-[#20221f]"><Store size={20} /></span>
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src="/brand/iubits-mark.svg" alt="" className="size-10 shrink-0" />
             )}
             <div className="min-w-0">
               <strong className="block truncate font-display text-xl uppercase">{user?.tenant?.business_name ?? t("shell.business")}</strong>

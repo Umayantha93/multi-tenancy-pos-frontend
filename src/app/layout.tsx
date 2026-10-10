@@ -20,9 +20,42 @@ const sinhalaFont = Noto_Sans_Sinhala({
   weight: ["400", "500", "600", "700"],
 });
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://iubits.cc";
+const description = "Multi-tenant POS for garages, cottages, shops, and supermarkets — billing, inventory, payroll, and finance.";
+
 export const metadata: Metadata = {
-  title: "Bay 06 | Business Operations",
-  description: "Multi-tenant POS for garages, cottages, shops, and supermarkets — billing, inventory, payroll, and finance.",
+  metadataBase: new URL(siteUrl),
+  applicationName: "IUBits POS",
+  title: "IUBits POS | Business Operations",
+  description,
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "32x32" },
+      { url: "/brand/iubits-mark.png", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
+  openGraph: {
+    type: "website",
+    siteName: "IUBits POS",
+    title: "IUBits POS",
+    description,
+    images: [
+      {
+        url: "/brand/iubits-og.png",
+        width: 1200,
+        height: 630,
+        alt: "IUBits POS",
+        type: "image/png",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "IUBits POS",
+    description,
+    images: ["/brand/iubits-og.png"],
+  },
 };
 
 export default function RootLayout({
