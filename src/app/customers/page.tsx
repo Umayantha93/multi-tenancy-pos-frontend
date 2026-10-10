@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ArrowRight, Plus, Search } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
+import { ErrorMessage, ListPager, LIST_PAGE_SIZE, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
 import { api, formatDate, money } from "@/lib/api";
 
 type LastBill = {
@@ -30,6 +30,8 @@ type Customer = {
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -37,20 +39,24 @@ export default function CustomersPage() {
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  function load(term = search) {
+  const load = useCallback((term: string, pageNum: number) => {
     setLoading(true);
-    const params = new URLSearchParams({ per_page: "50" });
+    const params = new URLSearchParams({ per_page: String(LIST_PAGE_SIZE), page: String(Math.max(1, pageNum)) });
     if (term.trim()) params.set("search", term.trim());
-    api<{ data: Customer[] }>(`/customers?${params}`)
-      .then((result) => setCustomers(result.data))
+    api<{ data: Customer[]; current_page: number; last_page: number }>(`/customers?${params}`)
+      .then((result) => {
+        setCustomers(result.data);
+        setPage(result.current_page || 1);
+        setLastPage(Math.max(1, result.last_page || 1));
+      })
       .catch((caught) => setError(caught.message))
       .finally(() => setLoading(false));
-  }
+  }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => load(), 250);
+    const timer = setTimeout(() => load(search, 1), 250);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, load]);
 
   async function createCustomer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -70,7 +76,7 @@ export default function CustomersPage() {
       setNotice("Customer added.");
       setAdding(false);
       event.currentTarget.reset();
-      load();
+      load(search, 1);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not add customer.");
     } finally {
@@ -162,6 +168,7 @@ export default function CustomersPage() {
           })}
         </div>
       )}
+      {!loading && <ListPager page={page} lastPage={lastPage} onPage={(next) => load(search, next)} />}
     </AppShell>
   );
 }

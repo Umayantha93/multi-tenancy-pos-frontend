@@ -20,7 +20,7 @@ type BillPage = {
   total: number;
 };
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 15;
 
 type Bill = {
   id: number;

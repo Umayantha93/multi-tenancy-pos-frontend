@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { ArrowLeft, ChevronDown, ChevronRight, Loader2, Pencil, Plus, ScanBarcode, Search, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { buttonClass, ErrorMessage, inputClass, Panel, SuccessMessage } from "@/components/ui";
+import { buttonClass, ErrorMessage, inputClass, ListPager, LIST_PAGE_SIZE, Panel, SuccessMessage } from "@/components/ui";
 import { api, currentFeatures, currentUser, formatDate, money } from "@/lib/api";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 import { formatStockQty, sellPriceFromMarkup, STOCK_UNIT_OPTIONS, stockAllowsDecimal, stockUnitLabel } from "@/lib/stock-unit";
@@ -233,7 +233,7 @@ export default function BulkRestockPage() {
 
   const loadReceipts = useCallback((term: string, page: number, append: boolean) => {
     const seq = ++receiptSeq.current;
-    const params = new URLSearchParams({ per_page: "20", page: String(page) });
+    const params = new URLSearchParams({ per_page: String(LIST_PAGE_SIZE), page: String(page) });
     if (term.trim()) params.set("search", term.trim());
     setReceiptsLoading(true);
     api<ReceiptsPage>(`/stock-receipts?${params}`)
@@ -1016,15 +1016,12 @@ export default function BulkRestockPage() {
               </p>
             )}
           </div>
-          {!receiptsLoading && receiptPage < receiptLastPage && (
-            <button
-              type="button"
-              onClick={() => loadReceipts(receiptSearch, receiptPage + 1, true)}
-              className="mt-2 text-xs font-semibold text-[#167c73]"
-            >
-              Load more
-            </button>
-          )}
+          <ListPager
+            page={receiptPage}
+            lastPage={receiptLastPage}
+            disabled={receiptsLoading}
+            onPage={(next) => loadReceipts(receiptSearch, next, false)}
+          />
         </Panel>
       </div>
     </AppShell>

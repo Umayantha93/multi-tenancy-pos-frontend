@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Search } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { ErrorMessage, PageState, Panel, inputClass } from "@/components/ui";
+import { ErrorMessage, ListPager, pageWindow, PageState, Panel, inputClass } from "@/components/ui";
 import { api, currentFeatures, formatDate, money } from "@/lib/api";
 import { billStatusClass, billStatusLabel } from "@/lib/bill-stamp";
 import { useBusinessProfile } from "@/lib/use-business-profile";
@@ -119,6 +119,12 @@ export default function ReportsPage() {
   const [shopFilter, setShopFilter] = useState("");
   const [report, setReport] = useState<Report | null>(null);
   const [serviceOps, setServiceOps] = useState<ServiceOps | null>(null);
+  const [addonPage, setAddonPage] = useState(1);
+  const [owingPage, setOwingPage] = useState(1);
+  const [lowStockPage, setLowStockPage] = useState(1);
+  const [addonQuery, setAddonQuery] = useState("");
+  const [owingQuery, setOwingQuery] = useState("");
+  const [lowStockQuery, setLowStockQuery] = useState("");
   const [tab, setTab] = useState<"overview" | "service">("overview");
   const [error, setError] = useState("");
   const [canServiceOps, setCanServiceOps] = useState(false);
@@ -149,6 +155,18 @@ export default function ReportsPage() {
   }, [period, month, year, employeeId, shopFilter, canServiceOps, todayMode]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { setAddonPage(1); }, [serviceOps]);
+  useEffect(() => { setOwingPage(1); setLowStockPage(1); }, [report]);
+
+  const addonNeedle = addonQuery.trim().toLowerCase();
+  const visibleAddons = (serviceOps?.rows ?? []).filter((row) => !addonNeedle || row.name.toLowerCase().includes(addonNeedle));
+  const addonWindow = pageWindow(visibleAddons, addonPage);
+  const owingNeedle = owingQuery.trim().toLowerCase();
+  const visibleOwing = (report?.receivables ?? []).filter((row) => !owingNeedle || `${row.bill_number} ${row.customer?.name ?? ""}`.toLowerCase().includes(owingNeedle));
+  const owingWindow = pageWindow(visibleOwing, owingPage, 7);
+  const stockNeedle = lowStockQuery.trim().toLowerCase();
+  const visibleStock = (report?.stock.low_stock ?? []).filter((item) => !stockNeedle || item.name.toLowerCase().includes(stockNeedle));
+  const stockWindow = pageWindow(visibleStock, lowStockPage, 7);
 
   function goToday() {
     if (todayMode) {
@@ -261,8 +279,22 @@ export default function ReportsPage() {
             </div>
             <Panel>
               <div className="border-b border-[#d7d3c8] px-5 py-4">
-                <h2 className="font-display text-2xl font-semibold uppercase">Service addons</h2>
-                <p className="text-xs text-[#6f746e]">Sold qty is billed lines only. Inside full service does not inflate sold qty. {formatDate(serviceOps.from)} – {formatDate(serviceOps.to)}</p>
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <h2 className="font-display text-2xl font-semibold uppercase">Service addons</h2>
+                    <p className="text-xs text-[#6f746e]">Sold qty is billed lines only. Inside full service does not inflate sold qty. {formatDate(serviceOps.from)} – {formatDate(serviceOps.to)}</p>
+                  </div>
+                  <label className="relative block w-full max-w-xs">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6f746e]" size={14} />
+                    <input
+                      value={addonQuery}
+                      onChange={(event) => { setAddonQuery(event.target.value); setAddonPage(1); }}
+                      className={`${inputClass} pl-8`}
+                      placeholder="Search service"
+                      aria-label="Search service addons"
+                    />
+                  </label>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[640px] text-left text-sm">
@@ -277,7 +309,7 @@ export default function ReportsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {serviceOps.rows.map((row) => (
+                    {addonWindow.rows.map((row) => (
                       <tr key={row.key} className="border-t border-[#e2ded4]">
                         <td className="px-5 py-3 font-semibold">{row.name}</td>
                         <td>{row.sold_qty}</td>
@@ -290,7 +322,9 @@ export default function ReportsPage() {
                   </tbody>
                 </table>
                 {serviceOps.rows.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No billed service addons in this period.</p>}
+                {serviceOps.rows.length > 0 && visibleAddons.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No service addons match that search.</p>}
               </div>
+              <ListPager page={addonWindow.page} lastPage={addonWindow.lastPage} onPage={setAddonPage} />
             </Panel>
           </div>
         ) : <PageState message="Loading service operations..." />
@@ -365,7 +399,19 @@ export default function ReportsPage() {
           <div className="grid gap-5 xl:grid-cols-2">
             <Panel>
               <div className="border-b border-[#d7d3c8] px-5 py-4">
-                <h2 className="font-display text-2xl font-semibold uppercase">Owing customers</h2>
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <h2 className="font-display text-2xl font-semibold uppercase">Owing customers</h2>
+                  <label className="relative block w-full max-w-xs">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6f746e]" size={14} />
+                    <input
+                      value={owingQuery}
+                      onChange={(event) => { setOwingQuery(event.target.value); setOwingPage(1); }}
+                      className={`${inputClass} pl-8`}
+                      placeholder="Bill or customer"
+                      aria-label="Search owing customers"
+                    />
+                  </label>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[520px] text-left text-sm">
@@ -373,7 +419,7 @@ export default function ReportsPage() {
                     <tr><th className="px-5 py-3">Bill</th><th>Customer</th><th className="pr-5 text-right">Due</th></tr>
                   </thead>
                   <tbody>
-                    {report.receivables.map((row) => (
+                    {owingWindow.rows.map((row) => (
                       <tr key={row.id} className="border-t border-[#e2ded4]">
                         <td className="px-5 py-3 font-semibold">{row.bill_number}</td>
                         <td>{row.customer?.name ?? "—"}</td>
@@ -383,12 +429,28 @@ export default function ReportsPage() {
                   </tbody>
                 </table>
                 {report.receivables.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No outstanding bills.</p>}
+                {report.receivables.length > 0 && visibleOwing.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No owing customers match that search.</p>}
               </div>
+              <ListPager page={owingWindow.page} lastPage={owingWindow.lastPage} onPage={setOwingPage} />
             </Panel>
             <Panel>
               <div className="border-b border-[#d7d3c8] px-5 py-4">
-                <h2 className="font-display text-2xl font-semibold uppercase">Low stock</h2>
-                <p className="text-xs text-[#6f746e]">{money(report.stock.on_hand_value)} on hand · {report.stock.sku_count} SKUs</p>
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <h2 className="font-display text-2xl font-semibold uppercase">Low stock</h2>
+                    <p className="text-xs text-[#6f746e]">{money(report.stock.on_hand_value)} on hand · {report.stock.sku_count} SKUs</p>
+                  </div>
+                  <label className="relative block w-full max-w-xs">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6f746e]" size={14} />
+                    <input
+                      value={lowStockQuery}
+                      onChange={(event) => { setLowStockQuery(event.target.value); setLowStockPage(1); }}
+                      className={`${inputClass} pl-8`}
+                      placeholder="Search item"
+                      aria-label="Search low stock"
+                    />
+                  </label>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
@@ -396,7 +458,7 @@ export default function ReportsPage() {
                     <tr><th className="px-5 py-3">Item</th><th className="pr-5 text-right">Qty</th></tr>
                   </thead>
                   <tbody>
-                    {report.stock.low_stock.map((item) => (
+                    {stockWindow.rows.map((item) => (
                       <tr key={`${item.id}-${item.name}`} className="border-t border-[#e2ded4]">
                         <td className="px-5 py-3 font-semibold">{item.name}</td>
                         <td className="pr-5 text-right">{formatStockQty(item.stock_qty, item.stock_unit, isPaint)}</td>
@@ -405,7 +467,9 @@ export default function ReportsPage() {
                   </tbody>
                 </table>
                 {report.stock.low_stock.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No low-stock items.</p>}
+                {report.stock.low_stock.length > 0 && visibleStock.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No low-stock items match that search.</p>}
               </div>
+              <ListPager page={stockWindow.page} lastPage={stockWindow.lastPage} onPage={setLowStockPage} />
             </Panel>
           </div>
           <Panel>
