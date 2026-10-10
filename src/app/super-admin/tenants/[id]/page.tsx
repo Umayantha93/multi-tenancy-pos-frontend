@@ -966,6 +966,16 @@ export default function TenantDetailPage() {
                   <input name="business_name" required defaultValue={tenant.business_name} className={`${inputClass} mt-2`} />
                 </label>
                 <label className="block text-xs font-bold uppercase">
+                  Inventory cost
+                  <select name="inventory_cost_method" defaultValue={tenant.inventory_cost_method === "latest" ? "latest" : "average"} className={`${inputClass} mt-2`}>
+                    <option value="average">Default — average cost (old stock + new stock)</option>
+                    <option value="latest">Recent cost price</option>
+                  </select>
+                  <span className="mt-1 block text-[11px] font-normal normal-case text-[#6f746e]">
+                    Default is the current method: old cost and new cost divided by total quantity. Recent cost replaces the catalogue cost with the latest purchase price. Applies to this tenant only.
+                  </span>
+                </label>
+                <label className="block text-xs font-bold uppercase">
                   Business type
                   <select name="business_type" defaultValue={tenant.business_type} className={`${inputClass} mt-2`}>
                     {BUSINESS_TYPE_OPTIONS.map((option) => (

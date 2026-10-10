@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ArrowRight, ClipboardPlus, Hammer, Percent, Search, Wrench, X, Zap } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
@@ -12,6 +12,15 @@ import { billListStatus, billStatusClass, billStatusLabel, isOweInUrgent } from 
 import { BillingBranchBanner } from "@/components/branch-chip";
 import { useRouter } from "next/navigation";
 import { useT } from "@/lib/locale";
+
+type BillPage = {
+  data: Bill[];
+  current_page: number;
+  last_page: number;
+  total: number;
+};
+
+const PAGE_SIZE = 5;
 
 type Bill = {
   id: number;
@@ -51,6 +60,8 @@ function billJobKindLabel(bill: Bill, type: string, t: ReturnType<typeof useT>):
 
 export default function BillsPage() {
   const [bills, setBills] = useState<Bill[]>([]);
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -70,7 +81,7 @@ export default function BillsPage() {
     setIsOwner(currentUser()?.role === "business_owner");
   }, []);
 
-  useEffect(() => {
+  const loadBills = useCallback((pageNum: number) => {
     if (rangeInvalid) {
       setError(t("bills.range_invalid"));
       setLoading(false);
@@ -79,22 +90,29 @@ export default function BillsPage() {
 
     setLoading(true);
     setError("");
-    const timer = setTimeout(() => {
-      const params = new URLSearchParams({
-        search,
-        per_page: "50",
-      });
-      if (usesStoreCounter(profile.type)) params.set("job_kind", "parts_sale");
-      if (dateFrom) params.set("date_from", dateFrom);
-      if (dateTo) params.set("date_to", dateTo);
+    const params = new URLSearchParams({
+      search,
+      per_page: String(PAGE_SIZE),
+      page: String(Math.max(1, pageNum)),
+    });
+    if (usesStoreCounter(profile.type)) params.set("job_kind", "parts_sale");
+    if (dateFrom) params.set("date_from", dateFrom);
+    if (dateTo) params.set("date_to", dateTo);
 
-      api<{ data: Bill[] }>(`/bills?${params}`)
-        .then((result) => setBills(result.data))
-        .catch((caught) => setError(caught.message))
-        .finally(() => setLoading(false));
-    }, 250);
+    api<BillPage>(`/bills?${params}`)
+      .then((result) => {
+        setBills(result.data);
+        setPage(result.current_page || 1);
+        setLastPage(Math.max(1, result.last_page || 1));
+      })
+      .catch((caught) => setError(caught.message))
+      .finally(() => setLoading(false));
+  }, [search, dateFrom, dateTo, rangeInvalid, profile.type, t]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => loadBills(1), 250);
     return () => clearTimeout(timer);
-  }, [search, dateFrom, dateTo, rangeInvalid, profile.type]);
+  }, [loadBills]);
 
   function clearDates() {
     setDateFrom("");
@@ -223,7 +241,7 @@ export default function BillsPage() {
           </button>
         )}
       </div>
-      {error ? <ErrorMessage message={error} /> : loading ? (
+      {error ? <ErrorMessage message={error} /> : loading && bills.length === 0 ? (
         <PageState message={t("bills.loading", { kind: t(`terms.${profile.billingLabel}`).toLowerCase() })} />
       ) : (
         <>
@@ -331,6 +349,27 @@ export default function BillsPage() {
             )}
           </div>
         </Panel>
+        {lastPage > 1 && (
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              disabled={page <= 1 || loading}
+              onClick={() => loadBills(page - 1)}
+              className="h-8 border border-[#c9c5b9] bg-white px-3 text-[11px] font-semibold disabled:opacity-40"
+            >
+              {t("common.previous")}
+            </button>
+            <span className="text-xs text-[#6f746e]">{t("common.page_of", { page, last: lastPage })}</span>
+            <button
+              type="button"
+              disabled={page >= lastPage || loading}
+              onClick={() => loadBills(page + 1)}
+              className="h-8 border border-[#c9c5b9] bg-white px-3 text-[11px] font-semibold disabled:opacity-40"
+            >
+              {t("common.next")}
+            </button>
+          </div>
+        )}
         </>
       )}
       {quickOpen && (

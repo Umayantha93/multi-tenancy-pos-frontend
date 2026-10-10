@@ -7,14 +7,24 @@ import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, QtyStepper, buttonClass, inputClass } from "@/components/ui";
 import { api, currentFeatures, money } from "@/lib/api";
 import { usesStoreCounter } from "@/lib/business-profiles";
+import { salePriceLayers } from "@/lib/stock-unit";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 import { BillingBranchBanner } from "@/components/branch-chip";
 import { useT } from "@/lib/locale";
 
-type Part = { id: number; name: string; sku?: string | null; barcode?: string | null; brand?: string; price: string; stock_qty: number; serialized?: boolean };
+type Part = { id: number; name: string; sku?: string | null; barcode?: string | null; brand?: string; price: string; pending_price?: string | null; pending_price_at_qty?: string | number | null; stock_qty: number; serialized?: boolean };
 type Product = { id: number; name: string; sku: string | null; size: string | null; color: string | null; price: string; stock_qty: number };
 type WarrantyCover = "" | "months" | "years" | "custom";
-type CartLine = { id: number; name: string; detail: string; price: number; stock: number; quantity: number; warrantyCover?: WarrantyCover; warrantyAmount?: number; warrantyUntil?: string; serialized?: boolean; serials?: string[] };
+type CartLine = { id: number; name: string; detail: string; price: number; pendingPrice?: number | null; pendingAtQty?: number | null; stock: number; quantity: number; warrantyCover?: WarrantyCover; warrantyAmount?: number; warrantyUntil?: string; serialized?: boolean; serials?: string[] };
+
+function lineLayers(line: CartLine) {
+  if (line.serialized) return [{ quantity: line.quantity, unitPrice: line.price }];
+  return salePriceLayers(line.quantity, line.price, line.stock, line.pendingPrice, line.pendingAtQty);
+}
+
+function lineAmount(line: CartLine): number {
+  return lineLayers(line).reduce((sum, layer) => sum + layer.unitPrice * layer.quantity, 0);
+}
 
 function toCartLine(row: Part | Product, store: boolean, stockLabel = "Stock", serials?: string[]): CartLine {
   if (store) {
@@ -24,6 +34,8 @@ function toCartLine(row: Part | Product, store: boolean, stockLabel = "Stock", s
       name: part.name,
       detail: [part.barcode, part.sku, part.brand].filter(Boolean).join(" · ") || stockLabel,
       price: Number(part.price),
+      pendingPrice: part.pending_price == null || part.pending_price === "" ? null : Number(part.pending_price),
+      pendingAtQty: part.pending_price_at_qty == null || part.pending_price_at_qty === "" ? null : Number(part.pending_price_at_qty),
       stock: part.stock_qty,
       quantity: serials?.length || 1,
       warrantyCover: "",
@@ -83,7 +95,7 @@ export default function PosPage() {
       .finally(() => setLoading(false));
   }, [search, isStore, profile.type, sessionReady]);
 
-  const subtotal = useMemo(() => cart.reduce((sum, line) => sum + line.price * line.quantity, 0), [cart]);
+  const subtotal = useMemo(() => cart.reduce((sum, line) => sum + lineAmount(line), 0), [cart]);
   const discountAmount = Math.min(Math.max(0, Number(discount || 0)), subtotal);
   const total = Math.max(0, subtotal - discountAmount);
   const tenderedAmount = Number(tendered || 0);
@@ -271,8 +283,13 @@ export default function PosPage() {
                 >
                   <p className="font-semibold">{item.name}</p>
                   <p className="text-xs text-[#6f746e]">{item.detail}</p>
-                  <div className="mt-2 flex justify-between text-sm">
-                    <strong className="tabular-nums">{money(item.price)}</strong>
+                  <div className="mt-2 flex justify-between gap-2 text-sm">
+                    <strong className="tabular-nums">
+                      {money(item.price)}
+                      {item.pendingPrice != null && item.stock - Number(item.pendingAtQty ?? 0) > 0.0001 && (
+                        <span className="mt-0.5 block text-[10px] font-semibold text-[#167c73]">then {money(item.pendingPrice)}</span>
+                      )}
+                    </strong>
                     <span className="text-[#6f746e]">{t("common.left", { count: item.stock })}</span>
                   </div>
                 </button>
@@ -290,14 +307,16 @@ export default function PosPage() {
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                   <div className="min-w-0 flex-1 basis-40">
                     <p className="truncate font-semibold">{line.name}</p>
-                    <p className="tabular-nums text-[#6f746e]">{money(line.price)} × {line.quantity}</p>
+                    {lineLayers(line).map((layer, index) => (
+                      <p key={index} className="tabular-nums text-[#6f746e]">{money(layer.unitPrice)} × {layer.quantity}</p>
+                    ))}
                     {line.serials?.length ? <p className="mt-1 truncate text-[11px] text-[#6f746e]">{line.serials.join(" · ")}</p> : null}
                   </div>
                   <div className="ml-auto flex shrink-0 items-center gap-2">
                     {!line.serials?.length && (
                       <QtyStepper value={line.quantity} max={line.stock} onChange={(qty) => setQty(line.id, qty, line.stock)} />
                     )}
-                    <strong className="shrink-0 whitespace-nowrap text-right text-sm tabular-nums">{money(line.price * line.quantity)}</strong>
+                    <strong className="shrink-0 whitespace-nowrap text-right text-sm tabular-nums">{money(lineAmount(line))}</strong>
                     <button type="button" className="grid size-7 shrink-0 place-items-center text-[#b84837]" onClick={() => setCart((rows) => rows.filter((row) => row.id !== line.id))} aria-label={t("common.remove")}><Trash2 size={14} /></button>
                   </div>
                 </div>

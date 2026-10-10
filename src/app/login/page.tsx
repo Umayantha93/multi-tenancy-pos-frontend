@@ -84,7 +84,7 @@ export default function LoginPage() {
         <div className="relative max-w-xl">
           <p className="mb-4 font-display text-lg uppercase text-[#f5c842]">{t("login.one_platform")}</p>
           <h1 className="font-display text-7xl font-semibold uppercase leading-[0.88]">
-            {t("login.garages")}<br />{t("login.studios")}<br />{t("login.garments")}<br />{t("login.cottages")}
+            {t("login.headline_1")}<br />{t("login.headline_2")}<br />{t("login.headline_3")}
           </h1>
           <p className="mt-6 max-w-md text-sm leading-6 text-white/55">
             {t("login.pitch")}
@@ -169,13 +169,9 @@ export default function LoginPage() {
             <ArrowRight size={19} />
           </button>
 
-          <div className="mt-8 grid grid-cols-2 gap-2 border-t border-[#e2ded4] pt-6 text-center sm:grid-cols-4">
-            {[t("login.garages"), t("login.studios"), t("login.garments"), t("login.cottages")].map((label) => (
-              <div key={label} className="border border-[#d7d3c8] bg-[#fbfaf6] px-2 py-3">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-[#6f746e]">{label.replace(/\.$/, "")}</p>
-              </div>
-            ))}
-          </div>
+          <p className="mt-8 border-t border-[#e2ded4] pt-6 text-center text-[10px] font-bold uppercase tracking-wide text-[#6f746e]">
+            {t("login.smart_line").replace(/\.$/, "")}
+          </p>
         </form>
       </section>
     </main>
