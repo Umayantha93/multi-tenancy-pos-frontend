@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
+import { buttonClass, ErrorMessage, inputClass, ListPager, LIST_PAGE_SIZE, PageState, Panel } from "@/components/ui";
 import { api, currentFeatures, currentUser, formatDate, money } from "@/lib/api";
 import { billStatusClass, billStatusLabel } from "@/lib/bill-stamp";
 import { ShopFilter } from "@/components/branch-chip";
@@ -75,7 +75,7 @@ type Report = {
   credit_generated: number;
   credit_collected: number;
   credit_pending: number;
-  bills: { data: ProfitBill[] };
+  bills: { data: ProfitBill[]; current_page?: number; last_page?: number };
 };
 
 function daysAgo(days: number) {
@@ -101,6 +101,9 @@ export default function BillProfitsPage() {
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [billPage, setBillPage] = useState(1);
+  const [billQuery, setBillQuery] = useState("");
+  const [billSearch, setBillSearch] = useState("");
   const [detail, setDetail] = useState<ProfitBill | null>(null);
   const [detailBusy, setDetailBusy] = useState(false);
   const [shopFilter, setShopFilter] = useState<string>("");
@@ -108,7 +111,7 @@ export default function BillProfitsPage() {
 
   const effectiveKind = jobKind ?? (isStore && !hasRepair ? "parts_sale" : null);
 
-  const load = useCallback(() => {
+  const load = useCallback((pageNum: number) => {
     if (!dateFrom || !dateTo) return;
     if (rangeInvalid) {
       setError("From date must be on or before To date.");
@@ -117,21 +120,35 @@ export default function BillProfitsPage() {
     }
     setLoading(true);
     setError("");
-    const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, per_page: "50" });
+    const params = new URLSearchParams({
+      date_from: dateFrom,
+      date_to: dateTo,
+      per_page: String(LIST_PAGE_SIZE),
+      page: String(Math.max(1, pageNum)),
+    });
+    if (billSearch.trim()) params.set("search", billSearch.trim());
     if (effectiveKind) params.set("job_kind", effectiveKind);
     if (shopFilter) params.set("branch_id", shopFilter);
     api<Report>(`/bill-profits?${params}`)
-      .then(setReport)
+      .then((result) => {
+        setReport(result);
+        setBillPage(result.bills.current_page || 1);
+      })
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load bill profits."))
       .finally(() => setLoading(false));
-  }, [dateFrom, dateTo, effectiveKind, rangeInvalid, shopFilter]);
+  }, [dateFrom, dateTo, effectiveKind, rangeInvalid, shopFilter, billSearch]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setBillSearch(billQuery), 250);
+    return () => window.clearTimeout(timer);
+  }, [billQuery]);
 
   useEffect(() => {
     setDateFrom(daysAgo(29));
     setDateTo(todayStamp());
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(1); }, [load]);
   useEffect(() => {
     const type = currentUser()?.tenant?.business_type;
     setIsGarage(type === "garage" || type === "tyre" || type === "device_repair" || type === "paint");
@@ -232,7 +249,7 @@ export default function BillProfitsPage() {
           <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className={`${inputClass} w-auto min-w-40`} />
         </label>
         <ShopFilter value={shopFilter} onChange={setShopFilter} />
-        <button type="button" onClick={load} className={buttonClass}>Apply period</button>
+        <button type="button" onClick={() => load(1)} className={buttonClass}>Apply period</button>
         <button
           type="button"
           onClick={() => {
@@ -320,10 +337,20 @@ export default function BillProfitsPage() {
           </Panel>
 
           <Panel className="mt-5 overflow-hidden">
-            <div className="border-b border-[#d7d3c8] px-5 py-4">
+            <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[#d7d3c8] px-5 py-4">
               <h2 className="font-display text-2xl font-semibold uppercase">
                 {effectiveKind === "service" ? (isPaint ? "Package jobs" : "Service bills") : effectiveKind === "repair" ? (isPaint ? "Panel jobs" : "Repair bills") : effectiveKind === "parts_sale" ? (isPaint ? "Counter sales" : isStore ? "Sales" : "Instant bills") : "Bills"}
               </h2>
+              <label className="relative block w-full max-w-xs">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6f746e]" size={14} />
+                <input
+                  value={billQuery}
+                  onChange={(event) => setBillQuery(event.target.value)}
+                  className={`${inputClass} pl-8`}
+                  placeholder="Bill, customer, phone or vehicle"
+                  aria-label="Search bills"
+                />
+              </label>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[960px] text-left text-sm">
@@ -385,8 +412,16 @@ export default function BillProfitsPage() {
                   ))}
                 </tbody>
               </table>
+              <ListPager
+                page={billPage}
+                lastPage={Math.max(1, report.bills.last_page || 1)}
+                disabled={loading}
+                onPage={(next) => load(next)}
+              />
               {report.bills.data.length === 0 && (
-                <p className="p-8 text-center text-sm text-[#6f746e]">No bills in this date range.</p>
+                <p className="p-8 text-center text-sm text-[#6f746e]">
+                  {billSearch.trim() ? "No bills match that search." : "No bills in this date range."}
+                </p>
               )}
             </div>
           </Panel>

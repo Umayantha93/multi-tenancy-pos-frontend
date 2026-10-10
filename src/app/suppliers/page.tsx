@@ -1,9 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Search, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { buttonClass, ErrorMessage, PageState, Panel, inputClass } from "@/components/ui";
+import { buttonClass, ErrorMessage, ListPager, LIST_PAGE_SIZE, pageWindow, PageState, Panel, inputClass } from "@/components/ui";
 import { api, money } from "@/lib/api";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 
@@ -68,17 +68,28 @@ function supplierPayload(form: HTMLFormElement) {
 export default function SuppliersPage() {
   const isGarage = useBusinessProfile().type === "garage";
   const [rows, setRows] = useState<Supplier[]>([]);
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
+  const [purchasePage, setPurchasePage] = useState(1);
+  const [partPage, setPartPage] = useState(1);
+  const [supplierSearch, setSupplierSearch] = useState("");
+  const [purchaseQuery, setPurchaseQuery] = useState("");
+  const [partQuery, setPartQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<SupplierDetail | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  function load() {
+  function load(pageNum = 1, term = supplierSearch) {
     setLoading(true);
-    api<{ data: Supplier[] }>("/suppliers?per_page=100")
+    const params = new URLSearchParams({ per_page: String(LIST_PAGE_SIZE), page: String(Math.max(1, pageNum)) });
+    if (term.trim()) params.set("search", term.trim());
+    api<{ data: Supplier[]; current_page: number; last_page: number }>(`/suppliers?${params}`)
       .then((result) => {
         setRows(result.data);
+        setPage(result.current_page || 1);
+        setLastPage(Math.max(1, result.last_page || 1));
         if (isGarage && result.data.length && selectedId == null) {
           setSelectedId(result.data[0].id);
         }
@@ -87,7 +98,17 @@ export default function SuppliersPage() {
       .finally(() => setLoading(false));
   }
 
-  useEffect(load, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => load(1, supplierSearch), 200);
+    return () => window.clearTimeout(timer);
+  }, [supplierSearch]);
+
+  useEffect(() => {
+    setPurchasePage(1);
+    setPurchaseQuery("");
+    setPartPage(1);
+    setPartQuery("");
+  }, [selectedId]);
 
   useEffect(() => {
     if (!isGarage || !selectedId) {
@@ -140,6 +161,23 @@ export default function SuppliersPage() {
     }
   }
 
+  const purchaseNeedle = purchaseQuery.trim().toLowerCase();
+  const filteredPurchases = (detail?.purchases ?? []).filter((row) => {
+    if (!purchaseNeedle) return true;
+    return [row.receipt_number, row.items_label, row.received_at, row.payment_status]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(purchaseNeedle);
+  });
+  const purchases = pageWindow(filteredPurchases, purchasePage, 7);
+  const partNeedle = partQuery.trim().toLowerCase();
+  const filteredParts = (detail?.parts_bought ?? []).filter((row) => {
+    if (!partNeedle) return true;
+    return [row.name, row.kind].filter(Boolean).join(" ").toLowerCase().includes(partNeedle);
+  });
+  const partsBought = pageWindow(filteredParts, partPage, 7);
+
   if (!isGarage) {
     return (
       <AppShell title="Suppliers" eyebrow="Optional on restock — leave blank to keep the current purchase path">
@@ -154,6 +192,16 @@ export default function SuppliersPage() {
             </form>
           </Panel>
           <Panel>
+            <label className="relative block border-b border-[#d7d3c8] p-3">
+              <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-[#6f746e]" size={14} />
+              <input
+                value={supplierSearch}
+                onChange={(event) => setSupplierSearch(event.target.value)}
+                className={`${inputClass} pl-8`}
+                placeholder="Supplier name or phone"
+                aria-label="Search suppliers"
+              />
+            </label>
             {error && <div className="p-4"><ErrorMessage message={error} /></div>}
             {loading ? <PageState message="Loading suppliers..." /> : (
               <div className="overflow-x-auto">
@@ -176,9 +224,10 @@ export default function SuppliersPage() {
                     ))}
                   </tbody>
                 </table>
-                {rows.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No suppliers yet. Restock still works without one.</p>}
+                {rows.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">{supplierSearch.trim() ? "No suppliers match that search." : "No suppliers yet. Restock still works without one."}</p>}
               </div>
             )}
+            <ListPager page={page} lastPage={lastPage} disabled={loading} onPage={(next) => load(next)} />
           </Panel>
         </div>
       </AppShell>
@@ -205,6 +254,16 @@ export default function SuppliersPage() {
             </form>
           </Panel>
           <Panel>
+            <label className="relative block border-b border-[#d7d3c8] p-3">
+              <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-[#6f746e]" size={14} />
+              <input
+                value={supplierSearch}
+                onChange={(event) => setSupplierSearch(event.target.value)}
+                className={`${inputClass} pl-8`}
+                placeholder="Supplier name or phone"
+                aria-label="Search suppliers"
+              />
+            </label>
             {loading ? <PageState message="Loading suppliers..." /> : (
               <div className="divide-y divide-[#e2ded4]">
                 {rows.map((row) => (
@@ -221,8 +280,12 @@ export default function SuppliersPage() {
                     </span>
                   </button>
                 ))}
+                {!loading && rows.length === 0 && (
+                  <p className="px-5 py-6 text-sm text-[#6f746e]">{supplierSearch.trim() ? "No suppliers match that search." : "No suppliers yet."}</p>
+                )}
               </div>
             )}
+            <ListPager page={page} lastPage={lastPage} disabled={loading} onPage={(next) => load(next)} />
           </Panel>
         </div>
 
@@ -260,8 +323,21 @@ export default function SuppliersPage() {
               </form>
             </Panel>
             <Panel>
-              <div className="border-b border-[#d7d3c8] px-5 py-4">
+              <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[#d7d3c8] px-5 py-4">
                 <h3 className="font-display text-xl font-semibold uppercase">Purchases</h3>
+                <label className="relative block w-full max-w-xs">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6f746e]" size={14} />
+                  <input
+                    value={purchaseQuery}
+                    onChange={(event) => {
+                      setPurchaseQuery(event.target.value);
+                      setPurchasePage(1);
+                    }}
+                    className={`${inputClass} pl-8`}
+                    placeholder="Invoice, item or date"
+                    aria-label="Search purchases"
+                  />
+                </label>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[520px] text-left text-sm">
@@ -269,7 +345,7 @@ export default function SuppliersPage() {
                     <tr><th className="px-5 py-3">Date</th><th>Ref</th><th>Items</th><th>Status</th><th className="pr-5 text-right">Amount</th></tr>
                   </thead>
                   <tbody>
-                    {(detail.purchases ?? []).map((row) => (
+                    {purchases.rows.map((row) => (
                       <tr key={row.id} className="border-t border-[#e2ded4]">
                         <td className="px-5 py-3">{row.received_at || "—"}</td>
                         <td>{row.receipt_number || "—"}</td>
@@ -281,11 +357,26 @@ export default function SuppliersPage() {
                   </tbody>
                 </table>
                 {(detail.purchases ?? []).length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No purchases on this supplier yet.</p>}
+                {(detail.purchases ?? []).length > 0 && filteredPurchases.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No purchases match that search.</p>}
               </div>
+              <ListPager page={purchases.page} lastPage={purchases.lastPage} onPage={setPurchasePage} />
             </Panel>
             <Panel>
-              <div className="border-b border-[#d7d3c8] px-5 py-4">
+              <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[#d7d3c8] px-5 py-4">
                 <h3 className="font-display text-xl font-semibold uppercase">Parts bought</h3>
+                <label className="relative block w-full max-w-xs">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6f746e]" size={14} />
+                  <input
+                    value={partQuery}
+                    onChange={(event) => {
+                      setPartQuery(event.target.value);
+                      setPartPage(1);
+                    }}
+                    className={`${inputClass} pl-8`}
+                    placeholder="Part name or kind"
+                    aria-label="Search parts bought"
+                  />
+                </label>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[480px] text-left text-sm">
@@ -293,7 +384,7 @@ export default function SuppliersPage() {
                     <tr><th className="px-5 py-3">Part</th><th>Kind</th><th>Times</th><th>Qty</th><th className="pr-5 text-right">Last cost</th></tr>
                   </thead>
                   <tbody>
-                    {(detail.parts_bought ?? []).map((row) => (
+                    {partsBought.rows.map((row) => (
                       <tr key={row.part_id} className="border-t border-[#e2ded4]">
                         <td className="px-5 py-3 font-semibold">{row.name}</td>
                         <td>{row.kind || "—"}</td>
@@ -305,7 +396,9 @@ export default function SuppliersPage() {
                   </tbody>
                 </table>
                 {(detail.parts_bought ?? []).length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No parts linked yet.</p>}
+                {(detail.parts_bought ?? []).length > 0 && filteredParts.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No parts match that search.</p>}
               </div>
+              <ListPager page={partsBought.page} lastPage={partsBought.lastPage} onPage={setPartPage} />
             </Panel>
           </div>
         ) : (

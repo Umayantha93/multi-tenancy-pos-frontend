@@ -15,6 +15,50 @@ export function ErrorMessage({ message }: { message: string }) { return <p class
 export function SuccessMessage({ message }: { message: string }) { return <p className="border-l-4 border-[#167c73] bg-[#167c73]/8 px-4 py-3 text-sm text-[#0f5c56]">{message}</p>; }
 export const inputClass = "h-8 w-full border border-[#c9c5b9] bg-white px-2 text-[11px] outline-none focus:border-[#167c73] [&:is(textarea)]:h-auto [&:is(textarea)]:min-h-[4rem] [&:is(textarea)]:py-1.5";
 export const buttonClass = "inline-flex h-8 items-center justify-center gap-1 bg-[#20221f] px-2.5 text-[11px] font-semibold text-white transition hover:bg-[#167c73] disabled:opacity-50";
+export const LIST_PAGE_SIZE = 15;
+
+export function pageWindow<T>(rows: T[], page: number, size = LIST_PAGE_SIZE) {
+  const lastPage = Math.max(1, Math.ceil(rows.length / size));
+  const safe = Math.min(Math.max(1, page), lastPage);
+  const start = (safe - 1) * size;
+  return { page: safe, lastPage, rows: rows.slice(start, start + size) };
+}
+
+export function ListPager({
+  page,
+  lastPage,
+  onPage,
+  disabled = false,
+}: {
+  page: number;
+  lastPage: number;
+  onPage: (page: number) => void;
+  disabled?: boolean;
+}) {
+  const t = useT();
+  if (lastPage <= 1) return null;
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2 px-5 py-3">
+      <button
+        type="button"
+        disabled={disabled || page <= 1}
+        onClick={() => onPage(page - 1)}
+        className="h-8 border border-[#c9c5b9] bg-white px-3 text-[11px] font-semibold disabled:opacity-40"
+      >
+        {t("common.previous")}
+      </button>
+      <span className="text-xs text-[#6f746e]">{t("common.page_of", { page, last: lastPage })}</span>
+      <button
+        type="button"
+        disabled={disabled || page >= lastPage}
+        onClick={() => onPage(page + 1)}
+        className="h-8 border border-[#c9c5b9] bg-white px-3 text-[11px] font-semibold disabled:opacity-40"
+      >
+        {t("common.next")}
+      </button>
+    </div>
+  );
+}
 
 type PasswordInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & {
   leftIcon?: ReactNode;
