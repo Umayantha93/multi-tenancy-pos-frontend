@@ -102,6 +102,74 @@ export function groupModules<T extends ModuleFeature>(features: T[]) {
 
 export type NestedModule<T extends ModuleFeature> = { feature: T; children: T[] };
 
+export type NavGroup<T> = {
+  group: string;
+  entries: Array<{ item: T; children: T[] }>;
+};
+
+export function groupNavigation<T extends { href: string; feature?: string | null }>(
+  items: T[],
+  catalog: Array<{ key: string; group: string }> = [],
+): { pinned: T[]; groups: NavGroup<T>[]; account: T[] } {
+  const pinned: T[] = [];
+  const account: T[] = [];
+  const featured: T[] = [];
+
+  for (const item of items) {
+    if (!item.feature) {
+      if (item.href === "/dashboard") pinned.push(item);
+      else account.push(item);
+      continue;
+    }
+    featured.push(item);
+  }
+
+  const groupName = new Map(catalog.map((row) => [row.key, row.group]));
+  const buckets = new Map<string, T[]>();
+  for (const item of featured) {
+    const key = item.feature ?? "";
+    const group = groupName.get(key) || FALLBACK_GROUP[key] || "Other";
+    const list = buckets.get(group) ?? [];
+    list.push(item);
+    buckets.set(group, list);
+  }
+
+  const orderedGroups = [
+    ...GROUP_ORDER.filter((group) => buckets.has(group)),
+    ...[...buckets.keys()].filter((group) => !GROUP_ORDER.includes(group)).sort(),
+  ];
+
+  const groups = orderedGroups.map((group) => {
+    const groupItems = buckets.get(group) ?? [];
+    const present = new Set(groupItems.map((item) => item.feature));
+    const childFeatures = new Set(
+      groupItems
+        .map((item) => item.feature ?? "")
+        .filter((key) => FEATURE_PARENTS[key] && present.has(FEATURE_PARENTS[key])),
+    );
+    const attached = new Set<string>();
+    const entries: Array<{ item: T; children: T[] }> = [];
+
+    for (const item of groupItems) {
+      const key = item.feature ?? "";
+      if (childFeatures.has(key)) continue;
+      if (attached.has(key)) {
+        entries.push({ item, children: [] });
+        continue;
+      }
+      attached.add(key);
+      entries.push({
+        item,
+        children: groupItems.filter((child) => FEATURE_PARENTS[child.feature ?? ""] === key),
+      });
+    }
+
+    return { group, entries };
+  });
+
+  return { pinned, groups, account };
+}
+
 export function nestGroupFeatures<T extends ModuleFeature>(features: T[]): NestedModule<T>[] {
   const present = new Set(features.map((feature) => feature.key));
   const childKeys = new Set(
