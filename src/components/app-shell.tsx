@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { LogOut, Menu, X } from "lucide-react";
+import { ChevronRight, LogOut, Menu, X } from "lucide-react";
 import { api, clearSession, currentFeatures, currentUser, mediaUrl, money, SessionPayload, storeSession, User } from "@/lib/api";
-import { profileFor } from "@/lib/business-profiles";
+import { profileFor, type NavItem } from "@/lib/business-profiles";
+import { groupNavigation } from "@/lib/feature-modules";
 import { BranchChip } from "@/components/branch-chip";
 import { LanguageToggle } from "@/components/language-toggle";
 import { useLocale, useT } from "@/lib/locale";
@@ -13,6 +14,31 @@ import { useLocale, useT } from "@/lib/locale";
 let cachedUser: User | null = null;
 let cachedFeatures: string[] = [];
 let sidebarScrollTop = 0;
+
+const NAV_FOLDS_KEY = "garage_nav_folds";
+
+type NavFolds = { groups: Record<string, boolean>; features: Record<string, boolean> };
+
+function pathMatches(pathname: string, href: string) {
+  if (pathname === href) return true;
+  if (href === "/dashboard") return false;
+  return pathname.startsWith(`${href}/`);
+}
+
+function readNavFolds(): NavFolds {
+  if (typeof window === "undefined") return { groups: {}, features: {} };
+  try {
+    const raw = localStorage.getItem(NAV_FOLDS_KEY);
+    if (!raw) return { groups: {}, features: {} };
+    const parsed = JSON.parse(raw) as Partial<NavFolds>;
+    return {
+      groups: parsed.groups ?? {},
+      features: parsed.features ?? {},
+    };
+  } catch {
+    return { groups: {}, features: {} };
+  }
+}
 
 export function AppShell({ children, title, eyebrow, action }: { children: ReactNode; title: string; eyebrow?: string; action?: ReactNode }) {
   const pathname = usePathname();
@@ -24,6 +50,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
   const [features, setFeatures] = useState<string[]>(cachedFeatures);
   const [open, setOpen] = useState(false);
   const [dueCheques, setDueCheques] = useState<{ count: number; firstExpenseId?: number } | null>(null);
+  const [folds, setFolds] = useState<NavFolds>({ groups: {}, features: {} });
 
   const profile = useMemo(() => profileFor(user?.tenant?.business_type), [user?.tenant?.business_type]);
   const navigation = profile.navigation;
@@ -94,7 +121,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
   useEffect(() => {
     if (!user) return;
     const required = navigation.find((item) => {
-      if (item.href === "/dashboard" || !pathname.startsWith(item.href)) return false;
+      if (!pathMatches(pathname, item.href)) return false;
       if (item.owner && user.role !== "business_owner") return false;
       if (item.staffSelf && user.role !== "staff") return false;
       return true;
@@ -120,6 +147,77 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
     if (item.feature && !features.includes(item.feature)) return false;
     return true;
   });
+  const menu = groupNavigation(links, profile.moduleCatalog);
+
+  useEffect(() => {
+    const stored = readNavFolds();
+    const next: NavFolds = {
+      groups: { ...stored.groups },
+      features: { ...stored.features },
+    };
+    for (const { group, entries } of menu.groups) {
+      const active = entries.some(({ item, children }) => routeActive(item.href) || children.some((child) => routeActive(child.href)));
+      if (!active) continue;
+      next.groups[group] = true;
+      for (const { item, children } of entries) {
+        if (children.length > 0 && (routeActive(item.href) || children.some((child) => routeActive(child.href)))) {
+          next.features[item.href] = true;
+        }
+      }
+    }
+    if (menu.account.some((item) => routeActive(item.href))) next.groups.Account = true;
+    setFolds(next);
+  }, [pathname, links.length]);
+
+  function routeActive(href: string) {
+    return pathMatches(pathname, href);
+  }
+
+  function sectionActive(entries: Array<{ item: NavItem; children: NavItem[] }>) {
+    return entries.some(({ item, children }) => routeActive(item.href) || children.some((child) => routeActive(child.href)));
+  }
+
+  function sectionOpen(key: string, active: boolean) {
+    if (key in folds.groups) return folds.groups[key];
+    return active;
+  }
+
+  function featureOpen(href: string, active: boolean) {
+    if (href in folds.features) return folds.features[href];
+    return active;
+  }
+
+  function saveFolds(next: NavFolds) {
+    setFolds(next);
+    localStorage.setItem(NAV_FOLDS_KEY, JSON.stringify(next));
+  }
+
+  function toggleSection(key: string, openNow: boolean) {
+    saveFolds({ ...folds, groups: { ...folds.groups, [key]: !openNow } });
+  }
+
+  function toggleFeature(href: string, openNow: boolean) {
+    saveFolds({ ...folds, features: { ...folds.features, [href]: !openNow } });
+  }
+
+  function navLink(item: NavItem, nested = false) {
+    const { href, label, icon: Icon } = item;
+    const active = routeActive(href);
+    return (
+      <Link
+        key={href}
+        href={href}
+        onClick={() => {
+          if (navRef.current) sidebarScrollTop = navRef.current.scrollTop;
+          setOpen(false);
+        }}
+        className={`flex min-w-0 flex-1 items-center gap-3 px-3 text-sm transition ${nested ? "h-9" : "h-11"} ${active ? "bg-[#f5c842] font-semibold text-[#20221f]" : "text-white/65 hover:bg-white/8 hover:text-white"}`}
+      >
+        <Icon size={nested ? 16 : 18} />
+        <span className="truncate">{t(`nav.${label}`)}</span>
+      </Link>
+    );
+  }
 
   useLayoutEffect(() => {
     const el = navRef.current;
@@ -164,22 +262,70 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
           <button onClick={() => setOpen(false)} className="lg:hidden" aria-label={t("shell.close_nav")}><X /></button>
         </div>
         <nav ref={navRef} className="sidebar-scroll flex-1 space-y-1 overflow-y-auto overscroll-contain px-3 py-6">
-          {links.map(({ href, label, icon: Icon }) => {
-            const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+          {menu.pinned.map((item) => navLink(item))}
+          {menu.groups.map(({ group, entries }) => {
+            const active = sectionActive(entries);
+            const open = sectionOpen(group, active);
             return (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => {
-                  if (navRef.current) sidebarScrollTop = navRef.current.scrollTop;
-                  setOpen(false);
-                }}
-                className={`flex h-11 items-center gap-3 px-3 text-sm transition ${active ? "bg-[#f5c842] font-semibold text-[#20221f]" : "text-white/65 hover:bg-white/8 hover:text-white"}`}
-              >
-                <Icon size={18} />{t(`nav.${label}`)}
-              </Link>
+              <div key={group} className="pt-3">
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  onClick={() => toggleSection(group, open)}
+                  className="mb-1 flex h-8 w-full items-center justify-between px-3 text-[10px] font-bold uppercase tracking-wide text-white/35 hover:text-white/70"
+                >
+                  {t(`nav.${group}`)}
+                  <ChevronRight size={14} className={`transition ${open ? "rotate-90" : ""}`} />
+                </button>
+                {open && entries.map(({ item, children }) => {
+                  const parentActive = routeActive(item.href);
+                  const nestedActive = parentActive || children.some((child) => routeActive(child.href));
+                  const nestedOpen = children.length > 0 && featureOpen(item.href, nestedActive);
+                  return (
+                    <div key={item.href}>
+                      <div className="flex items-center">
+                        {navLink(item)}
+                        {children.length > 0 && (
+                          <button
+                            type="button"
+                            aria-expanded={nestedOpen}
+                            aria-label={t(`nav.${item.label}`)}
+                            onClick={() => toggleFeature(item.href, nestedOpen)}
+                            className={`grid h-11 w-8 shrink-0 place-items-center ${parentActive ? "bg-[#f5c842] text-[#20221f]" : "text-white/45 hover:text-white"}`}
+                          >
+                            <ChevronRight size={14} className={`transition ${nestedOpen ? "rotate-90" : ""}`} />
+                          </button>
+                        )}
+                      </div>
+                      {nestedOpen && (
+                        <div className="mt-1 ml-3 space-y-1 border-l border-white/15 pl-2">
+                          {children.map((child) => navLink(child, true))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             );
           })}
+          {menu.account.length > 0 && (() => {
+            const active = menu.account.some((item) => routeActive(item.href));
+            const open = sectionOpen("Account", active);
+            return (
+              <div className="pt-3">
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  onClick={() => toggleSection("Account", open)}
+                  className="mb-1 flex h-8 w-full items-center justify-between px-3 text-[10px] font-bold uppercase tracking-wide text-white/35 hover:text-white/70"
+                >
+                  {t("nav.Account")}
+                  <ChevronRight size={14} className={`transition ${open ? "rotate-90" : ""}`} />
+                </button>
+                {open && menu.account.map((item) => navLink(item))}
+              </div>
+            );
+          })()}
         </nav>
         <div className="border-t border-white/10 p-4">
           <LanguageToggle />
