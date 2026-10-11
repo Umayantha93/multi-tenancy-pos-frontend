@@ -709,15 +709,20 @@ export default function PartsPage() {
                       className={`${inputClass} mt-2 bg-[#eeece5]`}
                     />
                   </label>
-                  {(isGarage || isPaint) && (
-                    <div className="text-xs font-bold uppercase">
-                      Unit
-                      <p className="mt-2 border border-[#c9c5b9] bg-[#eeece5] px-3 py-2 text-sm font-semibold normal-case">
-                        {stockUnitLabel(selected.stock_unit, isPaint)}
-                      </p>
-                    </div>
-                  )}
-                  <p className="text-xs text-[#6f746e] sm:col-span-2">Use Restock to add stock and record expense.</p>
+                  <label className="text-xs font-bold uppercase">
+                    Unit
+                    <select
+                      name="stock_unit"
+                      value={stockUnit}
+                      onChange={(event) => setStockUnit(normalizeStockUnit(event.target.value, isPaint))}
+                      className={`${inputClass} mt-2`}
+                    >
+                      {STOCK_UNIT_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="text-xs text-[#6f746e] sm:col-span-2">The quantity number stays the same. Change the unit here if it was saved wrong. Use Restock to add stock and record expense.</p>
                 </>
               )}
               <label className="text-xs font-bold uppercase sm:col-span-2">
