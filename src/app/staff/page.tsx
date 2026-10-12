@@ -182,7 +182,7 @@ export default function StaffPage() {
               <div>
                 <p className="text-xs font-bold uppercase text-[#167c73]">Effective access</p>
                 <h2 className="font-display text-3xl font-semibold uppercase">{selected.name}</h2>
-                <p className="mt-1 text-sm text-[#6f746e]">Modules are listed under their area. Off = hidden from their sidebar.</p>
+                <p className="mt-1 text-sm text-[#6f746e]">Off hides that module. Edit inventory stays off until you turn it on for this person.</p>
               </div>
               <button onClick={() => setSelected(null)} className="text-sm text-[#6f746e]">Close</button>
             </div>

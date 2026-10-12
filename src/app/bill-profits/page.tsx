@@ -430,7 +430,7 @@ export default function BillProfitsPage() {
 
       {detail && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-          <button type="button" aria-label="Close dialog" className="absolute inset-0 bg-[#181b19]/55" onClick={() => setDetail(null)} />
+          <div aria-hidden className="absolute inset-0 bg-[#181b19]/55" />
           <div className="relative z-10 max-h-[90vh] w-full max-w-2xl overflow-y-auto border border-[#d7d3c8] bg-[#fbfaf6]">
             <div className="flex items-start justify-between border-b border-[#e2ded4] px-5 py-4">
               <div>
