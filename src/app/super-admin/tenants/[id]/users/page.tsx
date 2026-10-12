@@ -49,7 +49,8 @@ export default function TenantUsersPage() {
     setLoading(true);
     setError("");
     setNotice("");
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     try {
       const creatingSecondary = asSecondary;
       await api(`/super-admin/tenants/${id}/users`, {
@@ -59,7 +60,7 @@ export default function TenantUsersPage() {
           is_secondary_view: creatingSecondary,
         }),
       });
-      event.currentTarget.reset();
+      formElement.reset();
       setAsSecondary(false);
       setNotice(creatingSecondary ? "Secondary login created successfully." : "User account created successfully.");
       load();
