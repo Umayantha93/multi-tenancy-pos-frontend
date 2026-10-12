@@ -592,7 +592,7 @@ export default function TenantDetailPage() {
       />
       {setupSettleOpen && tenant && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-          <button type="button" aria-label="Close dialog" className="absolute inset-0 bg-[#181b19]/55" onClick={() => !setupSaving && setSetupSettleOpen(false)} />
+          <div aria-hidden className="absolute inset-0 bg-[#181b19]/55" />
           <form onSubmit={recordSetupPayment} className="relative z-10 w-full max-w-md border border-[#d7d3c8] bg-[#fbfaf6] p-5">
             <p className="text-[10px] font-bold uppercase tracking-wide text-[#167c73]">Settle one-time payment</p>
             <h2 className="mt-1 font-display text-2xl font-semibold uppercase">Pay this bill in steps</h2>

@@ -847,7 +847,7 @@ function BalanceSheetPageInner() {
 
       {dayDetail && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-          <button type="button" aria-label="Close dialog" className="absolute inset-0 bg-[#181b19]/55" onClick={() => setSelectedDay(null)} />
+          <div aria-hidden className="absolute inset-0 bg-[#181b19]/55" />
           <div className="relative z-10 max-h-[90vh] w-full max-w-4xl overflow-y-auto border border-[#d7d3c8] bg-[#fbfaf6]">
             <div className="flex items-start justify-between border-b border-[#e2ded4] px-5 py-4">
               <div>
@@ -904,7 +904,7 @@ function BalanceSheetPageInner() {
 
       {settleItem && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-          <button type="button" aria-label="Close dialog" className="absolute inset-0 bg-[#181b19]/55" onClick={() => setSettleItem(null)} />
+          <div aria-hidden className="absolute inset-0 bg-[#181b19]/55" />
           <form onSubmit={settlePayable} className="relative z-10 w-full max-w-md border border-[#d7d3c8] bg-[#fbfaf6] p-5">
             <p className="text-[10px] font-bold uppercase tracking-wide text-[#167c73]">Settle supplier credit</p>
             <h2 className="mt-1 font-display text-2xl font-semibold uppercase">Pay this bill in steps</h2>
@@ -955,7 +955,7 @@ function BalanceSheetPageInner() {
 
       {chequeItem && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-          <button type="button" aria-label="Close dialog" className="absolute inset-0 bg-[#181b19]/55" onClick={() => setChequeItem(null)} />
+          <div aria-hidden className="absolute inset-0 bg-[#181b19]/55" />
           <form onSubmit={issueCheque} className="relative z-10 w-full max-w-md border border-[#d7d3c8] bg-[#fbfaf6] p-5">
             <p className="text-[10px] font-bold uppercase tracking-wide text-[#167c73]">Supplier cheque</p>
             <h2 className="mt-1 font-display text-2xl font-semibold uppercase">Issue cheque</h2>

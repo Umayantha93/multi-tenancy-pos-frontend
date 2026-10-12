@@ -373,8 +373,8 @@ export default function BillsPage() {
         </>
       )}
       {quickOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4" onClick={() => !quickSaving && setQuickOpen(false)}>
-          <form onSubmit={createQuickBill} onClick={(event) => event.stopPropagation()} className="w-full max-w-md bg-[#f3f0e8]">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4">
+          <form onSubmit={createQuickBill} className="w-full max-w-md bg-[#f3f0e8]">
             <div className="border-b border-[#d7d3c8] px-5 py-4">
               <h2 className="font-display text-2xl font-semibold uppercase">{t("bills.quick_bill")}</h2>
               <p className="mt-1 text-xs text-[#6f746e]">{t("bills.quick_hint")}</p>

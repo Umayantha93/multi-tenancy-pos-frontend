@@ -1,6 +1,6 @@
 "use client";
 
-import { InputHTMLAttributes, ReactNode, useEffect, useState } from "react";
+import { InputHTMLAttributes, ReactNode, useState } from "react";
 import { Eye, EyeOff, Minus, Plus, X } from "lucide-react";
 import { useT } from "@/lib/locale";
 
@@ -115,14 +115,6 @@ export function ConfirmModal({
   const t = useT();
   const resolvedConfirm = confirmLabel ?? t("common.confirm");
   const resolvedCancel = cancelLabel ?? t("common.cancel");
-  useEffect(() => {
-    if (!open) return;
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape" && !busy) onCancel();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, busy, onCancel]);
 
   if (!open) return null;
 
@@ -135,13 +127,7 @@ export function ConfirmModal({
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-      <button
-        type="button"
-        aria-label={t("common.close_dialog")}
-        className="absolute inset-0 bg-[#181b19]/55 backdrop-blur-[2px]"
-        disabled={busy}
-        onClick={onCancel}
-      />
+      <div aria-hidden className="absolute inset-0 bg-[#181b19]/55 backdrop-blur-[2px]" />
       <div
         role="dialog"
         aria-modal="true"
