@@ -62,7 +62,8 @@ export default function CustomersPage() {
     event.preventDefault();
     setSaving(true);
     setError("");
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     try {
       await api("/customers", {
         method: "POST",
@@ -75,7 +76,7 @@ export default function CustomersPage() {
       });
       setNotice("Customer added.");
       setAdding(false);
-      event.currentTarget.reset();
+      formElement.reset();
       load(search, 1);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not add customer.");

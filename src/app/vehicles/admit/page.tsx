@@ -105,6 +105,7 @@ export default function AdmitVehiclePage() {
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [employeeIds, setEmployeeIds] = useState<number[]>([]);
   const [canAssignEmployees, setCanAssignEmployees] = useState(false);
+  const [openedJob, setOpenedJob] = useState("");
   const phoneBoxRef = useRef<HTMLLabelElement>(null);
 
   function chooseJobKind(next: JobKind) {
@@ -210,11 +211,33 @@ export default function AdmitVehiclePage() {
     setCustomerVehicles([]);
   }
 
+  function finishAdmit(bill: { id: number; bill_number?: string }, formElement?: HTMLFormElement) {
+    if (currentFeatures().includes("billing")) {
+      router.push(`/bills/${bill.id}`);
+      return;
+    }
+    formElement?.reset();
+    setOpenedJob(bill.bill_number || "");
+    setSaving(false);
+    setCreatingId(null);
+    setPlateQuery("");
+    setVehicles([]);
+    setFormPlate("");
+    setCustomerName("");
+    setCustomerPhone("");
+    setCustomerAddress("");
+    setCustomerMatches([]);
+    setCustomerVehicles([]);
+    setSelectedCustomerId(null);
+    setEmployeeIds([]);
+  }
+
   async function openNewCard(vehicleId: number) {
     setCreatingId(vehicleId);
     setError("");
+    setOpenedJob("");
     try {
-      const bill = await api<{ id: number }>("/bills/from-vehicle", {
+      const bill = await api<{ id: number; bill_number?: string }>("/bills/from-vehicle", {
         method: "POST",
         body: JSON.stringify({
           vehicle_id: vehicleId,
@@ -223,7 +246,7 @@ export default function AdmitVehiclePage() {
           employee_ids: employeeIds,
         }),
       });
-      router.push(`/bills/${bill.id}`);
+      finishAdmit(bill);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("admit.open_failed"));
       setCreatingId(null);
@@ -234,7 +257,9 @@ export default function AdmitVehiclePage() {
     event.preventDefault();
     setSaving(true);
     setError("");
-    const form = Object.fromEntries(new FormData(event.currentTarget));
+    setOpenedJob("");
+    const formElement = event.currentTarget;
+    const form = Object.fromEntries(new FormData(formElement));
     const payload: Record<string, unknown> = {
       ...form,
       customer_name: customerName,
@@ -246,8 +271,8 @@ export default function AdmitVehiclePage() {
     };
     if (isDevice) payload.asset_kind = "device";
     try {
-      const bill = await api<{ id: number }>("/bills", { method: "POST", body: JSON.stringify(payload) });
-      router.push(`/bills/${bill.id}`);
+      const bill = await api<{ id: number; bill_number?: string }>("/bills", { method: "POST", body: JSON.stringify(payload) });
+      finishAdmit(bill, formElement);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("admit.admit_failed"));
       setSaving(false);
@@ -373,6 +398,13 @@ export default function AdmitVehiclePage() {
             </div>
           )}
         </Panel>
+
+        {openedJob && (
+          <div className="border-l-4 border-[#167c73] bg-[#f3faf8] p-4">
+            <p className="text-sm font-semibold">{isDevice ? t("admit.admitted_device") : t("admit.admitted_vehicle")}</p>
+            <p className="mt-1 text-sm text-[#6f746e]">{t("admit.opened_for_desk", { number: openedJob })}</p>
+          </div>
+        )}
 
         {error && <ErrorMessage message={error} />}
 

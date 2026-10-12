@@ -8,12 +8,14 @@ import { api, clearSession, currentFeatures, currentUser, mediaUrl, money, Sessi
 import { profileFor, type NavItem } from "@/lib/business-profiles";
 import { groupNavigation } from "@/lib/feature-modules";
 import { BranchChip } from "@/components/branch-chip";
+import { JobAlertBell } from "@/components/job-alert-bell";
 import { LanguageToggle } from "@/components/language-toggle";
 import { useLocale, useT } from "@/lib/locale";
 
 let cachedUser: User | null = null;
 let cachedFeatures: string[] = [];
 let sidebarScrollTop = 0;
+let holdSidebarScroll = false;
 
 const NAV_FOLDS_KEY = "garage_nav_folds";
 
@@ -50,7 +52,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
   const [features, setFeatures] = useState<string[]>(cachedFeatures);
   const [open, setOpen] = useState(false);
   const [dueCheques, setDueCheques] = useState<{ count: number; firstExpenseId?: number } | null>(null);
-  const [folds, setFolds] = useState<NavFolds>({ groups: {}, features: {} });
+  const [folds, setFolds] = useState<NavFolds>(readNavFolds);
 
   const profile = useMemo(() => profileFor(user?.tenant?.business_type), [user?.tenant?.business_type]);
   const navigation = profile.navigation;
@@ -136,6 +138,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
     cachedUser = null;
     cachedFeatures = [];
     sidebarScrollTop = 0;
+    holdSidebarScroll = false;
     clearSession();
     router.replace("/login");
   }
@@ -207,8 +210,10 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
       <Link
         key={href}
         href={href}
+        data-nav-active={active ? "true" : undefined}
         onClick={() => {
           if (navRef.current) sidebarScrollTop = navRef.current.scrollTop;
+          holdSidebarScroll = true;
           setOpen(false);
         }}
         className={`flex min-w-0 flex-1 items-center gap-3 px-3 text-sm transition ${nested ? "h-9" : "h-11"} ${active ? "bg-[#f5c842] font-semibold text-[#20221f]" : "text-white/65 hover:bg-white/8 hover:text-white"}`}
@@ -222,21 +227,41 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
   useLayoutEffect(() => {
     const el = navRef.current;
     if (!el) return;
-    const restore = () => {
+    const apply = () => {
       el.scrollTop = sidebarScrollTop;
+      const active = el.querySelector<HTMLElement>("[data-nav-active='true']");
+      if (!active) return;
+      const navRect = el.getBoundingClientRect();
+      const itemRect = active.getBoundingClientRect();
+      if (itemRect.top < navRect.top || itemRect.bottom > navRect.bottom) {
+        el.scrollTop += itemRect.top - navRect.top - 8;
+        sidebarScrollTop = el.scrollTop;
+      }
     };
-    restore();
-    const frame = requestAnimationFrame(restore);
+    apply();
+    const frame = requestAnimationFrame(apply);
     const onScroll = () => {
+      if (holdSidebarScroll) {
+        if (Math.abs(el.scrollTop - sidebarScrollTop) > 1) el.scrollTop = sidebarScrollTop;
+        return;
+      }
       sidebarScrollTop = el.scrollTop;
+    };
+    const release = () => {
+      holdSidebarScroll = false;
     };
     el.addEventListener("scroll", onScroll, { passive: true });
+    el.addEventListener("wheel", release, { passive: true });
+    el.addEventListener("touchstart", release, { passive: true });
+    el.addEventListener("pointerdown", release);
     return () => {
       cancelAnimationFrame(frame);
-      sidebarScrollTop = el.scrollTop;
       el.removeEventListener("scroll", onScroll);
+      el.removeEventListener("wheel", release);
+      el.removeEventListener("touchstart", release);
+      el.removeEventListener("pointerdown", release);
     };
-  }, [links.length, pathname]);
+  }, [links.length, pathname, folds]);
 
   const logoUrl = mediaUrl(user?.tenant?.logo_url || user?.tenant?.logo);
   const roleLabel = user?.role ? t(`roles.${user.role}`) : t("shell.account");
@@ -372,6 +397,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
               </div>
             </div>
             <div className="relative z-30 flex min-w-0 flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end">
+              <JobAlertBell enabled={user?.role === "staff" && features.includes("billing")} />
               <BranchChip />
               {action}
             </div>

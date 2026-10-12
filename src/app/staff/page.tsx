@@ -35,10 +35,11 @@ export default function StaffPage() {
     event.preventDefault();
     setLoading(true);
     setError("");
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     try {
       await api("/tenant/staff", { method: "POST", body: JSON.stringify(Object.fromEntries(form)) });
-      event.currentTarget.reset();
+      formElement.reset();
       load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to add staff.");
