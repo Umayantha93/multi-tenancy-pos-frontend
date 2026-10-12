@@ -127,7 +127,8 @@ export default function ShopsPage() {
     event.preventDefault();
     setSaving(true);
     setError("");
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const payloadItems = lines
       .filter((line) => line.item_id && Number(line.quantity) > 0)
       .map((line) => ({
@@ -145,7 +146,7 @@ export default function ShopsPage() {
         }),
       });
       setNotice("Transfer note created. Receive it at the destination shop.");
-      event.currentTarget.reset();
+      formElement.reset();
       setLines([{ kind: itemKind, item_id: "", quantity: "1" }]);
       load();
     } catch (caught) {
