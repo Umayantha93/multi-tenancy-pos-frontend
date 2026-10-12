@@ -70,6 +70,7 @@ export type FeatureKey =
   | "payroll"
   | "balance_sheet"
   | "parts_inventory"
+  | "inventory_edit"
   | "employees_management"
   | "attendance"
   | "reports"

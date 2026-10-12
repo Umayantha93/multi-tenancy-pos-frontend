@@ -200,12 +200,11 @@ export function StickerPrintButton({
 
   const dialog = open && mounted
     ? createPortal(
-        <div className="fixed inset-0 z-[100]" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-[100]">
           <div className="absolute inset-0 bg-black/45" />
           <form
             ref={panelRef}
             onSubmit={(event) => void printStickers(event)}
-            onClick={(event) => event.stopPropagation()}
             style={
               panelPos
                 ? { top: panelPos.top, left: panelPos.left, width: panelPos.width }

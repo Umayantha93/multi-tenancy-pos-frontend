@@ -1556,10 +1556,9 @@ export default function BillDetailPage() {
         </label>
       </ConfirmModal>
       {refundOpen && (
-        <div className="no-print fixed inset-0 z-50 grid place-items-center bg-black/55 p-4" onClick={() => !refunding && setRefundOpen(false)}>
+        <div className="no-print fixed inset-0 z-50 grid place-items-center bg-black/55 p-4">
           <form
             onSubmit={submitRefund}
-            onClick={(event) => event.stopPropagation()}
             className="max-h-[90vh] w-full max-w-2xl overflow-y-auto bg-[#f3f0e8] p-5"
           >
             <h2 className="font-display text-2xl font-semibold uppercase">{t("bill.refund_bill")}</h2>
@@ -1694,10 +1693,9 @@ export default function BillDetailPage() {
         </div>
       )}
       {warrantyItem && (
-        <div className="no-print fixed inset-0 z-50 grid place-items-center bg-black/55 p-4" onClick={() => !savingWarranty && setWarrantyItem(null)}>
+        <div className="no-print fixed inset-0 z-50 grid place-items-center bg-black/55 p-4">
           <form
             onSubmit={saveWarranty}
-            onClick={(event) => event.stopPropagation()}
             className="w-full max-w-md bg-[#f3f0e8] p-5"
           >
             <h2 className="font-display text-2xl font-semibold uppercase">{t("warranty.title")}</h2>

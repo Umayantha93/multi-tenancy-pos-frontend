@@ -260,10 +260,9 @@ function InventoryPageInner() {
       )}
 
       {editing && (
-        <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4" onClick={() => setEditing(null)}>
+        <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4">
           <form
             onSubmit={save}
-            onClick={(event) => event.stopPropagation()}
             className="my-8 w-full max-w-md bg-[#f3f0e8]"
           >
             <div className="flex items-center justify-between border-b border-[#d7d3c8] p-5">

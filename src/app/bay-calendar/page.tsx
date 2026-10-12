@@ -208,8 +208,8 @@ export default function BayCalendarPage() {
       )}
 
       {draft && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setDraft(null)}>
-          <form onSubmit={createBooking} onClick={(event) => event.stopPropagation()} className="w-full max-w-md space-y-3 bg-[#f3f0e8] p-5">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
+          <form onSubmit={createBooking} className="w-full max-w-md space-y-3 bg-[#f3f0e8] p-5">
             <h2 className="font-display text-2xl font-semibold uppercase">{t("bay_calendar.book_slot")}</h2>
             <p className="text-sm text-[#6f746e]">{formatDate(date)} · {hourLabel(draft.hour)}</p>
             <input required value={plate} onChange={(event) => setPlate(event.target.value)} className={inputClass} placeholder={t("bay_calendar.plate")} />

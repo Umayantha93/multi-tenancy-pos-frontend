@@ -66,7 +66,7 @@ export default function PartsPage() {
   const [notice, setNotice] = useState("");
   const [mode, setMode] = useState<Mode>(null);
   const [selected, setSelected] = useState<Part | null>(null);
-  const [admin, setAdmin] = useState(false);
+  const [canEdit, setCanEdit] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [importing, setImporting] = useState(false);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
@@ -120,7 +120,7 @@ export default function PartsPage() {
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      setAdmin(currentUser()?.role === "business_owner");
+      setCanEdit(currentUser()?.role === "business_owner" || currentFeatures().includes("inventory_edit"));
       setCanSerial(currentFeatures().includes("serial_inventory"));
       if (currentFeatures().includes("suppliers")) {
         api<{ data: Supplier[] }>("/suppliers?per_page=100")
@@ -148,15 +148,6 @@ export default function PartsPage() {
     });
   }, [importOpen, suppliers, isGarage]);
 
-  useEffect(() => {
-    if (!mode) return;
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape" && !saving) setMode(null);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [mode, saving]);
-
   const loadCatalog = useCallback(() => {
     api<{ data: CatalogCategory[] }>("/part-categories")
       .then((result) => setCatalog(result.data))
@@ -178,7 +169,7 @@ export default function PartsPage() {
   }
 
   function openEdit(part: Part) {
-    if (!admin) return;
+    if (!canEdit) return;
     setSelected(part);
     setStockUnit(normalizeStockUnit(part.stock_unit, isPaint));
     setCategoryDraft(part.type ?? "");
@@ -353,7 +344,7 @@ export default function PartsPage() {
   }
 
   function openDelete(part: Part) {
-    if (!admin) return;
+    if (!canEdit) return;
     setMode(null);
     setSelected(null);
     setSaving(false);
@@ -395,7 +386,7 @@ export default function PartsPage() {
     <AppShell
       title={isPaint ? "Color stock" : isStore ? "Stock" : "Inventory"}
       eyebrow={`${parts.length} catalog items${isPaint ? " · millilitres" : ""}`}
-      action={admin ? (
+      action={canEdit ? (
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Link
             href="/parts/bulk-restock"
@@ -493,7 +484,7 @@ export default function PartsPage() {
             const image = mediaUrl(part.image_urls?.[0] || part.images?.[0]);
             return (
               <Panel key={part.id} className="group relative flex h-full flex-col overflow-hidden">
-                {admin && (
+                {canEdit && (
                   <button
                     type="button"
                     aria-label={`Remove ${part.name}`}
@@ -507,7 +498,7 @@ export default function PartsPage() {
                     <X size={16} />
                   </button>
                 )}
-                <button type="button" onClick={() => (admin ? openEdit(part) : openRestock(part))} className="block w-full flex-1 text-left">
+                <button type="button" onClick={() => (canEdit ? openEdit(part) : openRestock(part))} className="block w-full flex-1 text-left">
                   <div className="relative aspect-[16/10] w-full overflow-hidden bg-[#e8e5dc]">
                     {image ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -546,12 +537,12 @@ export default function PartsPage() {
                   </div>
                 </button>
                 <div className="mt-auto flex border-t border-[#d7d3c8]">
-                    {admin && (
+                    {canEdit && (
                       <button type="button" onClick={() => openEdit(part)} className="flex flex-1 items-center justify-center gap-1.5 py-2 text-[10px] font-bold uppercase hover:bg-[#eeece5]">
                         <Pencil size={12} /> Edit
                       </button>
                     )}
-                    <button type="button" onClick={() => openRestock(part)} className={`flex flex-1 items-center justify-center gap-1.5 py-2 text-[10px] font-bold uppercase text-[#167c73] hover:bg-[#eeece5] ${admin ? "border-l border-[#d7d3c8]" : ""}`}>
+                    <button type="button" onClick={() => openRestock(part)} className={`flex flex-1 items-center justify-center gap-1.5 py-2 text-[10px] font-bold uppercase text-[#167c73] hover:bg-[#eeece5] ${canEdit ? "border-l border-[#d7d3c8]" : ""}`}>
                       <PackagePlus size={12} /> Restock
                     </button>
                     <span className="flex flex-1 border-l border-[#d7d3c8]">
@@ -591,13 +582,9 @@ export default function PartsPage() {
       )}
 
       {(mode === "add" || mode === "edit") && (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4"
-          onClick={() => { if (!saving) setMode(null); }}
-        >
+        <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4">
           <form
             onSubmit={savePart}
-            onClick={(event) => event.stopPropagation()}
             aria-busy={saving}
             className="relative my-8 w-full max-w-2xl bg-[#f3f0e8]"
           >
@@ -703,10 +690,13 @@ export default function PartsPage() {
                   <label className="text-xs font-bold uppercase">
                     Current stock
                     <input
+                      name="stock_qty"
                       type="number"
-                      readOnly
-                      value={formatStockNumber(selected.stock_qty, selected.stock_unit, isPaint)}
-                      className={`${inputClass} mt-2 bg-[#eeece5]`}
+                      min="0"
+                      step={stockAllowsDecimal(stockUnit, isPaint) ? "0.001" : "1"}
+                      defaultValue={formatStockNumber(selected.stock_qty, selected.stock_unit, isPaint)}
+                      required
+                      className={`${inputClass} mt-2`}
                     />
                   </label>
                   <label className="text-xs font-bold uppercase">
@@ -722,7 +712,7 @@ export default function PartsPage() {
                       ))}
                     </select>
                   </label>
-                  <p className="text-xs text-[#6f746e] sm:col-span-2">The quantity number stays the same. Change the unit here if it was saved wrong. Use Restock to add stock and record expense.</p>
+                  <p className="text-xs text-[#6f746e] sm:col-span-2">This sets the on-hand quantity at this shop and does not create a purchase. Change the unit here if it was saved wrong. Use Restock to buy stock and record the expense.</p>
                 </>
               )}
               <label className="text-xs font-bold uppercase sm:col-span-2">
@@ -772,13 +762,9 @@ export default function PartsPage() {
       )}
 
       {mode === "restock" && selected && (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4"
-          onClick={() => { if (!saving) setMode(null); }}
-        >
+        <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4">
           <form
             onSubmit={restock}
-            onClick={(event) => event.stopPropagation()}
             aria-busy={saving}
             className="relative my-8 w-full max-w-md bg-[#f3f0e8]"
           >
@@ -932,8 +918,8 @@ export default function PartsPage() {
         </div>
       )}
       {importOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4" onClick={() => setImportOpen(false)}>
-          <div className="w-full max-w-md bg-[#f3f0e8] p-5" onClick={(event) => event.stopPropagation()}>
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4">
+          <div className="w-full max-w-md bg-[#f3f0e8] p-5">
             <h2 className="font-display text-2xl font-semibold uppercase">Import parts</h2>
             <p className="mt-2 text-sm text-[#6f746e]">
               Name is the only required column. After stock_qty add unit: ITEM, L, ML, G, KG, and the other units on the template. Measured units may be decimal (0.2 L). ITEM, PACK, BOX, PAIR, and DOZEN stay whole numbers. Blank brand becomes Generic, blank category becomes General. Credit also needs a due date.
@@ -967,18 +953,23 @@ export default function PartsPage() {
                 <input value={importDue} onChange={(event) => setImportDue(event.target.value)} type="date" required className={`${inputClass} mt-2`} />
               </label>
             )}
-            <button
-              type="button"
-              disabled={
-                importing
-                || (importPayment === "credit" && !importDue)
-                || ((isGarage || importPayment === "credit") && suppliers.length > 0 && !importSupplierId)
-              }
-              onClick={() => importInputRef.current?.click()}
-              className={`${buttonClass} mt-5 w-full`}
-            >
-              {importing ? "Importing..." : "Choose spreadsheet"}
-            </button>
+            <div className="mt-5 flex gap-2">
+              <button type="button" onClick={() => setImportOpen(false)} className="inline-flex h-8 flex-1 items-center justify-center border border-[#c9c5b9] bg-white px-2.5 text-[11px] font-semibold">
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={
+                  importing
+                  || (importPayment === "credit" && !importDue)
+                  || ((isGarage || importPayment === "credit") && suppliers.length > 0 && !importSupplierId)
+                }
+                onClick={() => importInputRef.current?.click()}
+                className={`${buttonClass} flex-1`}
+              >
+                {importing ? "Importing..." : "Choose spreadsheet"}
+              </button>
+            </div>
           </div>
         </div>
       )}
