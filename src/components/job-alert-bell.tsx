@@ -86,9 +86,9 @@ export function JobAlertBell({ enabled }: { enabled: boolean }) {
         aria-label={t("shell.job_alerts")}
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        className={`relative grid size-10 place-items-center border border-[#242723] bg-[#242723] ${hasAlerts ? "text-[#c4352b]" : "text-white"}`}
+        className={`relative grid h-8 w-8 place-items-center border ${hasAlerts ? "border-white bg-[#c4352b] text-white" : "border-[#20221f] bg-white text-[#20221f]"}`}
       >
-        <Bell size={16} />
+        <Bell size={14} />
         {hasAlerts && (
           <span className="absolute -top-1 -right-1 grid min-w-4 place-items-center bg-[#f5c842] px-1 text-[10px] font-bold leading-4 text-[#20221f]">
             {unread > 9 ? "9+" : unread}

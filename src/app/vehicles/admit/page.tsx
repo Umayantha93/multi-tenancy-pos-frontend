@@ -105,7 +105,8 @@ export default function AdmitVehiclePage() {
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [employeeIds, setEmployeeIds] = useState<number[]>([]);
   const [canAssignEmployees, setCanAssignEmployees] = useState(false);
-  const [openedJob, setOpenedJob] = useState("");
+  const [openedPlate, setOpenedPlate] = useState("");
+  const successRef = useRef<HTMLDivElement>(null);
   const phoneBoxRef = useRef<HTMLLabelElement>(null);
 
   function chooseJobKind(next: JobKind) {
@@ -211,13 +212,14 @@ export default function AdmitVehiclePage() {
     setCustomerVehicles([]);
   }
 
-  function finishAdmit(bill: { id: number; bill_number?: string }, formElement?: HTMLFormElement) {
+  function finishAdmit(bill: { id: number; bill_number?: string; vehicle?: { number_plate?: string | null } | null }, plate: string, formElement?: HTMLFormElement) {
     if (currentFeatures().includes("billing")) {
       router.push(`/bills/${bill.id}`);
       return;
     }
     formElement?.reset();
-    setOpenedJob(bill.bill_number || "");
+    const shown = (bill.vehicle?.number_plate || plate || bill.bill_number || "").trim();
+    setOpenedPlate(shown);
     setSaving(false);
     setCreatingId(null);
     setPlateQuery("");
@@ -232,12 +234,19 @@ export default function AdmitVehiclePage() {
     setEmployeeIds([]);
   }
 
+  useEffect(() => {
+    if (!openedPlate) return;
+    successRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [openedPlate]);
+
   async function openNewCard(vehicleId: number) {
     setCreatingId(vehicleId);
     setError("");
-    setOpenedJob("");
+    setOpenedPlate("");
+    const known = vehicles.find((vehicle) => vehicle.id === vehicleId)
+      ?? customerVehicles.find((vehicle) => vehicle.id === vehicleId);
     try {
-      const bill = await api<{ id: number; bill_number?: string }>("/bills/from-vehicle", {
+      const bill = await api<{ id: number; bill_number?: string; vehicle?: { number_plate?: string | null } | null }>("/bills/from-vehicle", {
         method: "POST",
         body: JSON.stringify({
           vehicle_id: vehicleId,
@@ -246,7 +255,7 @@ export default function AdmitVehiclePage() {
           employee_ids: employeeIds,
         }),
       });
-      finishAdmit(bill);
+      finishAdmit(bill, known?.number_plate || "");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("admit.open_failed"));
       setCreatingId(null);
@@ -257,7 +266,7 @@ export default function AdmitVehiclePage() {
     event.preventDefault();
     setSaving(true);
     setError("");
-    setOpenedJob("");
+    setOpenedPlate("");
     const formElement = event.currentTarget;
     const form = Object.fromEntries(new FormData(formElement));
     const payload: Record<string, unknown> = {
@@ -271,17 +280,29 @@ export default function AdmitVehiclePage() {
     };
     if (isDevice) payload.asset_kind = "device";
     try {
-      const bill = await api<{ id: number; bill_number?: string }>("/bills", { method: "POST", body: JSON.stringify(payload) });
-      finishAdmit(bill, formElement);
+      const bill = await api<{ id: number; bill_number?: string; vehicle?: { number_plate?: string | null } | null }>("/bills", { method: "POST", body: JSON.stringify(payload) });
+      finishAdmit(bill, String(form.number_plate || ""), formElement);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("admit.admit_failed"));
       setSaving(false);
     }
   }
 
+  const translatedSuccess = t("admit.added_to_job_cards", { plate: openedPlate });
+  const successText = openedPlate && translatedSuccess.includes(openedPlate)
+    ? translatedSuccess
+    : `${openedPlate} is successfully added to job cards.`;
+
   return (
     <AppShell title={isDevice ? t("admit.title_device") : t("admit.title_vehicle")} eyebrow={isPaint ? t("admit.eyebrow_paint") : t("admit.eyebrow")}>
       <div className="mx-auto max-w-5xl space-y-5">
+        {openedPlate && (
+          <div ref={successRef} className="sticky top-3 z-20 border-2 border-[#20221f] bg-[#f5c842] px-5 py-4 shadow-md">
+            <p className="text-xl font-semibold leading-tight text-[#20221f]">
+              {successText}
+            </p>
+          </div>
+        )}
         <div className="flex items-start gap-4 border-l-4 border-[#f5c842] bg-[#fbfaf6] p-4">
           <ClipboardCheck className="shrink-0 text-[#167c73]" />
           <div>
@@ -398,13 +419,6 @@ export default function AdmitVehiclePage() {
             </div>
           )}
         </Panel>
-
-        {openedJob && (
-          <div className="border-l-4 border-[#167c73] bg-[#f3faf8] p-4">
-            <p className="text-sm font-semibold">{isDevice ? t("admit.admitted_device") : t("admit.admitted_vehicle")}</p>
-            <p className="mt-1 text-sm text-[#6f746e]">{t("admit.opened_for_desk", { number: openedJob })}</p>
-          </div>
-        )}
 
         {error && <ErrorMessage message={error} />}
 
