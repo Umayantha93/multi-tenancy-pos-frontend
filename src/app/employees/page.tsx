@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { Eye, Fingerprint, Pencil, Plus, Power, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
-import { api, Branch, money } from "@/lib/api";
+import { api, Branch, currentFeatures, formatDate, money } from "@/lib/api";
 
 type Allowance = { name: string; amount: number | string; kind?: string; min_days?: number };
 type Shift = { id: number; name: string };
@@ -16,8 +16,19 @@ type Employee = {
   position: string;
   base_salary: string;
   overtime_hourly_rate?: string;
-  fingerprint_id: string;
+  fingerprint_id?: string | null;
+  pay_type?: "monthly" | "daily";
+  daily_rate?: string | null;
+  commission_percent?: string | null;
   active: boolean;
+  bills?: Array<{
+    id: number;
+    bill_number?: string;
+    admission_date?: string | null;
+    job_kind?: string | null;
+    vehicle?: { number_plate?: string | null } | null;
+    pivot?: { commission_amount?: string | number | null; commission_deducted_at?: string | null };
+  }>;
   epf_enabled?: boolean;
   paid_leave_days_per_year?: number | null;
   default_shift_id?: number | null;
@@ -61,6 +72,9 @@ export default function EmployeesPage() {
     setSelected(employee);
     setMode("view");
     setError("");
+    api<Employee>(`/employees/${employee.id}`)
+      .then((detail) => setSelected(detail))
+      .catch(() => undefined);
   }
 
   function openEdit(employee: Employee) {
@@ -77,11 +91,14 @@ export default function EmployeesPage() {
     const payload = {
       name: data.name,
       nic: data.nic,
-      phone: data.phone,
-      position: data.position,
-      base_salary: data.base_salary,
+      phone: data.phone || null,
+      position: data.position || null,
+      pay_type: data.pay_type || "monthly",
+      base_salary: data.base_salary === "" ? null : data.base_salary,
+      daily_rate: data.pay_type === "daily" ? data.daily_rate : null,
+      commission_percent: data.commission_percent === "" ? null : data.commission_percent,
       overtime_hourly_rate: data.overtime_hourly_rate || 0,
-      fingerprint_id: data.fingerprint_id,
+      fingerprint_id: data.fingerprint_id || null,
       epf_enabled: data.epf_enabled === "1",
       paid_leave_days_per_year: data.paid_leave_days_per_year ? Number(data.paid_leave_days_per_year) : null,
       default_shift_id: data.default_shift_id ? Number(data.default_shift_id) : null,
@@ -159,7 +176,7 @@ export default function EmployeesPage() {
                     {employee.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}
                   </span>
                   <span className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold ${employee.active ? "bg-[#167c73]/10 text-[#167c73]" : "bg-[#b84837]/10 text-[#b84837]"}`}>
-                    <Fingerprint size={13} />{employee.fingerprint_id}
+                    <Fingerprint size={13} />{employee.fingerprint_id || "—"}
                   </span>
                 </div>
                 <h2 className="mt-5 font-display text-2xl font-semibold uppercase">{employee.name}</h2>
@@ -167,7 +184,7 @@ export default function EmployeesPage() {
                 <div className="mt-5 grid grid-cols-2 gap-3 border-t border-[#d7d3c8] pt-4 text-xs">
                   <div><p className="text-[#6f746e]">NIC</p><strong>{employee.nic}</strong></div>
                   <div><p className="text-[#6f746e]">Phone</p><strong>{employee.phone}</strong></div>
-                  <div className="col-span-2"><p className="text-[#6f746e]">Base salary</p><strong>{money(employee.base_salary)}</strong></div>
+                  <div className="col-span-2"><p className="text-[#6f746e]">{employee.pay_type === "daily" ? "Daily rate" : "Base salary"}</p><strong>{money(employee.pay_type === "daily" ? employee.daily_rate || 0 : employee.base_salary)}</strong></div>
                 </div>
               </button>
               <div className="mt-4 flex gap-2 border-t border-[#d7d3c8] pt-4">
@@ -196,9 +213,11 @@ export default function EmployeesPage() {
                 ["Position", selected.position],
                 ["NIC", selected.nic],
                 ["Phone", selected.phone],
-                ["Base salary", money(selected.base_salary)],
+                ["Pay type", selected.pay_type === "daily" ? "End of day" : "Monthly"],
+                ["Base salary", money(selected.base_salary || 0)],
+                ["Daily rate", selected.daily_rate ? money(selected.daily_rate) : "—"],
                 ["OT hourly rate", selected.overtime_hourly_rate ? money(selected.overtime_hourly_rate) : "—"],
-                ["Fingerprint ID", selected.fingerprint_id],
+                ["Fingerprint ID", selected.fingerprint_id || "—"],
                 ["Status", selected.active ? "Active" : "Inactive"],
                 ["EPF / ETF", selected.epf_enabled ? "On" : "Off"],
                 ["Paid leave / year", selected.paid_leave_days_per_year != null ? String(selected.paid_leave_days_per_year) : "Not set"],
@@ -211,6 +230,30 @@ export default function EmployeesPage() {
                   <p className="mt-1 font-semibold">{value}</p>
                 </div>
               ))}
+            </div>
+            <div className="border-t border-[#d7d3c8] px-5 py-4">
+              <p className="text-[10px] font-bold uppercase text-[#6f746e]">Past jobs</p>
+              {(selected.bills ?? []).length === 0 ? (
+                <p className="mt-2 text-sm text-[#6f746e]">No job cards yet.</p>
+              ) : (
+                <ul className="mt-2 divide-y divide-[#e2ded4] text-sm">
+                  {(selected.bills ?? []).map((job) => (
+                    <li key={job.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                      <span>
+                        <strong>{job.bill_number || `#${job.id}`}</strong>
+                        <span className="ml-2 text-[#6f746e]">{formatDate(job.admission_date)}{job.vehicle?.number_plate ? ` · ${job.vehicle.number_plate}` : ""}</span>
+                      </span>
+                      <span className="text-xs">
+                        {job.pivot?.commission_deducted_at
+                          ? `Commission ${money(job.pivot.commission_amount || 0)} deducted`
+                          : job.pivot?.commission_amount
+                            ? `Commission ${money(job.pivot.commission_amount)}`
+                            : "No commission deducted"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
             <div className="flex justify-end gap-2 border-t border-[#d7d3c8] p-5">
               {selected.active ? (
@@ -239,26 +282,43 @@ export default function EmployeesPage() {
             </div>
             <div className="grid gap-4 p-5 sm:grid-cols-2">
               {[
-                ["name", "Full name", selected?.name ?? ""],
-                ["nic", "NIC", selected?.nic ?? ""],
-                ["phone", "Phone", selected?.phone ?? ""],
-                ["position", "Position", selected?.position ?? ""],
-                ["base_salary", "Base salary", selected?.base_salary ?? ""],
-                ["overtime_hourly_rate", "OT hourly rate", selected?.overtime_hourly_rate ?? ""],
-                ["fingerprint_id", "Fingerprint ID", selected?.fingerprint_id ?? ""],
-              ].map(([name, label, value]) => (
-                <label key={name} className={`text-xs font-bold uppercase ${name === "fingerprint_id" ? "sm:col-span-2" : ""}`}>
+                ["name", "Full name", selected?.name ?? "", true],
+                ["nic", "NIC", selected?.nic ?? "", true],
+                ["phone", "Phone", selected?.phone ?? "", false],
+                ["position", "Position", selected?.position ?? "", false],
+                ["base_salary", "Base salary", selected?.base_salary ?? "", false],
+                ["overtime_hourly_rate", "OT hourly rate", selected?.overtime_hourly_rate ?? "", false],
+                ["fingerprint_id", "Fingerprint ID", selected?.fingerprint_id ?? "", false],
+              ].map(([name, label, value, required]) => (
+                <label key={String(name)} className={`text-xs font-bold uppercase ${name === "fingerprint_id" ? "sm:col-span-2" : ""}`}>
                   {label}
                   <input
-                    name={name}
-                    defaultValue={value}
-                    required={name !== "overtime_hourly_rate"}
-                    type={name.includes("salary") || name.includes("rate") ? "number" : "text"}
+                    name={String(name)}
+                    defaultValue={String(value)}
+                    required={Boolean(required)}
+                    type={String(name).includes("salary") || String(name).includes("rate") ? "number" : "text"}
                     step="0.01"
                     className={`${inputClass} mt-2`}
                   />
                 </label>
               ))}
+              <label className="text-xs font-bold uppercase">
+                Pay type
+                <select name="pay_type" defaultValue={selected?.pay_type ?? "monthly"} className={`${inputClass} mt-2`}>
+                  <option value="monthly">Monthly salary</option>
+                  <option value="daily">End of day</option>
+                </select>
+              </label>
+              <label className="text-xs font-bold uppercase">
+                Daily rate
+                <input name="daily_rate" type="number" min="0" step="0.01" defaultValue={selected?.daily_rate ?? ""} className={`${inputClass} mt-2`} />
+              </label>
+              {currentFeatures().includes("job_commissions") && (
+                <label className="text-xs font-bold uppercase sm:col-span-2">
+                  Commission percent of labor and service
+                  <input name="commission_percent" type="number" min="0" max="100" step="0.01" defaultValue={selected?.commission_percent ?? ""} className={`${inputClass} mt-2`} />
+                </label>
+              )}
               <label className="text-xs font-bold uppercase">
                 Paid leave days / year
                 <input name="paid_leave_days_per_year" type="number" min="0" defaultValue={selected?.paid_leave_days_per_year ?? ""} className={`${inputClass} mt-2`} />

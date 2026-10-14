@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { ChevronDown, Plus, Save, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ConfirmModal, ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
-import { api, currentUser, money } from "@/lib/api";
+import { api, currentFeatures, money } from "@/lib/api";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 
 type LaborItem = {
@@ -27,7 +27,7 @@ type PendingDelete =
   | { kind: "item"; id: number; label: string };
 
 export default function LaborCatalogPage() {
-  const [isOwner, setIsOwner] = useState(false);
+  const canEdit = currentFeatures().includes("billing");
   const [categories, setCategories] = useState<LaborCategory[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -48,13 +48,12 @@ export default function LaborCatalogPage() {
   }
 
   useEffect(() => {
-    setIsOwner(currentUser()?.role === "business_owner");
     load();
   }, []);
 
   async function createCategory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!isOwner) return;
+    if (!canEdit) return;
     const form = event.currentTarget;
     const name = String(new FormData(form).get("name") || "").trim();
     if (!name) return;
@@ -73,7 +72,7 @@ export default function LaborCatalogPage() {
   }
 
   async function renameCategory(category: LaborCategory, name: string) {
-    if (!isOwner || !name.trim()) return;
+    if (!canEdit || !name.trim()) return;
     setError("");
     try {
       await api(`/labor-categories/${category.id}`, { method: "PUT", body: JSON.stringify({ name: name.trim() }) });
@@ -85,7 +84,7 @@ export default function LaborCatalogPage() {
 
   async function createItem(event: FormEvent<HTMLFormElement>, categoryId: number) {
     event.preventDefault();
-    if (!isOwner) return;
+    if (!canEdit) return;
     const form = event.currentTarget;
     const data = Object.fromEntries(new FormData(form));
     setError("");
@@ -106,7 +105,7 @@ export default function LaborCatalogPage() {
   }
 
   async function saveItem(item: LaborItem, patch: Partial<{ name: string; hourly_rate: number; standard_hours: number }>) {
-    if (!isOwner) return;
+    if (!canEdit) return;
     setError("");
     try {
       await api(`/labor-items/${item.id}`, { method: "PUT", body: JSON.stringify(patch) });
@@ -151,12 +150,12 @@ export default function LaborCatalogPage() {
         onCancel={() => { if (!deleting) setPendingDelete(null); }}
         onConfirm={confirmDelete}
       />
-      {!isOwner && (
-        <p className="mb-5 text-sm text-[#6f746e]">Only the owner can add, edit, or remove labor categories and items.</p>
+      {!canEdit && (
+        <p className="mb-5 text-sm text-[#6f746e]">Job card access is required to change repair addons.</p>
       )}
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
 
-      {isOwner && (
+      {canEdit && (
         <Panel className="mb-5 p-5">
           <h2 className="font-display text-2xl font-semibold uppercase">Add category</h2>
           <p className="mt-1 text-sm text-[#6f746e]">
@@ -183,7 +182,7 @@ export default function LaborCatalogPage() {
                     <span className="font-display text-xl font-semibold uppercase">{category.name}</span>
                     <span className="text-xs text-[#6f746e]">{category.items.length} items</span>
                   </button>
-                  {isOwner && (
+                  {canEdit && (
                     <button
                       type="button"
                       onClick={() => setPendingDelete({ kind: "category", id: category.id, label: category.name })}
@@ -196,7 +195,7 @@ export default function LaborCatalogPage() {
                 </div>
                 {open && (
                   <div className="p-4">
-                    {isOwner && (
+                    {canEdit && (
                       <form
                         onSubmit={(event) => {
                           event.preventDefault();
@@ -216,7 +215,7 @@ export default function LaborCatalogPage() {
                             <th className="px-3 py-2">Hourly rate</th>
                             <th className="px-3 py-2">Std hours</th>
                             <th className="px-3 py-2 text-right">Standard price</th>
-                            {isOwner && <th className="px-3 py-2" />}
+                            {canEdit && <th className="px-3 py-2" />}
                           </tr>
                         </thead>
                         <tbody>
@@ -224,7 +223,7 @@ export default function LaborCatalogPage() {
                             <LaborItemRow
                               key={item.id}
                               item={item}
-                              canEdit={isOwner}
+                              canEdit={canEdit}
                               onSave={saveItem}
                               onRemove={() => setPendingDelete({ kind: "item", id: item.id, label: item.name })}
                             />
@@ -233,7 +232,7 @@ export default function LaborCatalogPage() {
                       </table>
                       {category.items.length === 0 && <p className="p-6 text-center text-sm text-[#6f746e]">No labor items in this category yet.</p>}
                     </div>
-                    {isOwner && (
+                    {canEdit && (
                       <form onSubmit={(event) => createItem(event, category.id)} className="mt-4 grid gap-2 sm:grid-cols-[1.4fr_0.8fr_0.6fr_auto]">
                         <input name="name" required placeholder={isPaint ? "New paint labor" : "New labor item"} className={inputClass} />
                         <input name="hourly_rate" required type="number" min="0" step="0.01" placeholder="Hourly rate" defaultValue="3000" className={inputClass} />

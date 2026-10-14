@@ -30,12 +30,25 @@ export default function PayrollPage() {
   const [rows, setRows] = useState<Payroll[]>([]);
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
+  const [payDate, setPayDate] = useState(now.toISOString().slice(0, 10));
+  const [dayStaff, setDayStaff] = useState<Array<{ id: number; name: string; daily_rate?: string | null; paid: boolean; amount?: string | null }>>([]);
+  const [dayAmounts, setDayAmounts] = useState<Record<number, string>>({});
+  const [payingId, setPayingId] = useState<number | null>(null);
   const load = useCallback(() => {
     api<{ data: Payroll[] }>(`/payroll?month=${month}&year=${year}`)
       .then((result) => setRows(result.data))
       .catch((caught) => setError(caught.message));
   }, [month, year]);
+  const loadDayWages = useCallback(() => {
+    api<{ employees: Array<{ id: number; name: string; daily_rate?: string | null; paid: boolean; amount?: string | null }> }>(`/payroll/day-wages?date=${payDate}`)
+      .then((result) => {
+        setDayStaff(result.employees);
+        setDayAmounts(Object.fromEntries(result.employees.map((employee) => [employee.id, String(employee.paid ? employee.amount ?? "" : employee.daily_rate ?? "")])));
+      })
+      .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load day wages."));
+  }, [payDate]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadDayWages(); }, [loadDayWages]);
   async function generate(event: FormEvent) {
     event.preventDefault();
     setWorking(true);
@@ -48,6 +61,24 @@ export default function PayrollPage() {
       setWorking(false);
     }
   }
+  async function payDay(employeeId: number) {
+    const amount = Number(dayAmounts[employeeId]);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError("Enter the daily amount before paying.");
+      return;
+    }
+    setPayingId(employeeId);
+    setError("");
+    try {
+      await api("/payroll/day-wages", { method: "POST", body: JSON.stringify({ employee_id: employeeId, paid_on: payDate, amount }) });
+      loadDayWages();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not record the day payment.");
+    } finally {
+      setPayingId(null);
+    }
+  }
+
   const epfPayable = rows.reduce((sum, row) => sum + Number(row.epf_employee || 0) + Number(row.epf_employer || 0), 0);
   const etfPayable = rows.reduce((sum, row) => sum + Number(row.etf_employer || 0), 0);
 
@@ -73,6 +104,45 @@ export default function PayrollPage() {
           <Panel className="p-4"><p className="text-xs font-bold uppercase text-[#6f746e]">ETF payable</p><p className="mt-1 font-display text-2xl font-semibold">{money(etfPayable)}</p></Panel>
         </div>
       )}
+      <Panel className="mb-5 overflow-hidden">
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[#d7d3c8] px-5 py-4">
+          <div>
+            <h2 className="font-display text-2xl font-semibold uppercase">End of day</h2>
+            <p className="text-sm text-[#6f746e]">Daily employees stay out of monthly payroll. Paying them posts a named line on the finance report.</p>
+          </div>
+          <label className="text-xs font-bold uppercase">
+            Date
+            <input type="date" value={payDate} onChange={(event) => setPayDate(event.target.value)} className={`${inputClass} mt-2 w-40`} />
+          </label>
+        </div>
+        {dayStaff.length === 0 ? (
+          <p className="p-5 text-sm text-[#6f746e]">No end-of-day employees.</p>
+        ) : (
+          <ul className="divide-y divide-[#e2ded4]">
+            {dayStaff.map((employee) => (
+              <li key={employee.id} className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
+                <strong className="min-w-40 flex-1">{employee.name}</strong>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  disabled={employee.paid}
+                  value={dayAmounts[employee.id] ?? ""}
+                  onChange={(event) => setDayAmounts((current) => ({ ...current, [employee.id]: event.target.value }))}
+                  className={`${inputClass} w-32`}
+                />
+                {employee.paid ? (
+                  <span className="text-xs font-bold uppercase text-[#167c73]">Paid {money(employee.amount || 0)}</span>
+                ) : (
+                  <button type="button" disabled={payingId === employee.id} onClick={() => void payDay(employee.id)} className={buttonClass}>
+                    {payingId === employee.id ? "Paying..." : "Pay"}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
       <Panel className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[920px] text-left text-sm">

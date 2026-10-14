@@ -6,10 +6,11 @@ import { ClipboardCheck, Plus, Save, Search } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { AddressField } from "@/components/address-field";
 import { EmployeePicker } from "@/components/employee-picker";
+import { compressPhoto } from "@/components/job-photos";
 import { buttonClass, ErrorMessage, inputClass, Panel } from "@/components/ui";
 import { api, currentFeatures } from "@/lib/api";
 import { useBusinessProfile } from "@/lib/use-business-profile";
-import { allowsRepairJobs, allowsServiceJobs } from "@/lib/business-profiles";
+import { allowsCombinedJobs, allowsRepairJobs, allowsServiceJobs } from "@/lib/business-profiles";
 import { useT } from "@/lib/locale";
 
 type VehicleMatch = {
@@ -42,7 +43,7 @@ type CustomerDetail = CustomerMatch & {
   }>;
 };
 
-type JobKind = "repair" | "service";
+type JobKind = "repair" | "service" | "both";
 type EmployeeOption = { id: number; name: string; position?: string | null };
 
 const JOB_KIND_STORAGE_KEY = "garage_admit_job_kind";
@@ -57,7 +58,7 @@ function todayIsoDate() {
 function readStoredJobKind(): JobKind | null {
   if (typeof window === "undefined") return null;
   const stored = localStorage.getItem(JOB_KIND_STORAGE_KEY);
-  return stored === "repair" || stored === "service" ? stored : null;
+  return stored === "repair" || stored === "service" || stored === "both" ? stored : null;
 }
 
 export default function AdmitVehiclePage() {
@@ -102,6 +103,9 @@ export default function AdmitVehiclePage() {
   const [admissionDate, setAdmissionDate] = useState(todayIsoDate);
   const [canRepair, setCanRepair] = useState(true);
   const [canService, setCanService] = useState(true);
+  const [canCombined, setCanCombined] = useState(false);
+  const [canAdmitPhotos, setCanAdmitPhotos] = useState(false);
+  const [admitPhotos, setAdmitPhotos] = useState<File[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [employeeIds, setEmployeeIds] = useState<number[]>([]);
   const [canAssignEmployees, setCanAssignEmployees] = useState(false);
@@ -123,8 +127,11 @@ export default function AdmitVehiclePage() {
     setCanAssignEmployees(features.includes("employees_management") || features.includes("attendance"));
     const repair = allowsRepairJobs(profile.type, features);
     const service = allowsServiceJobs(profile.type, features);
+    const combined = allowsCombinedJobs(profile.type, features);
     setCanRepair(repair);
     setCanService(service);
+    setCanCombined(combined);
+    setCanAdmitPhotos(features.includes("admit_photos"));
     if (repair && !service) {
       chooseJobKind("repair");
       return;
@@ -134,7 +141,8 @@ export default function AdmitVehiclePage() {
       return;
     }
     const stored = readStoredJobKind();
-    if (stored === "repair" && repair) chooseJobKind("repair");
+    if (stored === "both" && combined) chooseJobKind("both");
+    else if (stored === "repair" && repair) chooseJobKind("repair");
     else if (stored === "service" && service) chooseJobKind("service");
   }, [profile.type]);
 
@@ -212,7 +220,23 @@ export default function AdmitVehiclePage() {
     setCustomerVehicles([]);
   }
 
-  function finishAdmit(bill: { id: number; bill_number?: string; vehicle?: { number_plate?: string | null } | null }, plate: string, formElement?: HTMLFormElement) {
+  async function uploadAdmitPhotos(billId: number) {
+    if (!canAdmitPhotos || admitPhotos.length === 0) return;
+    for (const file of admitPhotos.slice(0, 5)) {
+      const body = new FormData();
+      body.append("photo", await compressPhoto(file));
+      body.append("kind", "admit");
+      await api(`/bills/${billId}/photos`, { method: "POST", body });
+    }
+    setAdmitPhotos([]);
+  }
+
+  async function finishAdmit(bill: { id: number; bill_number?: string; vehicle?: { number_plate?: string | null } | null }, plate: string, formElement?: HTMLFormElement) {
+    try {
+      await uploadAdmitPhotos(bill.id);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t("photos.upload_failed"));
+    }
     if (currentFeatures().includes("billing")) {
       router.push(`/bills/${bill.id}`);
       return;
@@ -390,6 +414,7 @@ export default function AdmitVehiclePage() {
               {([
                 ["repair", isPaint ? t("admit.panel_work") : t("admit.repair")],
                 ["service", isPaint ? t("admit.paint_package") : t("admit.service")],
+                ...(canCombined ? [["both", t("admit.both")] as const] : []),
               ] as const).map(([value, label]) => {
                 const selected = jobKind === value;
                 return (
@@ -411,6 +436,56 @@ export default function AdmitVehiclePage() {
             </div>
           ) : (
             <p className="mt-4 text-sm font-semibold">{canService ? t("admit.service") : t("admit.repair")}</p>
+          )}
+          {canAdmitPhotos && (
+            <div className="mt-5">
+              <p className="text-xs font-bold uppercase">{t("photos.admit_title")}</p>
+              <p className="mt-1 text-xs text-[#6f746e]">{t("photos.admit_hint", { count: admitPhotos.length })}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <label className="inline-flex h-8 cursor-pointer items-center bg-[#20221f] px-3 text-xs font-bold uppercase text-white">
+                  {t("photos.add", { left: Math.max(0, 5 - admitPhotos.length) })}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    multiple
+                    className="sr-only"
+                    disabled={admitPhotos.length >= 5}
+                    onChange={(event) => {
+                      const files = Array.from(event.target.files ?? []);
+                      setAdmitPhotos((current) => [...current, ...files].slice(0, 5));
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
+                <label className="inline-flex h-8 cursor-pointer items-center border border-[#20221f] px-3 text-xs font-bold uppercase">
+                  {t("photos.take")}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="sr-only"
+                    disabled={admitPhotos.length >= 5}
+                    onChange={(event) => {
+                      const files = Array.from(event.target.files ?? []);
+                      setAdmitPhotos((current) => [...current, ...files].slice(0, 5));
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+              {admitPhotos.length > 0 && (
+                <ul className="mt-3 space-y-1 text-sm">
+                  {admitPhotos.map((file, index) => (
+                    <li key={`${file.name}-${index}`} className="flex items-center justify-between gap-3">
+                      <span className="truncate">{file.name}</span>
+                      <button type="button" className="text-xs font-bold uppercase text-[#b84837]" onClick={() => setAdmitPhotos((current) => current.filter((_, item) => item !== index))}>
+                        {t("photos.delete")}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
           {canAssignEmployees && (
             <div className="mt-5">

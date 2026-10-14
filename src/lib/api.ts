@@ -53,6 +53,8 @@ export type FeatureKey =
   | "admit_vehicle"
   | "admit_repair"
   | "admit_service"
+  | "admit_combined"
+  | "admit_photos"
   | "job_board"
   | "job_bookings"
   | "service_reminders"
@@ -87,7 +89,8 @@ export type FeatureKey =
   | "expense_job_split"
   | "finance_report_export"
   | "job_videos"
-  | "job_photos";
+  | "job_photos"
+  | "job_commissions";
 
 export type BusinessType = "garage" | "tyre" | "device_repair" | "paint" | "photography" | "clothing" | "salon" | "cottage" | "store" | "mobile_shop";
 

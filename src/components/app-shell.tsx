@@ -52,7 +52,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
   const [features, setFeatures] = useState<string[]>(cachedFeatures);
   const [open, setOpen] = useState(false);
   const [dueCheques, setDueCheques] = useState<{ count: number; firstExpenseId?: number } | null>(null);
-  const [folds, setFolds] = useState<NavFolds>(readNavFolds);
+  const [folds, setFolds] = useState<NavFolds>({ groups: {}, features: {} });
 
   const profile = useMemo(() => profileFor(user?.tenant?.business_type), [user?.tenant?.business_type]);
   const navigation = profile.navigation;
@@ -152,7 +152,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
   });
   const menu = groupNavigation(links, profile.moduleCatalog);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const stored = readNavFolds();
     const next: NavFolds = {
       groups: { ...stored.groups },

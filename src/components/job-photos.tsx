@@ -63,7 +63,7 @@ async function decodeImage(file: File): Promise<ImageBitmap> {
   }
 }
 
-async function compressPhoto(file: File): Promise<File> {
+export async function compressPhoto(file: File): Promise<File> {
   if (file.type === "image/gif" && file.size <= PHOTO_UPLOAD_BUDGET) return file;
   if (!looksLikeImage(file)) {
     throw new Error("Use a JPEG, PNG, or WebP photo.");
@@ -115,19 +115,30 @@ async function snapshotFiles(list: FileList | null): Promise<File[]> {
   );
 }
 
-export function JobPhotos({ billId, readOnly = false }: { billId: number; readOnly?: boolean }) {
+export function JobPhotos({
+  billId,
+  readOnly = false,
+  kind = "job",
+  max = 15,
+}: {
+  billId: number;
+  readOnly?: boolean;
+  kind?: "job" | "admit";
+  max?: number;
+}) {
   const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
   const [photos, setPhotos] = useState<JobPhoto[]>([]);
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
   const [viewing, setViewing] = useState<{ id: number; url: string } | null>(null);
 
   const load = useCallback(() => {
-    api<JobPhoto[]>(`/bills/${billId}/photos`)
+    api<JobPhoto[]>(`/bills/${billId}/photos?kind=${kind}`)
       .then(setPhotos)
       .catch((caught) => setError(caught.message));
-  }, [billId]);
+  }, [billId, kind]);
 
   useEffect(() => {
     load();
@@ -139,7 +150,7 @@ export function JobPhotos({ billId, readOnly = false }: { billId: number; readOn
   async function upload(files: File[]) {
     setError("");
     setUploading(true);
-    const remaining = Math.max(0, 15 - photos.length);
+    const remaining = Math.max(0, max - photos.length);
     const batch = files.slice(0, remaining);
     if (batch.length === 0) {
       setUploading(false);
@@ -149,6 +160,7 @@ export function JobPhotos({ billId, readOnly = false }: { billId: number; readOn
       for (const file of batch) {
         const body = new FormData();
         body.append("photo", await compressPhoto(file));
+        body.append("kind", kind);
         await api(`/bills/${billId}/photos`, { method: "POST", body });
       }
       load();
@@ -188,14 +200,16 @@ export function JobPhotos({ billId, readOnly = false }: { billId: number; readOn
     }
   }
 
-  const left = Math.max(0, 15 - photos.length);
+  const left = Math.max(0, max - photos.length);
+  const title = kind === "admit" ? t("photos.admit_title") : t("photos.title");
+  const hint = kind === "admit" ? t("photos.admit_hint", { count: photos.length }) : t("photos.hint", { count: photos.length });
 
   return (
     <div className="no-print border border-[#d7d3c8] bg-white p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="font-display text-xl font-semibold uppercase">{t("photos.title")}</p>
-          <p className="text-xs text-[#6f746e]">{t("photos.hint", { count: photos.length })}</p>
+          <p className="font-display text-xl font-semibold uppercase">{title}</p>
+          <p className="text-xs text-[#6f746e]">{hint}</p>
         </div>
         {!readOnly && (
           <span className="relative inline-flex">
@@ -212,6 +226,34 @@ export function JobPhotos({ billId, readOnly = false }: { billId: number; readOn
               type="file"
               accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif"
               multiple
+              className="sr-only"
+              tabIndex={-1}
+              onChange={(event) => {
+                const input = event.target;
+                void snapshotFiles(input.files).then((files) => {
+                  input.value = "";
+                  if (files.length) void upload(files);
+                }).catch(() => {
+                  input.value = "";
+                  setError("This photo could not be read. Save it as JPEG or PNG and try again.");
+                });
+              }}
+            />
+            {kind === "admit" && (
+              <button
+                type="button"
+                disabled={uploading || left <= 0}
+                onClick={() => cameraRef.current?.click()}
+                className="ml-2 inline-flex h-8 cursor-pointer items-center border border-[#20221f] px-3 text-xs font-bold uppercase disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {t("photos.take")}
+              </button>
+            )}
+            <input
+              ref={cameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
               className="sr-only"
               tabIndex={-1}
               onChange={(event) => {
