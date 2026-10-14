@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
-import { api, currentUser, money } from "@/lib/api";
+import { api, currentFeatures, money } from "@/lib/api";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 
 type DiscountType = {
@@ -19,7 +19,7 @@ type DiscountType = {
 export default function DiscountTypesPage() {
   const profile = useBusinessProfile();
   const isPaint = profile.type === "paint";
-  const [isOwner, setIsOwner] = useState(false);
+  const canEdit = currentFeatures().includes("billing");
   const [rows, setRows] = useState<DiscountType[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -33,13 +33,12 @@ export default function DiscountTypesPage() {
   }
 
   useEffect(() => {
-    setIsOwner(currentUser()?.role === "business_owner");
     load();
   }, []);
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!isOwner) return;
+    if (!canEdit) return;
     setError("");
     const form = event.currentTarget;
     const data = new FormData(form);
@@ -60,7 +59,7 @@ export default function DiscountTypesPage() {
   }
 
   async function saveRow(row: DiscountType, patch: Partial<DiscountType>) {
-    if (!isOwner) return;
+    if (!canEdit) return;
     setError("");
     try {
       await api(`/discount-types/${row.id}`, {
@@ -74,7 +73,7 @@ export default function DiscountTypesPage() {
   }
 
   async function remove(id: number) {
-    if (!isOwner) return;
+    if (!canEdit) return;
     setError("");
     try {
       await api(`/discount-types/${id}`, { method: "DELETE" });
@@ -90,7 +89,7 @@ export default function DiscountTypesPage() {
         Create common discounts (fixed LKR or %). Staff pick them on the bill discount section instead of typing amounts each time.
       </p>
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
-      {isOwner && (
+      {canEdit && (
         <Panel className="mb-5 max-w-2xl p-5">
           <form onSubmit={create} className="grid gap-3 sm:grid-cols-[1.4fr_0.9fr_0.8fr_auto]">
             <label className="text-xs font-bold uppercase">
@@ -124,7 +123,7 @@ export default function DiscountTypesPage() {
                     {!row.active ? " · inactive" : ""}
                   </p>
                 </div>
-                {isOwner && (
+                {canEdit && (
                   <>
                     <input
                       type="number"

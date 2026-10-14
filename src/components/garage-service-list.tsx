@@ -4,7 +4,7 @@ import { KeyboardEvent, useCallback, useEffect, useMemo, useState, useSyncExtern
 import { Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ConfirmModal, ErrorMessage, PageState, Panel } from "@/components/ui";
-import { api, currentUser } from "@/lib/api";
+import { api, currentFeatures } from "@/lib/api";
 
 type Named = { id: number; name: string };
 type VehiclePrice = { service_vehicle_class_id: number; price: string | null; offered: boolean };
@@ -15,7 +15,7 @@ const noopSubscribe = () => () => {};
 const errorText = (caught: unknown, fallback: string) => (caught instanceof Error ? caught.message : fallback);
 
 export function GarageServiceList() {
-  const isOwner = useSyncExternalStore(noopSubscribe, () => currentUser()?.role === "business_owner", () => false);
+  const canEdit = useSyncExternalStore(noopSubscribe, () => currentFeatures().includes("billing"), () => false);
   const [categories, setCategories] = useState<Named[]>([]);
   const [addons, setAddons] = useState<Addon[]>([]);
   const [selectedTypeId, setSelectedTypeId] = useState<number | null>(null);
@@ -118,7 +118,7 @@ export function GarageServiceList() {
 
   return (
     <AppShell title="Service addons" eyebrow="One service blueprint for every vehicle type">
-      {!isOwner && <p className="mb-4 text-sm text-[#6f746e]">Only the owner can change these lists.</p>}
+      {!canEdit && <p className="mb-4 text-sm text-[#6f746e]">Job card access is required to change these lists.</p>}
       {error && <div className="mb-4"><ErrorMessage message={error} /></div>}
 
       {loading ? <PageState message="Loading..." /> : (
@@ -129,7 +129,7 @@ export function GarageServiceList() {
               <p className="mt-0.5 text-xs text-[#6f746e]">Write every service once — Body wash, Under wash, Hypower wash… Every vehicle type uses this same list.</p>
               <NameList
                 items={services}
-                canEdit={isOwner}
+                canEdit={canEdit}
                 placeholder="+ New service, press Enter"
                 empty="No services yet."
                 onAdd={addService}
@@ -140,7 +140,7 @@ export function GarageServiceList() {
                 <input
                   type="checkbox"
                   checked={Boolean(fullService)}
-                  disabled={!isOwner}
+                  disabled={!canEdit}
                   onChange={(event) => toggleFullService(event.target.checked)}
                   className="size-4 accent-[#167c73]"
                 />
@@ -153,7 +153,7 @@ export function GarageServiceList() {
                       <input
                         type="checkbox"
                         checked={includedIds.has(service.id)}
-                        disabled={!isOwner}
+                        disabled={!canEdit}
                         onChange={() => toggleIncluded(service.id)}
                         className="size-3.5 accent-[#167c73]"
                       />
@@ -170,7 +170,7 @@ export function GarageServiceList() {
               <p className="mt-0.5 text-xs text-[#6f746e]">Car, SUV, Van, Tata bus, Leyland bus, Lorry… A new type gets the whole blueprint straight away.</p>
               <NameList
                 items={categories}
-                canEdit={isOwner}
+                canEdit={canEdit}
                 placeholder="+ New vehicle type, press Enter"
                 empty="No vehicle types yet."
                 onAdd={addCategory}
@@ -212,7 +212,7 @@ export function GarageServiceList() {
                         key={`${selectedType.id}-${addon.id}`}
                         addon={addon}
                         setting={addon.vehicle_prices?.find((row) => row.service_vehicle_class_id === selectedType.id) ?? null}
-                        canEdit={isOwner}
+                        canEdit={canEdit}
                         onSave={(offered, price) => saveSetting(addon, selectedType.id, offered, price)}
                       />
                     ))}
