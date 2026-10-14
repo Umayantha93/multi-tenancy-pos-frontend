@@ -39,7 +39,7 @@ export default function ServiceAddonsPage() {
 }
 
 function PaintPackagesPage() {
-  const isOwner = useSyncExternalStore(noopSubscribe, () => currentUser()?.role === "business_owner", () => false);
+  const canEdit = useSyncExternalStore(noopSubscribe, () => currentFeatures().includes("billing"), () => false);
   const [packages, setPackages] = useState<PaintPackage[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -58,7 +58,7 @@ function PaintPackagesPage() {
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!isOwner) return;
+    if (!canEdit) return;
     const form = event.currentTarget;
     const data = new FormData(form);
     setError("");
@@ -99,10 +99,10 @@ function PaintPackagesPage() {
 
   return (
     <AppShell title="Paint packages" eyebrow="Buttons on paint-package jobs">
-      {!isOwner && <p className="mb-5 text-sm text-[#6f746e]">Only the owner can add, price, or remove these buttons.</p>}
+      {!canEdit && <p className="mb-5 text-sm text-[#6f746e]">Job card access is required to change these buttons.</p>}
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
       <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-        {isOwner && (
+        {canEdit && (
           <Panel className="p-5">
             <h2 className="font-display text-2xl font-semibold uppercase">Add a package</h2>
             <p className="mt-1 text-sm text-[#6f746e]">Staff tap it on paint-package jobs to add the priced line.</p>
@@ -113,11 +113,11 @@ function PaintPackagesPage() {
             </form>
           </Panel>
         )}
-        <Panel className={isOwner ? "" : "xl:col-span-2"}>
+        <Panel className={canEdit ? "" : "xl:col-span-2"}>
           {loading ? <PageState message="Loading paint packages..." /> : (
             <div className="divide-y divide-[#e2ded4]">
               {packages.map((item) => (
-                <PackageRow key={item.id} item={item} canEdit={isOwner} busy={saving} onSavePrice={savePrice} onRemove={remove} />
+                <PackageRow key={item.id} item={item} canEdit={canEdit} busy={saving} onSavePrice={savePrice} onRemove={remove} />
               ))}
               {packages.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No paint packages yet.</p>}
             </div>

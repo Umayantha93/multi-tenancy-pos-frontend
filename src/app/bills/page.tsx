@@ -5,7 +5,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ArrowRight, ClipboardPlus, Hammer, Percent, Search, Wrench, X, Zap } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
-import { api, currentFeatures, currentUser, formatDate, money } from "@/lib/api";
+import { api, currentFeatures, formatDate, money } from "@/lib/api";
 import { allowsServiceJobs, usesLaborCatalog, usesServiceAddonWorkspace, usesStoreCounter } from "@/lib/business-profiles";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 import { billListStatus, billStatusClass, billStatusLabel, isOweInUrgent } from "@/lib/bill-stamp";
@@ -67,7 +67,6 @@ export default function BillsPage() {
   const [dateTo, setDateTo] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [isOwner, setIsOwner] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickSaving, setQuickSaving] = useState(false);
   const [payNow, setPayNow] = useState(true);
@@ -76,10 +75,6 @@ export default function BillsPage() {
   const router = useRouter();
   const isStore = usesStoreCounter(profile.type);
   const rangeInvalid = Boolean(dateFrom && dateTo && dateFrom > dateTo);
-
-  useEffect(() => {
-    setIsOwner(currentUser()?.role === "business_owner");
-  }, []);
 
   const loadBills = useCallback((pageNum: number) => {
     if (rangeInvalid) {
@@ -153,7 +148,7 @@ export default function BillsPage() {
       eyebrow={t("bills.eyebrow")}
       action={
         <div className="flex items-center gap-2">
-          {(usesLaborCatalog(profile.type) || usesServiceAddonWorkspace(profile.type)) && isOwner && (
+          {(usesLaborCatalog(profile.type) || usesServiceAddonWorkspace(profile.type)) && (
             <>
               {usesLaborCatalog(profile.type) && (
               <Link

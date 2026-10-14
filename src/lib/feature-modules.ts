@@ -15,6 +15,8 @@ const FALLBACK_GROUP: Record<string, string> = {
   admit_vehicle: "Service Intake",
   admit_repair: "Service Intake",
   admit_service: "Service Intake",
+  admit_combined: "Service Intake",
+  admit_photos: "Service Intake",
   job_board: "Service Intake",
   job_bookings: "Service Intake",
   photo_bookings: "Service Intake",
@@ -32,6 +34,7 @@ const FALLBACK_GROUP: Record<string, string> = {
   owner_bill_sms: "Service Intake",
   job_photos: "Service Intake",
   job_videos: "Service Intake",
+  job_commissions: "Service Intake",
   parts_inventory: "Inventory",
   inventory_edit: "Inventory",
   product_catalog: "Inventory",
@@ -55,11 +58,15 @@ const FALLBACK_GROUP: Record<string, string> = {
 export const FEATURE_PARENTS: Record<string, string> = {
   admit_repair: "admit_vehicle",
   admit_service: "admit_vehicle",
+  admit_combined: "admit_vehicle",
+  admit_photos: "admit_vehicle",
   job_board: "admit_vehicle",
   owner_bill_sms: "admit_vehicle",
-  job_photos: "admit_vehicle",
-  job_videos: "admit_vehicle",
-  service_reminders: "bill_sms",
+  job_photos: "billing",
+  job_videos: "billing",
+  bill_sms: "billing",
+  service_reminders: "billing",
+  job_commissions: "billing",
   serial_inventory: "parts_inventory",
   inventory_edit: "parts_inventory",
   station_consumables: "parts_inventory",
@@ -205,6 +212,9 @@ export function togglePlanFeature(
       }
     }
     let next = enabled.filter((item) => item !== key && !children.includes(item));
+    if (key === "admit_service" || key === "admit_repair") {
+      next = next.filter((item) => item !== "admit_combined");
+    }
     if (key === "admit_service") {
       next = next.filter((item) => item !== "service_reminders" && item !== "service_ops_report");
     }
@@ -217,6 +227,16 @@ export function togglePlanFeature(
   const next = [...enabled, key];
   const parent = FEATURE_PARENTS[key];
   if (parent && !next.includes(parent)) next.push(parent);
+  if (key === "admit_combined") {
+    for (const need of ["admit_vehicle", "admit_repair", "admit_service"]) {
+      if (!next.includes(need)) next.push(need);
+    }
+  }
+  if (key === "service_reminders") {
+    for (const need of ["billing", "bill_sms", "admit_service"]) {
+      if (!next.includes(need)) next.push(need);
+    }
+  }
   if (options.garageAdmit && key === "admit_vehicle" && !next.includes("admit_repair") && !next.includes("admit_service")) {
     next.push("admit_repair", "admit_service");
   }

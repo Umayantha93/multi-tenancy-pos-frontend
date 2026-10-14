@@ -88,10 +88,17 @@ type Bill = {
   warranty_until?: string | null;
   customer: { name: string; phone: string; address?: string | null } | null;
   vehicle: { number_plate: string; chassis_number?: string | null; make?: string; model?: string } | null;
-  employees?: Array<{ id: number; name: string; position?: string | null }>;
+  employees?: Array<{
+    id: number;
+    name: string;
+    position?: string | null;
+    commission_percent?: string | number | null;
+    pivot?: { commission_amount?: string | number | null; commission_deducted_at?: string | null };
+  }>;
   items: Array<{
     id: number;
     type: string;
+    section?: string | null;
     description: string;
     included_services?: string[] | null;
     quantity: string;
@@ -154,6 +161,14 @@ type PendingDelete =
   | { kind: "item"; id: number; label: string }
   | { kind: "payment"; id: number; method: string; amount: string };
 
+function lineSection(item: { type: string; section?: string | null }, jobKind?: string | null) {
+  if (item.section === "service" || item.section === "repair" || item.section === "discount") return item.section;
+  if (item.type === "discount") return "discount";
+  if (item.type === "service_addon" || item.type === "service" || item.type === "charge") return "service";
+  if (item.type === "labor") return "repair";
+  return jobKind === "service" ? "service" : "repair";
+}
+
 export default function BillDetailPage() {
   const { id } = useParams<{ id: string }>();
   const t = useT();
@@ -174,6 +189,7 @@ export default function BillDetailPage() {
   const [itemSerials, setItemSerials] = useState("");
   const [addingAddonId, setAddingAddonId] = useState<number | null>(null);
   const [serviceAddMode, setServiceAddMode] = useState<"services" | "inventory" | "discount">("services");
+  const [combinedSection, setCombinedSection] = useState<"service" | "repair" | "discount">("service");
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [error, setError] = useState("");
   const [mode, setMode] = useState<"item" | "payment">("item");
@@ -240,6 +256,8 @@ export default function BillDetailPage() {
   const canOwnerSms = features.includes("owner_bill_sms");
   const canJobVideos = features.includes("job_videos");
   const canJobPhotos = features.includes("job_photos");
+  const canAdmitPhotos = features.includes("admit_photos");
+  const canCommission = features.includes("job_commissions");
   const canJobBoard = features.includes("job_board");
   const canReminders = features.includes("service_reminders");
   const canAssignEmployees = features.includes("employees_management") || features.includes("attendance");
@@ -272,6 +290,20 @@ export default function BillDetailPage() {
   const selectedType = itemTypes.find((option) => option.value === type) ?? itemTypes[0];
   const activeType = type || selectedType?.value || "labor";
   const isServiceJob = usesServiceAddonWorkspace(profile.type) && bill?.job_kind === "service";
+  const isCombinedJob = isGarage && bill?.job_kind === "both";
+  const serviceWorkspace = isServiceJob || (isCombinedJob && combinedSection === "service");
+  const showsServiceFields = isServiceJob || isCombinedJob;
+  const pickerTypes = isCombinedJob && combinedSection === "repair"
+    ? itemTypes.filter((option) => option.value === "labor" || option.value === "part")
+    : isCombinedJob && combinedSection === "discount"
+      ? itemTypes.filter((option) => option.value === "discount")
+      : itemTypes;
+  useEffect(() => {
+    if (!isCombinedJob) return;
+    if (combinedSection === "repair") setType("labor");
+    if (combinedSection === "discount") setType("discount");
+    if (combinedSection === "service") setServiceAddMode((mode) => (mode === "discount" ? "services" : mode));
+  }, [combinedSection, isCombinedJob]);
   const serviceClassId = bill?.service_vehicle_class_id ? String(bill.service_vehicle_class_id) : "";
   const needsServiceClass = !isPaint && vehicleClasses.length > 0 && !serviceClassId;
   const addonSetting = (addon: ServiceAddon) => serviceClassId
@@ -300,7 +332,9 @@ export default function BillDetailPage() {
   const composerMaterialAmount = composerMaterials.reduce((sum, row) => sum + Number(row.qty || 0) * row.unitPrice, 0);
   const panelTotal = composerLaborAmount + composerMaterialAmount;
   const jobKindLabel =
-    bill?.job_kind === "service"
+    bill?.job_kind === "both"
+      ? t("admit.both")
+      : bill?.job_kind === "service"
       ? (isPaint ? t("bills.package") : t("bills.service"))
       : bill?.job_kind === "parts_sale"
         ? (isPaint ? t("bill.counter_sale") : isStore ? t("bill.sale") : t("terms.Instant"))
@@ -667,8 +701,8 @@ export default function BillDetailPage() {
   }, [mixQuery, composerMaterials, parts]);
 
   const selectedPart = parts.find((part) => String(part.id) === selectedPartId);
-  const isStockType = selectedType?.kind === "stock" || (isServiceJob && serviceAddMode === "inventory");
-  const isDiscountType = activeType === "discount" || (isServiceJob && serviceAddMode === "discount");
+  const isStockType = selectedType?.kind === "stock" || (serviceWorkspace && serviceAddMode === "inventory");
+  const isDiscountType = activeType === "discount" || (serviceWorkspace && serviceAddMode === "discount");
   const showQuantity = isStockType || Boolean(selectedType?.allowQty);
   const showCost = !isStockType || outsidePart;
   const selectedDiscountType = discountTypes.find((row) => String(row.id) === selectedDiscountTypeId) ?? null;
@@ -686,7 +720,12 @@ export default function BillDetailPage() {
     try {
       await api(`/bills/${id}/items`, {
         method: "POST",
-        body: JSON.stringify({ type: "part", part_id: part.id, quantity }),
+        body: JSON.stringify({
+          type: "part",
+          part_id: part.id,
+          quantity,
+          ...(isCombinedJob ? { section: combinedSection === "repair" ? "repair" : "service" } : {}),
+        }),
       });
       setSelectedPartId("");
       setPartQuery("");
@@ -892,10 +931,14 @@ export default function BillDetailPage() {
       payload.quantity = showQuantity ? String(formData.get("quantity") || "1") : "1";
     }
 
+    if (isCombinedJob) {
+      payload.section = payload.type === "discount" ? "discount" : (combinedSection === "repair" ? "repair" : "service");
+    }
+
     try {
       const warranty = canWarranty && payload.type !== "discount" ? warrantyFromForm(formData) : null;
       await api(`/bills/${id}/items`, { method: "POST", body: JSON.stringify(warranty ? { ...payload, ...warranty } : payload) });
-      resetItemForm(isServiceJob ? (serviceAddMode === "discount" ? "discount" : "part") : itemTypes[0]?.value);
+      resetItemForm(serviceWorkspace ? (serviceAddMode === "discount" ? "discount" : "part") : pickerTypes[0]?.value);
       load();
       void loadParts(partQuery);
     } catch (caught) {
@@ -951,6 +994,7 @@ export default function BillDetailPage() {
           type: "service_addon",
           service_addon_id: addon.id,
           quantity: addonQty || "1",
+          ...(isCombinedJob ? { section: "service" } : {}),
         }),
       });
       load();
@@ -982,6 +1026,7 @@ export default function BillDetailPage() {
           description,
           unit_price: unitPrice,
           quantity,
+          ...(isCombinedJob ? { section: "service" } : {}),
         }),
       });
       load();
@@ -1177,7 +1222,7 @@ export default function BillDetailPage() {
       const payload: Record<string, number | string | null> = {
         mileage: mileageDraft === "" ? null : Number(mileageDraft),
       };
-      if (isServiceJob) {
+      if (showsServiceFields) {
         payload.next_service_mileage = nextServiceMileageDraft === "" ? null : Number(nextServiceMileageDraft);
         if (canReminders) {
           payload.next_service_due_on = nextServiceDueDraft === "" ? null : nextServiceDueDraft;
@@ -1869,10 +1914,10 @@ export default function BillDetailPage() {
                     <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{t("bill.mileage")}</p>
                     <p className="mt-0.5 text-[12px] font-semibold leading-tight">
                       {bill.mileage != null && bill.mileage !== "" ? t("common.km", { count: Number(bill.mileage).toLocaleString() }) : "—"}
-                      {isServiceJob && (bill.next_service_mileage != null && bill.next_service_mileage !== ""
+                      {showsServiceFields && (bill.next_service_mileage != null && bill.next_service_mileage !== ""
                         ? ` · ${t("bill.next_service")} ${Number(bill.next_service_mileage).toLocaleString()} km`
                         : "")}
-                      {isServiceJob && bill.next_service_due_on ? ` · ${formatDate(bill.next_service_due_on)}` : ""}
+                      {showsServiceFields && bill.next_service_due_on ? ` · ${formatDate(bill.next_service_due_on)}` : ""}
                     </p>
                     {!isLocked && (
                       <form
@@ -1889,7 +1934,7 @@ export default function BillDetailPage() {
                           placeholder={t("bill.current_km")}
                           aria-label={t("bill.current_km")}
                         />
-                        {isServiceJob ? (
+                        {showsServiceFields ? (
                           <input
                             type="number"
                             min="0"
@@ -1909,7 +1954,7 @@ export default function BillDetailPage() {
                             {savingMileage ? "..." : t("common.save")}
                           </button>
                         )}
-                        {isServiceJob && canReminders && (
+                        {showsServiceFields && canReminders && (
                           <input
                             type="date"
                             value={nextServiceDueDraft}
@@ -1918,7 +1963,7 @@ export default function BillDetailPage() {
                             aria-label={t("bill.next_due")}
                           />
                         )}
-                        {isServiceJob && (
+                        {showsServiceFields && (
                           <button
                             type="submit"
                             disabled={savingMileage}
@@ -1980,7 +2025,7 @@ export default function BillDetailPage() {
 
           <Panel>
             <div className="bill-section-head border-b border-[#d7d3c8] px-3 py-2">
-              <h2 className="font-display text-base font-semibold uppercase sm:text-lg">{t("bill.bill_items")}</h2>
+              <h2 className="font-display text-base font-semibold uppercase sm:text-lg">{isCombinedJob ? t("admit.both") : t("bill.bill_items")}</h2>
             </div>
             <div className="bill-items-scroll print:overflow-visible">
               <table className="bill-items-table w-full min-w-[36rem] text-left text-xs print:min-w-0">
@@ -2003,7 +2048,37 @@ export default function BillDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {chargeGroups.map((row) => {
+                  {isCombinedJob && (["service", "repair"] as const).map((section) => {
+                    const lines = chargeItems.filter((item) => lineSection(item, bill.job_kind) === section);
+                    const subtotal = lines.reduce((sum, item) => sum + Number(item.line_total), 0);
+                    return (
+                      <Fragment key={section}>
+                        <tr className="border-t border-[#d7d3c8] bg-[#f7f5ef]">
+                          <td colSpan={isLocked ? 5 : 6} className="px-3 py-2 text-[10px] font-bold uppercase">
+                            {section === "service" ? t("bills.service") : t("bills.repair")}
+                            <span className={`float-right tabular-nums ${hidePrintMoney ? "print:hidden" : ""}`}>{money(subtotal)}</span>
+                          </td>
+                        </tr>
+                        {lines.map((item) => (
+                          <ChargeItemRow
+                            key={item.id}
+                            item={item}
+                            profile={profile}
+                            isLocked={isLocked}
+                            savingLaborHours={savingLaborHours}
+                            onSaveHours={saveLaborHours}
+                            onSavePrice={canEditServicePrice ? saveLinePrice : undefined}
+                            onRemove={remove}
+                            laborAsQty={isGarageInstant}
+                            canWarranty={canWarranty}
+                            onEditWarranty={setWarrantyItem}
+                            hideAmountsOnPrint={hidePrintMoney}
+                          />
+                        ))}
+                      </Fragment>
+                    );
+                  })}
+                  {!isCombinedJob && chargeGroups.map((row) => {
                     if (row.kind === "group") {
                       const open = Boolean(expandedPanels[row.groupId]);
                       return (
@@ -2295,6 +2370,45 @@ export default function BillDetailPage() {
                     disabled={savingEmployees || isClosed}
                   />
                   {savingEmployees && <p className="text-[11px] text-[#6f746e]">{t("common.saving")}</p>}
+                  {canCommission && (bill.employees ?? []).length > 0 && (
+                    <ul className="space-y-2 border border-[#d7d3c8] bg-[#fbfaf6] p-2">
+                      {(bill.employees ?? []).map((employee) => {
+                        const base = (bill.items ?? [])
+                          .filter((item) => ["labor", "service_addon", "service", "charge"].includes(item.type))
+                          .reduce((sum, item) => sum + Number(item.line_total), 0);
+                        const deducted = Boolean(employee.pivot?.commission_deducted_at);
+                        const percent = Number(employee.commission_percent || 0);
+                        const amount = deducted
+                          ? Number(employee.pivot?.commission_amount || 0)
+                          : Math.round(base * percent) / 100;
+                        return (
+                          <li key={employee.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                            <span>
+                              <strong>{employee.name}</strong>
+                              <span className="ml-2 text-[#6f746e]">{percent}% · {money(amount)}</span>
+                            </span>
+                            {deducted ? (
+                              <span className="font-bold uppercase text-[#167c73]">Deducted</span>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={isClosed || amount <= 0}
+                                onClick={() => {
+                                  setError("");
+                                  api<Bill>(`/bills/${id}/commissions/${employee.id}`, { method: "POST" })
+                                    .then((updated) => setBill(updated))
+                                    .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not deduct commission."));
+                                }}
+                                className="h-7 border border-[#20221f] px-2 text-[10px] font-bold uppercase disabled:opacity-50"
+                              >
+                                Deduct
+                              </button>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
                 </div>
               )}
               {canJobBoard && !isClosed && bill.job_kind !== "parts_sale" && (
@@ -2323,6 +2437,9 @@ export default function BillDetailPage() {
           </Panel>
           )}
 
+          {canAdmitPhotos && isGarage && bill.job_kind !== "parts_sale" && (
+            <JobPhotos billId={bill.id} readOnly={isClosed} kind="admit" max={5} />
+          )}
           {canJobPhotos && isGarage && bill.job_kind !== "parts_sale" && (
             <JobPhotos billId={bill.id} readOnly={isClosed} />
           )}
@@ -2360,13 +2477,15 @@ export default function BillDetailPage() {
             )}
 
             {mode === "item" && !isOweIn ? (
-              isServiceJob && serviceAddMode === "services" ? (
+              serviceWorkspace && serviceAddMode === "services" ? (
                 <div className="flex max-h-[min(78vh,46rem)] flex-col">
                   <div className="space-y-3 overflow-y-auto p-4">
+                    {isCombinedJob && <CombinedSectionPicker section={combinedSection} onChange={setCombinedSection} />}
                     <ServiceAddModeToggle
                       mode={serviceAddMode}
                       onChange={switchServiceAddMode}
                       paint={isPaint}
+                      hideDiscount={isCombinedJob}
                     />
                     {!isPaint && vehicleClasses.length > 0 && (
                       <label className="block text-xs font-bold uppercase">
@@ -2482,18 +2601,20 @@ export default function BillDetailPage() {
               ) : (
               <form key={formKey} onSubmit={addItem} className="flex max-h-[min(78vh,46rem)] flex-col">
                 <div className="space-y-3 overflow-y-auto p-4">
-                {isServiceJob && (
+                {isCombinedJob && <CombinedSectionPicker section={combinedSection} onChange={setCombinedSection} />}
+                {serviceWorkspace && (
                   <ServiceAddModeToggle
                     mode={serviceAddMode}
                     onChange={switchServiceAddMode}
                     paint={isPaint}
+                    hideDiscount={isCombinedJob}
                   />
                 )}
-                {!isServiceJob && (
+                {!serviceWorkspace && (
                 <div>
                   <p className="mb-2 text-xs font-bold uppercase">{t("common.type")}</p>
                   <div className="flex gap-1">
-                    {itemTypes.map((option) => {
+                    {pickerTypes.map((option) => {
                       const selected = activeType === option.value;
                       return (
                         <button
@@ -2524,7 +2645,7 @@ export default function BillDetailPage() {
                   <input type="hidden" name="type" value={activeType} />
                 </div>
                 )}
-                {isServiceJob && <input type="hidden" name="type" value={serviceAddMode === "discount" ? "discount" : "part"} />}
+                {serviceWorkspace && <input type="hidden" name="type" value={serviceAddMode === "discount" ? "discount" : "part"} />}
 
                 {isStockType ? (
                   <>
@@ -3384,20 +3505,56 @@ function BillItemDescription({ item }: { item: { description: string; included_s
   );
 }
 
+function CombinedSectionPicker({
+  section,
+  onChange,
+}: {
+  section: "service" | "repair" | "discount";
+  onChange: (section: "service" | "repair" | "discount") => void;
+}) {
+  const t = useT();
+  const options = [
+    ["service", t("bills.service")],
+    ["repair", t("bills.repair")],
+    ["discount", t("common.discount")],
+  ] as const;
+  return (
+    <div>
+      <p className="mb-2 text-xs font-bold uppercase">{t("admit.both")}</p>
+      <div className="flex gap-1">
+        {options.map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => onChange(value)}
+            className={`h-8 min-w-0 flex-1 border px-1 text-center text-[10px] font-bold uppercase ${
+              section === value ? "border-[#20221f] bg-[#20221f] text-white" : "border-[#d7d3c8] bg-white"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ServiceAddModeToggle({
   mode,
   onChange,
   paint = false,
+  hideDiscount = false,
 }: {
   mode: "services" | "inventory" | "discount";
   onChange: (mode: "services" | "inventory" | "discount") => void;
   paint?: boolean;
+  hideDiscount?: boolean;
 }) {
   const t = useT();
   const options: Array<["services" | "inventory" | "discount", string]> = [
     ["services", paint ? t("bill.packages") : t("bill.services")],
     ...(paint ? [] : [["inventory", t("bill.inventory")] as ["inventory", string]]),
-    ["discount", t("common.discount")],
+    ...(hideDiscount ? [] : [["discount", t("common.discount")] as ["discount", string]]),
   ];
 
   return (

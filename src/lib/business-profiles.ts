@@ -156,6 +156,8 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { key: "admit_vehicle", name: "Admit vehicle", group: "Service Intake" },
       { key: "admit_repair", name: "Repair jobs", group: "Service Intake" },
       { key: "admit_service", name: "Service jobs", group: "Service Intake" },
+      { key: "admit_combined", name: "Repair and service", group: "Service Intake" },
+      { key: "admit_photos", name: "Admit photos", group: "Service Intake" },
       { key: "job_board", name: "Job status board", group: "Service Intake" },
       { key: "owner_bill_sms", name: "Owner bill SMS", group: "Service Intake" },
       { key: "job_photos", name: "Job photos", group: "Service Intake" },
@@ -169,6 +171,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { key: "station_consumables", name: "Station consumables", group: "Inventory" },
       ...sharedPeopleFinance.map((m) => m.key === "billing" ? { ...m, name: "Job cards" } : m),
       { key: "service_reminders", name: "Next-service reminders", group: "Service Intake" },
+      { key: "job_commissions", name: "Job commission", group: "Service Intake" },
       { key: "service_ops_report", name: "Service operations report", group: "Finance" },
       { key: "expense_job_split", name: "Repair / service expenses", group: "Finance" },
       { key: "finance_report_export", name: "Finance report download", group: "Finance" },
@@ -703,7 +706,8 @@ export function optionalFeaturesFor(type?: string | null): FeatureKey[] {
   if (type === "mobile_shop") return ["purchase_orders", "part_fitment", "serial_inventory", "bill_whatsapp"];
   if (type === "garage") {
     return [
-      "owner_bill_sms", "service_ops_report", "job_photos", "job_videos",
+      "owner_bill_sms", "service_ops_report", "job_photos", "job_videos", "job_commissions",
+      "admit_combined", "admit_photos",
       "job_board", "job_bookings", "service_reminders",
       "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp", "station_consumables",
       "expense_job_split", "finance_report_export",
@@ -719,6 +723,13 @@ export function allowsServiceJobs(type?: string | null, features: string[] = [])
   const hasLocks = features.includes("admit_repair") || features.includes("admit_service");
   if (!hasLocks) return true;
   return features.includes("admit_service");
+}
+
+export function allowsCombinedJobs(type?: string | null, features: string[] = []): boolean {
+  return type === "garage"
+    && features.includes("admit_combined")
+    && allowsRepairJobs(type, features)
+    && allowsServiceJobs(type, features);
 }
 
 export function allowsRepairJobs(type?: string | null, features: string[] = []): boolean {
