@@ -34,6 +34,7 @@ type Bill = {
   has_pending_cheque?: boolean;
   pending_cheque_date?: string | null;
   refund_status?: string;
+  is_free?: boolean;
   owe_in_due_date?: string | null;
   notes?: string | null;
   customer: { name: string; phone: string } | null;
@@ -254,6 +255,7 @@ export default function BillsPage() {
                       <p className="mt-1 text-xs text-[#6f746e]">{usesStoreCounter(profile.type) ? (bill.notes || "—") : (bill.vehicle?.number_plate ?? "—")} · {formatDate(bill.admission_date)}</p>
                     </div>
                     <span className={`px-2 py-1 text-[10px] font-bold uppercase ${billStatusClass(billListStatus(bill), bill.owe_in_due_date)}`}>{billStatusLabel(billListStatus(bill), t)}</span>
+                      {bill.is_free && <span className="mt-1 block px-2 py-1 text-center text-[10px] font-bold uppercase text-[#167c73]">{t("bill.free")}</span>}
                   </div>
                   <div className="mt-3 flex items-end justify-between gap-3">
                     {kind ? (
@@ -307,6 +309,9 @@ export default function BillsPage() {
                             <span className={`px-2 py-1 text-[10px] font-bold uppercase ${billStatusClass(listStatus, bill.owe_in_due_date)}`}>
                               {billStatusLabel(listStatus, t)}
                             </span>
+                            {bill.is_free && (
+                              <p className="mt-1 text-[10px] font-bold uppercase text-[#167c73]">{t("bill.free")}</p>
+                            )}
                             {listStatus === "cheque" && bill.pending_cheque_date && (
                               <p className="mt-1 text-[10px] font-semibold text-[#735a00]">
                                 {formatDate(bill.pending_cheque_date)}
