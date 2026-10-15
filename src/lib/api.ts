@@ -90,7 +90,9 @@ export type FeatureKey =
   | "finance_report_export"
   | "job_videos"
   | "job_photos"
-  | "job_commissions";
+  | "job_commissions"
+  | "free_service"
+  | "show_bill_technicians";
 
 export type BusinessType = "garage" | "tyre" | "device_repair" | "paint" | "photography" | "clothing" | "salon" | "cottage" | "store" | "mobile_shop";
 

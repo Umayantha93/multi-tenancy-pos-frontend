@@ -15,6 +15,8 @@ type SharedBill = {
   bill_number: string;
   admission_date: string | null;
   status: string;
+  is_free?: boolean;
+  free_reason?: string | null;
   hide_amounts?: boolean;
   subtotal: string | null;
   total_deductions: string | null;
@@ -50,6 +52,7 @@ type SharedBill = {
     warranty_months?: number | null;
     warranty_starts_on?: string | null;
     warranty_until?: string | null;
+    technician_name?: string | null;
   }>;
   payments: Array<{ id: number; amount: string; method: string; paid_at: string }>;
   photos?: Array<{ id: number; original_name?: string | null; size_bytes?: number }>;
@@ -229,6 +232,7 @@ export default function SharedBillPage() {
                   <p className="mt-1 text-sm font-semibold uppercase tracking-wide text-[#167c73]">{bill.branch.name}</p>
                 )}
                 <p className="mt-1 text-sm text-[#6f746e]">{bill.bill_number}</p>
+                {bill.is_free && <p className="mt-1 text-xs font-bold uppercase tracking-wide text-[#167c73]">{t("bill.free")}</p>}
                 <p className="mt-1 text-sm text-[#6f746e]">{t("print.date", { date: formatDate(bill.admission_date) })}</p>
                 <div className="mt-1.5 space-y-0.5 text-sm print:text-xs">
                   {(bill.branch?.address || bill.tenant?.address) && <p>{bill.branch?.address || bill.tenant?.address}</p>}
@@ -289,6 +293,13 @@ export default function SharedBillPage() {
           )}
         </div>
 
+        {bill.is_free && bill.free_reason && (
+          <div className="border-b border-[#1b365d]/20 bg-[#1b365d]/10 px-5 py-3 text-sm text-[#1b365d]">
+            <p className="text-[10px] font-bold uppercase tracking-wide">{t("bill.free_reason")}</p>
+            <p className="mt-1 whitespace-pre-wrap">{bill.free_reason}</p>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           <table className="bill-items-table w-full text-left text-sm">
             <thead className="border-b border-[#e2ddd0] bg-[#fbfaf6] text-[10px] uppercase text-[#6f746e]">
@@ -308,6 +319,7 @@ export default function SharedBillPage() {
                 <tr key={item.id} className="border-b border-[#f0ece3] align-top">
                   <td className="px-5 py-3">
                     <p className="font-semibold">{title}</p>
+                    {item.technician_name && <p className="mt-0.5 text-[11px] font-semibold uppercase text-[#20221f]">{item.technician_name}</p>}
                     {warranty && <p className="mt-1 text-[11px] font-semibold uppercase text-[#167c73]">{warranty}</p>}
                   </td>
                   <td className="px-3 py-3 tabular-nums">{hideHours || item.quantity == null ? "—" : item.quantity}</td>
