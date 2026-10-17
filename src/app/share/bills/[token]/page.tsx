@@ -46,6 +46,7 @@ type SharedBill = {
     included_services?: string[] | null;
     quantity: string | number | null;
     unit_price: string | number | null;
+    line_discount?: string | number | null;
     line_total: string | number | null;
     hide_hours?: boolean;
     hide_amounts?: boolean;
@@ -174,6 +175,8 @@ export default function SharedBillPage() {
   const billItems = sortBillItems(bill.items);
   const chargeItems = billItems.filter((item) => item.type !== "discount");
   const discountItems = billItems.filter((item) => item.type === "discount");
+  const showLineDiscount = chargeItems.some((item) => Number(item.line_discount || 0) > 0);
+  const shareCols = showLineDiscount ? 5 : 4;
 
   return (
     <main className="mx-auto min-h-screen max-w-3xl px-4 py-8 print:max-w-none print:px-0 print:py-0">
@@ -307,6 +310,7 @@ export default function SharedBillPage() {
                 <th className="px-5 py-3 font-bold">{t("common.item")}</th>
                 <th className="px-3 py-3 font-bold">{t("common.qty")}</th>
                 <th className="px-3 py-3 font-bold">{t("common.price")}</th>
+                {showLineDiscount && <th className="px-3 py-3 text-right font-bold">{t("bill.line_discount")}</th>}
                 <th className="px-5 py-3 text-right font-bold">{t("common.total")}</th>
               </tr>
             </thead>
@@ -324,6 +328,7 @@ export default function SharedBillPage() {
                   </td>
                   <td className="px-3 py-3 tabular-nums">{hideHours || item.quantity == null ? "—" : item.quantity}</td>
                   <td className="px-3 py-3 tabular-nums">{hideHours || item.unit_price == null ? "—" : money(item.unit_price)}</td>
+                  {showLineDiscount && <td className="px-3 py-3 text-right tabular-nums">{money(item.line_discount || 0)}</td>}
                   <td className="px-5 py-3 text-right tabular-nums">{item.line_total == null ? "—" : money(item.line_total)}</td>
                 </tr>
                 );
@@ -331,7 +336,7 @@ export default function SharedBillPage() {
               {discountItems.length > 0 && (
                 <>
                   <tr className="bill-discount-row border-t-2 border-[#167c73]/35 bg-[#e7f4f2]">
-                    <td colSpan={4} className="px-5 py-2 text-[10px] font-bold uppercase tracking-wide text-[#167c73]">
+                    <td colSpan={shareCols} className="px-5 py-2 text-[10px] font-bold uppercase tracking-wide text-[#167c73]">
                       {t("common.discount")}
                     </td>
                   </tr>
@@ -340,6 +345,7 @@ export default function SharedBillPage() {
                       <td className="px-5 py-3">{item.description}</td>
                       <td className="px-3 py-3 tabular-nums">{item.quantity == null ? "—" : item.quantity}</td>
                       <td className="px-3 py-3 tabular-nums">{item.unit_price == null ? "—" : money(item.unit_price)}</td>
+                      {showLineDiscount && <td />}
                       <td className="px-5 py-3 text-right font-semibold tabular-nums">{item.line_total == null ? "—" : `-${money(item.line_total)}`}</td>
                     </tr>
                   ))}
@@ -347,7 +353,7 @@ export default function SharedBillPage() {
               )}
               {!billItems.length && (
                 <tr>
-                  <td colSpan={4} className="px-5 py-8 text-center text-[#6f746e]">
+                  <td colSpan={shareCols} className="px-5 py-8 text-center text-[#6f746e]">
                     {t("print.no_lines")}
                   </td>
                 </tr>
