@@ -112,6 +112,7 @@ type Bill = {
     employee_id?: number | null;
     technician_name?: string | null;
     commission_amount?: string | number | null;
+    part_id?: number | null;
     part?: { id?: number; stock_unit?: string | null } | null;
     panel_group_id?: string | null;
     panel_name?: string | null;
