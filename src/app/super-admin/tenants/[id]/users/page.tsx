@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Power, Trash2, UserPlus } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
 import { ConfirmModal, ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
@@ -35,6 +35,7 @@ export default function TenantUsersPage() {
   const [actionBusy, setActionBusy] = useState(false);
   const [asSecondary, setAsSecondary] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   function load() {
     api<TenantUser[]>(`/super-admin/tenants/${id}/users`)
@@ -46,14 +47,18 @@ export default function TenantUsersPage() {
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formElement = formRef.current;
+    if (!formElement) {
+      setError("Could not read the form. Refresh the page and try again.");
+      return;
+    }
     setLoading(true);
     setError("");
     setNotice("");
-    const formElement = event.currentTarget;
     const form = new FormData(formElement);
     try {
       const creatingSecondary = asSecondary;
-      await api(`/super-admin/tenants/${id}/users`, {
+      const created = await api<{ welcome_email_sent?: boolean }>(`/super-admin/tenants/${id}/users`, {
         method: "POST",
         body: JSON.stringify({
           ...Object.fromEntries(form),
@@ -62,7 +67,10 @@ export default function TenantUsersPage() {
       });
       formElement.reset();
       setAsSecondary(false);
-      setNotice(creatingSecondary ? "Secondary login created successfully." : "User account created successfully.");
+      const emailed = created.welcome_email_sent !== false;
+      setNotice(creatingSecondary
+        ? (emailed ? "Secondary login created. Login details were emailed." : "Secondary login created, but the login email could not be sent.")
+        : (emailed ? "User account created. Login details were emailed." : "User account created, but the login email could not be sent."));
       load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to create user. Please try again.");
@@ -195,7 +203,7 @@ export default function TenantUsersPage() {
             <UserPlus size={19} className="text-[#167c73]" />
             <h2 className="font-display text-2xl font-semibold uppercase">Add account</h2>
           </div>
-          <form onSubmit={create} className="mt-5 space-y-4">
+          <form ref={formRef} onSubmit={create} className="mt-5 space-y-4">
             <label className="block text-sm font-semibold">
               Name
               <input required name="name" className={`mt-2 ${inputClass}`} />

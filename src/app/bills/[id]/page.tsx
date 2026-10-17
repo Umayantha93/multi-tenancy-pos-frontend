@@ -106,11 +106,12 @@ type Bill = {
     quantity: string;
     unit_price: string;
     discount_percent?: string | number | null;
+    line_discount?: string | number | null;
+    below_cost?: boolean;
     line_total: string;
     employee_id?: number | null;
     technician_name?: string | null;
     commission_amount?: string | number | null;
-    part_id?: number | null;
     part?: { id?: number; stock_unit?: string | null } | null;
     panel_group_id?: string | null;
     panel_name?: string | null;
@@ -268,6 +269,7 @@ export default function BillDetailPage() {
   const canCommission = features.includes("job_commissions");
   const canShowTechnicians = features.includes("show_bill_technicians");
   const canFreeService = features.includes("free_service");
+  const canLineDiscount = features.includes("line_discounts");
   const canAssignLine = canCommission || canShowTechnicians;
   const canJobBoard = features.includes("job_board");
   const canReminders = features.includes("service_reminders");
@@ -1102,6 +1104,25 @@ export default function BillDetailPage() {
       load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not assign this line.");
+    }
+  }
+
+  async function saveLineDiscount(itemId: number, discount: string) {
+    if (isLocked) return;
+    const amount = Number(discount);
+    if (discount.trim() === "" || !Number.isFinite(amount) || amount < 0) {
+      setError(t("bill.err_discount"));
+      return;
+    }
+    setSavingLaborHours(itemId);
+    setError("");
+    try {
+      await api(`/bills/${id}/items/${itemId}`, { method: "PUT", body: JSON.stringify({ line_discount: amount }) });
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t("bill.err_discount"));
+    } finally {
+      setSavingLaborHours(null);
     }
   }
 
@@ -2143,8 +2164,9 @@ export default function BillDetailPage() {
                   <col className="bill-col-desc w-[36%]" />
                   <col className="bill-col-type w-[14%]" />
                   <col className="bill-col-qty w-[10%]" />
-                  <col className="bill-col-rate w-[18%]" />
-                  <col className="bill-col-total w-[18%]" />
+                  <col className="bill-col-rate w-[14%]" />
+                  {canLineDiscount && <col className="bill-col-discount w-[14%]" />}
+                  <col className="bill-col-total w-[14%]" />
                   {!isLocked && <col className="no-print w-10" />}
                 </colgroup>
                 <thead className="bg-[#eeece5] text-[9px] uppercase text-[#6f746e]">
@@ -2153,6 +2175,7 @@ export default function BillDetailPage() {
                     <th className="bill-col-type px-2 py-2">{t("common.type")}</th>
                     <th className="bill-col-qty px-2 py-2 text-right">{t("common.qty")}</th>
                     <th className="bill-col-rate px-2 py-2 text-right">{t("bill.rate")}</th>
+                    {canLineDiscount && <th className="bill-col-discount px-2 py-2 text-right">{t("bill.line_discount")}</th>}
                     <th className="bill-col-total px-3 py-2 text-right">{t("common.total")}</th>
                     {!isLocked && <th className="no-print px-2 py-2" />}
                   </tr>
@@ -2164,7 +2187,7 @@ export default function BillDetailPage() {
                     return (
                       <Fragment key={section}>
                         <tr className="border-t border-[#d7d3c8] bg-[#f7f5ef]">
-                          <td colSpan={isLocked ? 5 : 6} className="px-3 py-2 text-[10px] font-bold uppercase">
+                          <td colSpan={(canLineDiscount ? 6 : 5) + (isLocked ? 0 : 1)} className="px-3 py-2 text-[10px] font-bold uppercase">
                             {section === "service" ? t("bills.service") : t("bills.repair")}
                             <span className={`float-right tabular-nums ${hidePrintMoney ? "print:hidden" : ""}`}>{money(subtotal)}</span>
                           </td>
@@ -2186,6 +2209,8 @@ export default function BillDetailPage() {
                             technicians={lineTechnicians}
                             onAssignTechnician={canAssignLine && !isLocked ? assignTechnician : undefined}
                             showTechnicianName={canShowTechnicians}
+                            showLineDiscount={canLineDiscount}
+                            onSaveDiscount={saveLineDiscount}
                           />
                         ))}
                       </Fragment>
@@ -2212,6 +2237,7 @@ export default function BillDetailPage() {
                             <td className="bill-col-type px-2 py-2 whitespace-nowrap text-[#6f746e]">{t("bill.panel")}</td>
                             <td className="bill-col-qty px-2 py-2 whitespace-nowrap text-right tabular-nums">—</td>
                             <td className="bill-col-rate px-2 py-2 whitespace-nowrap text-right tabular-nums">—</td>
+                            {canLineDiscount && <td className="bill-col-discount px-2 py-2 text-right tabular-nums">—</td>}
                             <td className="bill-col-total px-3 py-2 whitespace-nowrap text-right tabular-nums">
                               <span className={hidePrintMoney ? "print:hidden" : ""}>{money(row.total)}</span>
                               {hidePrintMoney && <span className="hidden print:inline">—</span>}
@@ -2243,7 +2269,9 @@ export default function BillDetailPage() {
                               visible={open}
                               technicians={lineTechnicians}
                               onAssignTechnician={canAssignLine && !isLocked ? assignTechnician : undefined}
-                            showTechnicianName={canShowTechnicians}
+                              showTechnicianName={canShowTechnicians}
+                              showLineDiscount={canLineDiscount}
+                              onSaveDiscount={saveLineDiscount}
                             />
                           ))}
                         </Fragment>
@@ -2265,7 +2293,9 @@ export default function BillDetailPage() {
                         hideAmountsOnPrint={hidePrintMoney}
                         technicians={lineTechnicians}
                         onAssignTechnician={canAssignLine && !isLocked ? assignTechnician : undefined}
-                            showTechnicianName={canShowTechnicians}
+                        showTechnicianName={canShowTechnicians}
+                        showLineDiscount={canLineDiscount}
+                        onSaveDiscount={saveLineDiscount}
                       />
                     );
                   })}
@@ -2273,7 +2303,7 @@ export default function BillDetailPage() {
                 {discountItems.length > 0 && (
                   <tbody>
                     <tr className="bill-discount-row border-t-2 border-[#167c73]/35 bg-[#e7f4f2]">
-                      <td colSpan={5} className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-wide text-[#167c73]">
+                      <td colSpan={canLineDiscount ? 6 : 5} className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-wide text-[#167c73]">
                         {t("common.discount")}
                       </td>
                       {!isLocked && <td className="no-print" />}
@@ -2291,6 +2321,7 @@ export default function BillDetailPage() {
                           <span className={hidePrintMoney ? "print:hidden" : ""}>{money(item.unit_price)}</span>
                           {hidePrintMoney && <span className="hidden print:inline">—</span>}
                         </td>
+                        {canLineDiscount && <td className="bill-col-discount" />}
                         <td className="bill-col-total px-3 py-2 whitespace-nowrap text-right font-semibold tabular-nums">
                           <span className={hidePrintMoney ? "print:hidden" : ""}>-{money(item.line_total)}</span>
                           {hidePrintMoney && <span className="hidden print:inline">—</span>}
@@ -3447,6 +3478,8 @@ function ChargeItemRow({
   technicians = [],
   onAssignTechnician,
   showTechnicianName = false,
+  showLineDiscount = false,
+  onSaveDiscount,
   laborAsQty = false,
   canWarranty = false,
   onEditWarranty,
@@ -3463,6 +3496,8 @@ function ChargeItemRow({
     quantity: string;
     unit_price: string;
     line_total: string;
+    line_discount?: string | number | null;
+    below_cost?: boolean;
     employee_id?: number | null;
     technician_name?: string | null;
     commission_amount?: string | number | null;
@@ -3481,6 +3516,8 @@ function ChargeItemRow({
   technicians?: Array<{ id: number; name: string; locked?: boolean }>;
   onAssignTechnician?: (itemId: number, employeeId: number | null) => void;
   showTechnicianName?: boolean;
+  showLineDiscount?: boolean;
+  onSaveDiscount?: (itemId: number, discount: string) => void;
   laborAsQty?: boolean;
   canWarranty?: boolean;
   onEditWarranty?: (item: {
@@ -3511,7 +3548,7 @@ function ChargeItemRow({
   const linePct = Number(item.discount_percent ?? 0);
 
   return (
-    <tr className={`border-t border-[#e2ded4] align-top ${hideOnPrint ? "no-print" : ""} ${hidden ? "hidden" : ""}`}>
+    <tr className={`border-t border-[#e2ded4] align-top ${hideOnPrint ? "no-print" : ""} ${hidden ? "hidden" : ""} ${item.below_cost ? "bg-[#b84837]/15 print:bg-transparent" : ""}`}>
       <td className={`bill-col-desc px-3 py-2 break-words ${nested ? "pl-7" : ""}`}>
         <BillItemDescription item={item} />
         {showTechnicianName && item.technician_name && ["labor", "service_addon", "service", "charge"].includes(item.type) && (
@@ -3617,6 +3654,42 @@ function ChargeItemRow({
           </>
         )}
       </td>
+      {showLineDiscount && (
+        <td className="bill-col-discount px-2 py-2 whitespace-nowrap text-right">
+          {fromCustomer || item.type === "discount" ? (
+            <span>—</span>
+          ) : !isLocked && onSaveDiscount ? (
+            <>
+              <input
+                key={`${item.id}-${item.line_discount ?? 0}`}
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                defaultValue={Number(item.line_discount || 0)}
+                disabled={savingLaborHours === item.id}
+                onBlur={(event) => {
+                  if (event.target.value !== String(Number(item.line_discount || 0))) {
+                    onSaveDiscount(item.id, event.target.value);
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                }}
+                className="no-print h-7 w-20 border border-[#c9c5b9] bg-white px-1.5 text-right text-[12px] tabular-nums"
+                aria-label={t("bill.line_discount")}
+              />
+              <span className={`hidden tabular-nums ${hideAmountsOnPrint ? "" : "print:inline"}`}>{money(item.line_discount || 0)}</span>
+              {hideAmountsOnPrint && <span className="hidden print:inline">—</span>}
+            </>
+          ) : (
+            <>
+              <span className={`tabular-nums ${hideAmountsOnPrint ? "print:hidden" : ""}`}>{money(item.line_discount || 0)}</span>
+              {hideAmountsOnPrint && <span className="hidden print:inline">—</span>}
+            </>
+          )}
+        </td>
+      )}
       <td className="bill-col-total px-3 py-2 whitespace-nowrap text-right">
         {fromCustomer ? (
           <span className="inline-block max-w-full text-[11px] font-semibold leading-snug text-[#167c73]">
