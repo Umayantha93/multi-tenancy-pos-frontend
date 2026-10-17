@@ -70,6 +70,7 @@ const sharedPeopleFinance: Array<{ key: FeatureKey; name: string; group: string 
   { key: "bill_sms", name: "Bill SMS", group: "Service Intake" },
   { key: "bill_whatsapp", name: "WhatsApp bill share", group: "Service Intake" },
   { key: "bill_profits", name: "Bill Profits Analysis", group: "Service Intake" },
+  { key: "line_discounts", name: "Line discount", group: "Service Intake" },
   { key: "employees_management", name: "Team", group: "People" },
   { key: "attendance", name: "Attendance", group: "People" },
   { key: "payroll", name: "Payroll", group: "People" },
@@ -707,21 +708,21 @@ export function usesDeviceJobs(type?: string | null): boolean {
 }
 
 export function optionalFeaturesFor(type?: string | null): FeatureKey[] {
-  if (type === "store") return ["repair_bills", "warranties", "purchase_orders", "part_fitment", "serial_inventory", "bill_whatsapp"];
-  if (type === "mobile_shop") return ["purchase_orders", "part_fitment", "serial_inventory", "bill_whatsapp"];
+  if (type === "store") return ["repair_bills", "warranties", "purchase_orders", "part_fitment", "serial_inventory", "bill_whatsapp", "line_discounts"];
+  if (type === "mobile_shop") return ["purchase_orders", "part_fitment", "serial_inventory", "bill_whatsapp", "line_discounts"];
   if (type === "garage") {
     return [
       "owner_bill_sms", "service_ops_report", "job_photos", "job_videos", "job_commissions",
-      "free_service", "show_bill_technicians",
+      "free_service", "show_bill_technicians", "line_discounts",
       "admit_combined", "admit_photos",
       "job_board", "job_bookings", "service_reminders",
       "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp", "station_consumables",
       "expense_job_split", "finance_report_export",
     ];
   }
-  if (type === "tyre" || type === "paint") return ["job_bookings", "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp"];
-  if (type === "device_repair") return ["job_bookings", "purchase_orders", "part_fitment", "serial_inventory", "cash_up", "bill_whatsapp"];
-  return ["cash_up", "bill_whatsapp"];
+  if (type === "tyre" || type === "paint") return ["job_bookings", "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp", "line_discounts"];
+  if (type === "device_repair") return ["job_bookings", "purchase_orders", "part_fitment", "serial_inventory", "cash_up", "bill_whatsapp", "line_discounts"];
+  return ["cash_up", "bill_whatsapp", "line_discounts"];
 }
 
 export function allowsServiceJobs(type?: string | null, features: string[] = []): boolean {

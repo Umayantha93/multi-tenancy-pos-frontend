@@ -102,7 +102,7 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
         if (parts.length > 1 && (parts[0] === "nav" || parts[0] === "ops" || parts[0] === "roles" || parts[0] === "terms" || parts[0] === "panels")) {
           return applyReplacements(parts.slice(1).join("."), replacements);
         }
-        return applyReplacements(parts[parts.length - 1] ?? bare, replacements);
+        return applyReplacements((parts[parts.length - 1] ?? bare).replaceAll("_", " "), replacements);
       }
       return applyReplacements(value, replacements);
     },
