@@ -143,9 +143,9 @@ export default function TenantDetailPage() {
   useEffect(() => {
     const welcome = searchParams.get("welcome_email");
     if (welcome === "sent") {
-      setNotice("Tenant created. Login link, email, and temporary password were emailed to the owner.");
+      setNotice("Tenant created. The login link, email, and temporary password are being emailed to the owner.");
     } else if (welcome === "failed") {
-      setError("Tenant was created, but the welcome email could not be sent. Check Improvmx settings and resend manually.");
+      setError("Tenant was created, but the welcome email could not be sent. Check the Brevo mail settings.");
     }
   }, [searchParams]);
 
