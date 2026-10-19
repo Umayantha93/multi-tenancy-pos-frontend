@@ -62,9 +62,8 @@ export function billStatusClass(status: string, dueDate?: string | null): string
 }
 
 export function billStatusLabel(status: string, t?: TranslateFn): string {
-  if (t) return t(`status.${status}`);
-  if (status === "partially_refunded") return "partially refunded";
-  return status.replaceAll("_", " ");
+  const label = t ? t(`status.${status}`) : status.replaceAll("_", " ");
+  return label.replaceAll("_", " ");
 }
 
 export function billListStatus(bill: {

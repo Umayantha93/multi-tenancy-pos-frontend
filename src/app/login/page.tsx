@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, LockKeyhole, Store } from "lucide-react";
 import { IubitsLogo } from "@/components/iubits-logo";
@@ -179,6 +180,9 @@ export default function LoginPage() {
 
           <p className="mt-8 border-t border-[#e2ded4] pt-6 text-center text-[10px] font-bold uppercase tracking-wide text-[#6f746e]">
             {t("login.smart_line").replace(/\.$/, "")}
+          </p>
+          <p className="mt-3 text-center text-sm">
+            <Link href="/home" className="font-semibold text-[#167c73] hover:underline">Visit IUBits Website</Link>
           </p>
         </form>
       </section>

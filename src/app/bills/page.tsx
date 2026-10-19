@@ -21,6 +21,7 @@ type BillPage = {
 };
 
 const PAGE_SIZE = 15;
+const BILL_STATUSES = ["open", "partially_paid", "paid", "owe_in", "closed", "cheque"] as const;
 
 type Bill = {
   id: number;
@@ -33,6 +34,7 @@ type Bill = {
   amount_refunded?: string | number;
   has_pending_cheque?: boolean;
   pending_cheque_date?: string | null;
+  cheque_due_today?: boolean;
   refund_status?: string;
   is_free?: boolean;
   owe_in_due_date?: string | null;
@@ -64,6 +66,8 @@ export default function BillsPage() {
   const [page, setPage] = useState(1);
   const [lastPage, setLastPage] = useState(1);
   const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const [closedKind, setClosedKind] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [error, setError] = useState("");
@@ -92,6 +96,8 @@ export default function BillsPage() {
       page: String(Math.max(1, pageNum)),
     });
     if (usesStoreCounter(profile.type)) params.set("job_kind", "parts_sale");
+    if (status) params.set("status", status);
+    if (status === "closed" && closedKind) params.set("closed_kind", closedKind);
     if (dateFrom) params.set("date_from", dateFrom);
     if (dateTo) params.set("date_to", dateTo);
 
@@ -103,7 +109,7 @@ export default function BillsPage() {
       })
       .catch((caught) => setError(caught.message))
       .finally(() => setLoading(false));
-  }, [search, dateFrom, dateTo, rangeInvalid, profile.type, t]);
+  }, [search, status, closedKind, dateFrom, dateTo, rangeInvalid, profile.type, t]);
 
   useEffect(() => {
     const timer = setTimeout(() => loadBills(1), 250);
@@ -207,6 +213,37 @@ export default function BillsPage() {
           </span>
         </label>
         <label className="block">
+          <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">{t("common.status")}</span>
+          <select
+            value={status}
+            onChange={(event) => {
+              const next = event.target.value;
+              setStatus(next);
+              if (next !== "closed") setClosedKind("");
+            }}
+            className={`${inputClass} w-auto min-w-40`}
+          >
+            <option value="">{t("bills.all_statuses")}</option>
+            {BILL_STATUSES.map((value) => (
+              <option key={value} value={value}>{billStatusLabel(value, t)}</option>
+            ))}
+          </select>
+        </label>
+        {status === "closed" && (
+          <label className="block">
+            <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">{t("bills.closed_within")}</span>
+            <select
+              value={closedKind}
+              onChange={(event) => setClosedKind(event.target.value)}
+              className={`${inputClass} w-auto min-w-40`}
+            >
+              <option value="">{t("bills.closed_all")}</option>
+              <option value="free">{t("bill.free")}</option>
+              <option value="refunded">{billStatusLabel("refunded", t)}</option>
+            </select>
+          </label>
+        )}
+        <label className="block">
           <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">{t("common.from")}</span>
           <input
             type="date"
@@ -244,10 +281,11 @@ export default function BillsPage() {
         <div className="space-y-3 md:hidden">
           {bills.map((bill) => {
             const urgent = bill.status === "owe_in" && isOweInUrgent(bill.owe_in_due_date);
+            const chequeToday = Boolean(bill.cheque_due_today);
             const kind = billJobKindLabel(bill, profile.type, t);
             return (
               <Link key={bill.id} href={`/bills/${bill.id}`}>
-                <Panel className={`p-4 ${urgent ? "border-[#b84837]" : ""}`}>
+                <Panel className={`p-4 ${chequeToday ? "border-[#b8860b] bg-[#f5c842]/35" : urgent ? "border-[#b84837]" : ""}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-semibold">{bill.bill_number}</p>
@@ -255,6 +293,7 @@ export default function BillsPage() {
                       <p className="mt-1 text-xs text-[#6f746e]">{usesStoreCounter(profile.type) ? (bill.notes || "—") : (bill.vehicle?.number_plate ?? "—")} · {formatDate(bill.admission_date)}</p>
                     </div>
                     <span className={`px-2 py-1 text-[10px] font-bold uppercase ${billStatusClass(billListStatus(bill), bill.owe_in_due_date)}`}>{billStatusLabel(billListStatus(bill), t)}</span>
+                      {chequeToday && <span className="mt-1 block px-2 py-1 text-center text-[10px] font-bold uppercase text-[#735a00]">{t("bills.cheque_today")}</span>}
                       {bill.is_free && <span className="mt-1 block px-2 py-1 text-center text-[10px] font-bold uppercase text-[#167c73]">{t("bill.free")}</span>}
                   </div>
                   <div className="mt-3 flex items-end justify-between gap-3">
@@ -267,7 +306,7 @@ export default function BillsPage() {
               </Link>
             );
           })}
-          {bills.length === 0 && <PageState message={t("bills.empty", { kind: t(`terms.${profile.billingLabel}`).toLowerCase() })} />}
+          {bills.length === 0 && <PageState message={dateFrom || dateTo ? t("bills.empty_range", { kind: t(`terms.${profile.billingLabel}`).toLowerCase() }) : status ? t("bills.empty_status", { kind: t(`terms.${profile.billingLabel}`).toLowerCase() }) : t("bills.empty", { kind: t(`terms.${profile.billingLabel}`).toLowerCase() })} />}
         </div>
         <Panel className="hidden md:block">
           <div className="overflow-x-auto">
@@ -287,9 +326,10 @@ export default function BillsPage() {
               <tbody>
                 {bills.map((bill) => {
                   const urgent = bill.status === "owe_in" && isOweInUrgent(bill.owe_in_due_date);
+                  const chequeToday = Boolean(bill.cheque_due_today);
                   const kind = billJobKindLabel(bill, profile.type, t);
                   return (
-                  <tr key={bill.id} className={`border-t border-[#e2ded4] ${urgent ? "bg-[#b84837]/8" : ""}`}>
+                  <tr key={bill.id} className={`border-t border-[#e2ded4] ${chequeToday ? "bg-[#f5c842]/40" : urgent ? "bg-[#b84837]/8" : ""}`}>
                     <td className="px-5 py-4 font-semibold">{bill.bill_number}</td>
                     <td>{formatDate(bill.admission_date)}</td>
                     <td>
@@ -314,7 +354,7 @@ export default function BillsPage() {
                             )}
                             {listStatus === "cheque" && bill.pending_cheque_date && (
                               <p className="mt-1 text-[10px] font-semibold text-[#735a00]">
-                                {formatDate(bill.pending_cheque_date)}
+                                {chequeToday ? t("bills.cheque_today") : formatDate(bill.pending_cheque_date)}
                               </p>
                             )}
                             {bill.status === "owe_in" && bill.owe_in_due_date && listStatus !== "cheque" && (
@@ -344,7 +384,9 @@ export default function BillsPage() {
               <p className="p-8 text-center text-sm text-[#6f746e]">
                 {dateFrom || dateTo
                   ? t("bills.empty_range", { kind: t(`terms.${profile.billingLabel}`).toLowerCase() })
-                  : t("bills.empty", { kind: t(`terms.${profile.billingLabel}`).toLowerCase() })}
+                  : status
+                    ? t("bills.empty_status", { kind: t(`terms.${profile.billingLabel}`).toLowerCase() })
+                    : t("bills.empty", { kind: t(`terms.${profile.billingLabel}`).toLowerCase() })}
               </p>
             )}
           </div>

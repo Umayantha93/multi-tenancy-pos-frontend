@@ -1,9 +1,9 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Power, UserPlus } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
+import { ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
 import { api, Branch, currentUser } from "@/lib/api";
 import { FeaturePlanToggles } from "@/components/feature-plan-toggles";
 
@@ -19,7 +19,9 @@ export default function StaffPage() {
   const [available, setAvailable] = useState<Feature[]>([]);
   const [enabled, setEnabled] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
   function load() {
     api<Staff[]>("/tenant/staff").then(setStaff).catch((caught) => setError(caught.message));
@@ -33,13 +35,21 @@ export default function StaffPage() {
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formElement = formRef.current;
+    if (!formElement) {
+      setError("Could not read the form. Refresh the page and try again.");
+      return;
+    }
     setLoading(true);
     setError("");
-    const formElement = event.currentTarget;
+    setNotice("");
     const form = new FormData(formElement);
     try {
-      await api("/tenant/staff", { method: "POST", body: JSON.stringify(Object.fromEntries(form)) });
+      const created = await api<{ welcome_email_sent?: boolean }>("/tenant/staff", { method: "POST", body: JSON.stringify(Object.fromEntries(form)) });
       formElement.reset();
+      setNotice(created.welcome_email_sent === false
+        ? "Staff account created, but the login email could not be sent."
+        : "Staff account created. Login details were emailed.");
       load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to add staff.");
@@ -101,6 +111,7 @@ export default function StaffPage() {
     <AppShell title="Staff access" eyebrow="Owner control">
       <div className="grid gap-5 xl:grid-cols-[1fr_0.55fr]">
         {error && <div className="xl:col-span-2"><ErrorMessage message={error} /></div>}
+        {notice && <div className="xl:col-span-2"><SuccessMessage message={notice} /></div>}
         {!staff ? (
           <PageState message="Loading staff access..." />
         ) : (
@@ -141,7 +152,7 @@ export default function StaffPage() {
             <UserPlus size={19} className="text-[#167c73]" />
             <h2 className="font-display text-2xl font-semibold uppercase">Add staff</h2>
           </div>
-          <form onSubmit={create} className="mt-5 space-y-4">
+          <form ref={formRef} onSubmit={create} className="mt-5 space-y-4">
             <label className="block text-sm font-semibold">Name<input required name="name" className={`mt-2 ${inputClass}`} /></label>
             <label className="block text-sm font-semibold">Email<input required name="email" type="email" className={`mt-2 ${inputClass}`} /></label>
             <label className="block text-sm font-semibold">Temporary password<input required name="password" type="password" minLength={8} className={`mt-2 ${inputClass}`} /></label>
