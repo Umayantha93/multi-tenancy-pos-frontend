@@ -153,6 +153,7 @@ export default function CompanyHomePage() {
             <a href="#trades" className="hover:text-[#167c73]">Who it is for</a>
             <a href="#features" className="hover:text-[#167c73]">Features</a>
             <a href="#other" className="hover:text-[#167c73]">ERP and websites</a>
+            <Link href="/home/contact" className="hover:text-[#167c73]">Contact</Link>
           </nav>
           <Link href="/login" className="inline-flex h-9 items-center bg-[#20221f] px-4 text-sm font-semibold text-white hover:bg-[#167c73]">
             Sign in
@@ -283,9 +284,14 @@ export default function CompanyHomePage() {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-8">
           <IubitsLogo tone="onLight" size="sm" />
           <p className="text-sm text-[#6f746e]">Point of sale, ERP, and websites.</p>
-          <Link href="/login" className="text-sm font-semibold text-[#167c73] hover:underline">
-            Sign in to your business
-          </Link>
+          <div className="flex flex-wrap gap-4">
+            <Link href="/home/contact" className="text-sm font-semibold text-[#167c73] hover:underline">
+              Contact us
+            </Link>
+            <Link href="/login" className="text-sm font-semibold text-[#167c73] hover:underline">
+              Sign in to your business
+            </Link>
+          </div>
         </div>
       </footer>
     </div>
