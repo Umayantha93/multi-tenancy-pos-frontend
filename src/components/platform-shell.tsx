@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
-import { Banknote, Building2, Boxes, CircleUser, Gauge, LogOut, Menu, Plus, ReceiptText, X } from "lucide-react";
+import { Banknote, Bell, Building2, Boxes, CircleUser, Gauge, LogOut, Menu, Plus, ReceiptText, X } from "lucide-react";
 import { IubitsLogo } from "@/components/iubits-logo";
 import { api, clearSession, currentUser, type User } from "@/lib/api";
 import { LanguageToggle } from "@/components/language-toggle";
@@ -11,6 +11,7 @@ import { useT } from "@/lib/locale";
 
 const links = [
   { href: "/super-admin/dashboard", label: "Platform pulse", icon: Gauge },
+  { href: "/super-admin/notifications", label: "Notifications", icon: Bell },
   { href: "/super-admin/income", label: "Income", icon: Banknote },
   { href: "/super-admin/tenants", label: "Businesses", icon: Building2 },
   { href: "/super-admin/invoices", label: "Tenants invoices", icon: ReceiptText, prefix: true },
@@ -25,6 +26,7 @@ export function PlatformShell({ children, title, eyebrow, action }: { children: 
   const t = useT();
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [unread, setUnread] = useState(0);
   const headerEyebrow = eyebrow ?? t("shell.platform_control");
 
   useEffect(() => {
@@ -35,6 +37,31 @@ export function PlatformShell({ children, title, eyebrow, action }: { children: 
     }
     setUser(sessionUser);
   }, [router]);
+
+  useEffect(() => {
+    if (!user) return;
+    let timer = 0;
+    const load = () => {
+      api<{ unread: number }>("/super-admin/notifications")
+        .then((result) => setUnread(result.unread))
+        .catch(() => undefined);
+    };
+    const onCount = (event: Event) => {
+      const next = (event as CustomEvent<number>).detail;
+      if (typeof next === "number") setUnread(next);
+    };
+    load();
+    timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") load();
+    }, 8000);
+    window.addEventListener("focus", load);
+    window.addEventListener("iubits-notifications", onCount);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", load);
+      window.removeEventListener("iubits-notifications", onCount);
+    };
+  }, [user]);
 
   async function logout() {
     try { await api("/auth/logout", { method: "POST" }); } catch { /* Local access still needs to be cleared. */ }
@@ -59,7 +86,13 @@ export function PlatformShell({ children, title, eyebrow, action }: { children: 
               onClick={() => setOpen(false)}
               className={`flex h-11 items-center gap-3 px-3 text-sm ${active ? "bg-[#f5c842] font-semibold text-[#181b19]" : "text-white/60 hover:bg-white/8 hover:text-white"}`}
             >
-              <Icon size={18} />{t(`nav.${label}`)}
+              <Icon size={18} />
+              <span className="truncate">{t(`nav.${label}`)}</span>
+              {href === "/super-admin/notifications" && unread > 0 && (
+                <span className={`ml-auto grid min-w-5 place-items-center px-1.5 text-[10px] font-bold leading-5 ${active ? "bg-[#181b19] text-[#f5c842]" : "bg-[#f5c842] text-[#181b19]"}`}>
+                  {unread > 99 ? "99+" : unread}
+                </span>
+              )}
             </Link>
           );
         })}

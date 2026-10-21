@@ -712,7 +712,7 @@ export default function PartsPage() {
                       ))}
                     </select>
                   </label>
-                  <p className="text-xs text-[#6f746e] sm:col-span-2">This sets the on-hand quantity at this shop and does not create a purchase. Change the unit here if it was saved wrong. Use Restock to buy stock and record the expense.</p>
+                  <p className="text-xs text-[#6f746e] sm:col-span-2">This sets the on-hand quantity at this shop. If that stock is still the original purchase, Finance is corrected to the new quantity at the same unit cost. If some was already sold, or the item was bought more than once, only the count changes. Use Restock to record a new purchase.</p>
                 </>
               )}
               <label className="text-xs font-bold uppercase sm:col-span-2">
