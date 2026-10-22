@@ -54,6 +54,16 @@ type SheetRow = {
   serials: string;
 };
 
+type ReceiptItem = {
+  id: number;
+  name: string;
+  sku?: string | null;
+  stock_unit?: string | null;
+  quantity: number;
+  unit_cost: string | number;
+  line_total: number | string;
+};
+
 type Receipt = {
   id: number;
   receipt_number: string;
@@ -63,15 +73,16 @@ type Receipt = {
   due_date: string | null;
   supplier: { id: number; name: string } | null;
   total: number | string;
-  items: Array<{
-    id: number;
-    name: string;
-    sku?: string | null;
-    stock_unit?: string | null;
-    quantity: number;
-    unit_cost: string | number;
-    line_total: number | string;
-  }>;
+  items: ReceiptItem[];
+};
+
+type EditLine = {
+  id: number;
+  name: string;
+  sku?: string | null;
+  stockUnit?: string | null;
+  quantity: string;
+  unitCost: string;
 };
 
 type ReceiptsPage = { data: Receipt[]; current_page: number; last_page: number; total: number };
@@ -152,6 +163,7 @@ export default function BulkRestockPage() {
   const [editInvoice, setEditInvoice] = useState("");
   const [editStatus, setEditStatus] = useState<"paid" | "credit">("paid");
   const [editDue, setEditDue] = useState("");
+  const [editLines, setEditLines] = useState<EditLine[]>([]);
   const [editSaving, setEditSaving] = useState(false);
   const [catalog, setCatalog] = useState<CatalogCategory[]>([]);
   const receiptSeq = useRef(0);
@@ -262,6 +274,14 @@ export default function BulkRestockPage() {
     setEditInvoice(receipt.invoice_number);
     setEditStatus(receipt.payment_status === "credit" ? "credit" : "paid");
     setEditDue(receipt.due_date ? String(receipt.due_date).slice(0, 10) : "");
+    setEditLines(receipt.items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      sku: item.sku,
+      stockUnit: item.stock_unit,
+      quantity: String(item.quantity),
+      unitCost: String(item.unit_cost),
+    })));
     setError("");
   }
 
@@ -281,6 +301,11 @@ export default function BulkRestockPage() {
           invoice_number: editInvoice.trim(),
           payment_status: editStatus,
           due_date: editStatus === "credit" ? editDue : null,
+          items: editLines.map((line) => ({
+            id: line.id,
+            quantity: Number(line.quantity),
+            unit_cost: Number(line.unitCost),
+          })),
         }),
       });
       setReceipts((current) => current.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)));
@@ -959,31 +984,71 @@ export default function BulkRestockPage() {
                     </button>
                   </div>
                   {open && editingReceiptId === receipt.id && (
-                    <form onSubmit={saveReceipt} className="grid gap-2 border-t border-[#e8e4da] bg-[#f7f3e4] px-3 py-2 sm:grid-cols-[1fr_8rem_9rem_auto]">
-                      <label className="text-[9px] font-bold uppercase text-[#6f746e]">
-                        Invoice number
-                        <input value={editInvoice} onChange={(event) => setEditInvoice(event.target.value)} required className={`${cell} mt-0.5`} />
-                      </label>
-                      <label className="text-[9px] font-bold uppercase text-[#6f746e]">
-                        Payment
-                        <select value={editStatus} onChange={(event) => setEditStatus(event.target.value as "paid" | "credit")} className={`${cell} mt-0.5`}>
-                          <option value="paid">Paid</option>
-                          <option value="credit">Credit</option>
-                        </select>
-                      </label>
-                      <label className="text-[9px] font-bold uppercase text-[#6f746e]">
-                        Due date
-                        <input type="date" value={editDue} onChange={(event) => setEditDue(event.target.value)} required={editStatus === "credit"} disabled={editStatus !== "credit"} className={`${cell} mt-0.5 disabled:bg-[#eeece5]`} />
-                      </label>
-                      <div className="flex items-end gap-1">
-                        <button type="submit" disabled={editSaving} className={`${buttonClass} h-7 px-2 text-[10px]`}>
-                          {editSaving ? "Saving…" : "Save"}
-                        </button>
-                        <button type="button" onClick={() => setEditingReceiptId(null)} className="h-7 border border-[#c9c5b9] bg-white px-2 text-[10px] font-semibold">Cancel</button>
+                    <form onSubmit={saveReceipt} className="space-y-2 border-t border-[#e8e4da] bg-[#f7f3e4] px-3 py-2">
+                      <div className="grid gap-2 sm:grid-cols-[1fr_8rem_9rem_auto]">
+                        <label className="text-[9px] font-bold uppercase text-[#6f746e]">
+                          Invoice number
+                          <input value={editInvoice} onChange={(event) => setEditInvoice(event.target.value)} required className={`${cell} mt-0.5`} />
+                        </label>
+                        <label className="text-[9px] font-bold uppercase text-[#6f746e]">
+                          Payment
+                          <select value={editStatus} onChange={(event) => setEditStatus(event.target.value as "paid" | "credit")} className={`${cell} mt-0.5`}>
+                            <option value="paid">Paid</option>
+                            <option value="credit">Credit</option>
+                          </select>
+                        </label>
+                        <label className="text-[9px] font-bold uppercase text-[#6f746e]">
+                          Due date
+                          <input type="date" value={editDue} onChange={(event) => setEditDue(event.target.value)} required={editStatus === "credit"} disabled={editStatus !== "credit"} className={`${cell} mt-0.5 disabled:bg-[#eeece5]`} />
+                        </label>
+                        <div className="flex items-end gap-1">
+                          <button type="submit" disabled={editSaving} className={`${buttonClass} h-7 px-2 text-[10px]`}>
+                            {editSaving ? "Saving…" : "Save"}
+                          </button>
+                          <button type="button" onClick={() => setEditingReceiptId(null)} className="h-7 border border-[#c9c5b9] bg-white px-2 text-[10px] font-semibold">Cancel</button>
+                        </div>
                       </div>
+                      <div className="space-y-1">
+                        {editLines.map((line) => {
+                          const decimal = stockAllowsDecimal(line.stockUnit, isPaint);
+                          const lineTotal = (Number(line.quantity) || 0) * (Number(line.unitCost) || 0);
+                          return (
+                            <div key={line.id} className="grid grid-cols-[1fr_5.5rem_6.5rem_5.5rem] items-center gap-1">
+                              <span className="truncate text-[11px]">
+                                {line.name}
+                                {line.sku && <span className="ml-1 text-[9px] text-[#6f746e]">{line.sku}</span>}
+                              </span>
+                              <input
+                                type="number"
+                                min={decimal ? "0.001" : "1"}
+                                step={decimal ? "0.001" : "1"}
+                                required
+                                value={line.quantity}
+                                onChange={(event) => setEditLines((current) => current.map((row) => row.id === line.id ? { ...row, quantity: event.target.value } : row))}
+                                aria-label={`Quantity for ${line.name}`}
+                                className={cellNum}
+                              />
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                required
+                                value={line.unitCost}
+                                onChange={(event) => setEditLines((current) => current.map((row) => row.id === line.id ? { ...row, unitCost: event.target.value } : row))}
+                                aria-label={`Unit cost for ${line.name}`}
+                                className={cellNum}
+                              />
+                              <span className="text-right text-[11px] font-semibold tabular-nums">{money(lineTotal)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[10px] text-[#6f746e]">
+                        Saving corrects the on-hand stock and the purchase in Finance. New total {money(editLines.reduce((sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unitCost) || 0), 0))}.
+                      </p>
                     </form>
                   )}
-                  {open && (
+                  {open && editingReceiptId !== receipt.id && (
                     <table className="w-full border-t border-[#e8e4da] bg-[#fbfaf6] text-[11px]">
                       <tbody>
                         {receipt.items.map((item) => (
