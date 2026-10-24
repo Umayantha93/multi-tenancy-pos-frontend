@@ -87,7 +87,7 @@ const featureGroups = [
       ["Job photos and videos", "Up to fifteen photos and five short clips on a garage job. The customer sees them on the bill link. They are removed after six months."],
       ["Technicians on the bill", "Print the technician’s name on each labor and service line."],
       ["Free service", "Mark a job free for the customer, including parts. Technician commission still uses the line prices."],
-      ["Job commission", "Commission for the people assigned to a job card, posted into finance."],
+      ["Job commission", "Monthly commission for the team on paid jobs. Repair labor counts in full, service labor at half, and the employee receives 10% of the amount above salary."],
       ["Next-service reminders", "An SMS or WhatsApp before the next service date, for garages that run service jobs and bill SMS."],
       ["Studio bookings and packages", "Photography sessions, priced packages, prints, and add-ons."],
       ["Salon appointments", "The same booking book used for salon appointments, packages, and add-ons."],

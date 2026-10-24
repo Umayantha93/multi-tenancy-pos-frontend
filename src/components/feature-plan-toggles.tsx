@@ -1,8 +1,16 @@
 "use client";
 
+import { ReactNode } from "react";
 import { Check } from "lucide-react";
 import type { FeatureKey } from "@/lib/api";
+import { inputClass } from "@/components/ui";
 import { groupModules, nestGroupFeatures, togglePlanFeature, type ModuleFeature } from "@/lib/feature-modules";
+
+export type CommissionTypeOption = {
+  key: string;
+  label: string;
+  summary: string;
+};
 
 type Props<T extends ModuleFeature> = {
   features: T[];
@@ -11,6 +19,7 @@ type Props<T extends ModuleFeature> = {
   garageAdmit?: boolean;
   columns?: 1 | 2;
   onChange: (next: FeatureKey[]) => void;
+  renderExtra?: (feature: T) => ReactNode;
 };
 
 export function FeaturePlanToggles<T extends ModuleFeature>({
@@ -20,6 +29,7 @@ export function FeaturePlanToggles<T extends ModuleFeature>({
   garageAdmit = false,
   columns = 2,
   onChange,
+  renderExtra,
 }: Props<T>) {
   return (
     <div className="space-y-6">
@@ -37,21 +47,24 @@ export function FeaturePlanToggles<T extends ModuleFeature>({
                     optional={optional.includes(feature.key)}
                     onClick={() => onChange(togglePlanFeature(enabled, feature.key, { garageAdmit }))}
                   />
+                  {renderExtra?.(feature)}
                   {children.length > 0 && (
                     <div className="mt-2 ml-5 space-y-2 border-l border-[#d7d3c8] pl-3">
                       {children.map((child) => (
-                        <ToggleButton
-                          key={child.key}
-                          name={child.name}
-                          active={enabled.includes(child.key)}
-                          optional={optional.includes(child.key)}
-                          disabled={parentOff}
-                          nested
-                          onClick={() => {
-                            if (parentOff) return;
-                            onChange(togglePlanFeature(enabled, child.key, { garageAdmit }));
-                          }}
-                        />
+                        <div key={child.key}>
+                          <ToggleButton
+                            name={child.name}
+                            active={enabled.includes(child.key)}
+                            optional={optional.includes(child.key)}
+                            disabled={parentOff}
+                            nested
+                            onClick={() => {
+                              if (parentOff) return;
+                              onChange(togglePlanFeature(enabled, child.key, { garageAdmit }));
+                            }}
+                          />
+                          {renderExtra?.(child)}
+                        </div>
                       ))}
                     </div>
                   )}
@@ -61,6 +74,40 @@ export function FeaturePlanToggles<T extends ModuleFeature>({
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+export function CommissionTypeSelect({
+  types,
+  value,
+  disabled = false,
+  onChange,
+}: {
+  types: CommissionTypeOption[];
+  value: string;
+  disabled?: boolean;
+  onChange: (key: string) => void;
+}) {
+  const selected = types.find((type) => type.key === value) ?? types[0];
+  if (!selected) return null;
+
+  return (
+    <div className={`mt-2 border border-[#d7d3c8] bg-white p-3 ${disabled ? "opacity-50" : ""}`}>
+      <label className="block text-[11px] font-bold uppercase">
+        Commission type
+        <select
+          value={selected.key}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          className={`${inputClass} mt-2 font-normal normal-case`}
+        >
+          {types.map((type) => (
+            <option key={type.key} value={type.key}>{type.label}</option>
+          ))}
+        </select>
+      </label>
+      <p className="mt-2 text-xs leading-relaxed text-[#6f746e]">{selected.summary}</p>
     </div>
   );
 }
