@@ -47,6 +47,7 @@ type SharedBill = {
     quantity: string | number | null;
     unit_price: string | number | null;
     line_discount?: string | number | null;
+    is_free?: boolean;
     line_total: string | number | null;
     hide_hours?: boolean;
     hide_amounts?: boolean;
@@ -329,7 +330,7 @@ export default function SharedBillPage() {
                   <td className="px-3 py-3 tabular-nums">{hideHours || item.quantity == null ? "—" : item.quantity}</td>
                   <td className="px-3 py-3 tabular-nums">{hideHours || item.unit_price == null ? "—" : money(item.unit_price)}</td>
                   {showLineDiscount && <td className="px-3 py-3 text-right tabular-nums">{money(item.line_discount || 0)}</td>}
-                  <td className="px-5 py-3 text-right tabular-nums">{item.line_total == null ? "—" : money(item.line_total)}</td>
+                  <td className="px-5 py-3 text-right tabular-nums">{item.is_free ? t("bill.free") : item.line_total == null ? "—" : money(item.line_total)}</td>
                 </tr>
                 );
               })}
