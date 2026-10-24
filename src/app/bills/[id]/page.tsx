@@ -120,6 +120,7 @@ type Bill = {
     unit_price: string;
     discount_percent?: string | number | null;
     line_discount?: string | number | null;
+    is_free?: boolean;
     below_cost?: boolean;
     line_total: string;
     employee_id?: number | null;
@@ -269,9 +270,7 @@ export default function BillDetailPage() {
   const [warrantyItem, setWarrantyItem] = useState<Bill["items"][number] | null>(null);
   const [savingWarranty, setSavingWarranty] = useState(false);
   const [savingJobWarranty, setSavingJobWarranty] = useState(false);
-  const [savingFree, setSavingFree] = useState(false);
-  const [freeModal, setFreeModal] = useState(false);
-  const [freeReason, setFreeReason] = useState("");
+  const [savingFreeId, setSavingFreeId] = useState<number | null>(null);
   const [printWithLogo, setPrintWithLogo] = useState(true);
   const [printThermal, setPrintThermal] = useState(false);
   const canSendSms = features.includes("bill_sms");
@@ -395,7 +394,7 @@ export default function BillDetailPage() {
           kind: "group",
           groupId: item.panel_group_id,
           name: item.panel_name || item.description,
-          total: members.reduce((sum, line) => sum + Number(line.line_total), 0),
+          total: members.reduce((sum, line) => sum + (line.is_free ? 0 : Number(line.line_total)), 0),
           items: members,
         });
       } else {
@@ -415,7 +414,9 @@ export default function BillDetailPage() {
   const isClosed = bill?.status === "closed";
   const isOweIn = bill?.status === "owe_in";
   const isLocked = isClosed || isOweIn;
-  const isPaid = Boolean(bill && Number(bill.balance_due) <= 0 && (Number(bill.amount_paid) > 0 || bill.is_free));
+  const chargeableLines = (bill?.items ?? []).filter((item) => !["discount", "advance", "customer_part"].includes(item.type));
+  const allLinesFree = chargeableLines.some((item) => item.is_free) && chargeableLines.every((item) => item.is_free || Number(item.line_total) <= 0);
+  const isPaid = Boolean(bill && Number(bill.balance_due) <= 0 && (Number(bill.amount_paid) > 0 || bill.is_free || allLinesFree));
   const amountRefunded = Number(bill?.amount_refunded ?? 0);
   const canRefund = Boolean(isClosed && Number(bill?.amount_paid ?? 0) - amountRefunded > 0.00001);
   const hasPendingCheque = Boolean(bill?.has_pending_cheque);
@@ -1097,22 +1098,20 @@ export default function BillDetailPage() {
     }
   }
 
-  async function toggleFree(next: boolean, reason = "") {
-    if (!bill) return;
-    setSavingFree(true);
+  async function toggleLineFree(itemId: number, next: boolean) {
+    if (!bill || isLocked) return;
+    setSavingFreeId(itemId);
     setError("");
     try {
-      await api(`/bills/${id}/free`, {
+      await api(`/bills/${id}/items/${itemId}`, {
         method: "PUT",
-        body: JSON.stringify({ is_free: next, reason: next ? reason.trim() : null }),
+        body: JSON.stringify({ is_free: next }),
       });
-      setFreeModal(false);
-      setFreeReason("");
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("bill.free_failed"));
     } finally {
-      setSavingFree(false);
+      setSavingFreeId(null);
     }
   }
 
@@ -1489,25 +1488,6 @@ export default function BillDetailPage() {
       eyebrow={`${bill.vehicle?.number_plate ?? bill.customer?.name ?? t(`terms.${profile.billingSingular}`)}${showJobKind ? ` · ${jobKindLabel}` : ""} · ${billStatusLabel(bill.status, t)}`}
       action={
         <div className="no-print flex w-full min-w-0 flex-wrap items-center gap-2">
-          {canFreeService && (
-            <label className={`inline-flex h-8 shrink-0 items-center gap-2 whitespace-nowrap border px-2.5 text-[11px] font-bold uppercase ${bill.is_free ? "border-[#167c73] bg-[#167c73] text-white" : "border-[#c9c5b9] bg-white"} ${isClosed || Number(bill.amount_paid) > 0 ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}>
-              <input
-                type="checkbox"
-                checked={Boolean(bill.is_free)}
-                disabled={savingFree || isClosed || Number(bill.amount_paid) > 0 || bill.status !== "open"}
-                onChange={(event) => {
-                  if (event.target.checked) {
-                    setFreeReason("");
-                    setFreeModal(true);
-                    return;
-                  }
-                  void toggleFree(false);
-                }}
-                className="size-3.5 accent-[#167c73]"
-              />
-              {t("bill.free_service")}
-            </label>
-          )}
           {isGarage && Number(bill.amount_paid) <= 0 && (
             <button
               type="button"
@@ -1706,41 +1686,6 @@ export default function BillDetailPage() {
           />
         </label>
       </ConfirmModal>
-      {freeModal && (
-        <div className="no-print fixed inset-0 z-50 grid place-items-center bg-black/55 p-4">
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!freeReason.trim()) return;
-              void toggleFree(true, freeReason);
-            }}
-            className="w-full max-w-md bg-[#f3f0e8] p-5"
-          >
-            <h2 className="font-display text-2xl font-semibold uppercase">{t("bill.free_reason_title")}</h2>
-            <p className="mt-1 text-sm text-[#6f746e]">{t("bill.free_reason_hint")}</p>
-            <label className="mt-4 block text-xs font-bold uppercase">
-              {t("bill.free_reason")}
-              <textarea
-                required
-                value={freeReason}
-                onChange={(event) => setFreeReason(event.target.value)}
-                rows={4}
-                maxLength={1000}
-                placeholder={t("bill.free_reason_placeholder")}
-                className={`${inputClass} mt-2`}
-              />
-            </label>
-            <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => setFreeModal(false)} className="h-9 border border-[#c9c5b9] bg-white px-3 text-xs font-bold uppercase">
-                {t("common.cancel")}
-              </button>
-              <button type="submit" disabled={savingFree || !freeReason.trim()} className={buttonClass}>
-                {savingFree ? t("common.saving") : t("common.save")}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
       {refundOpen && (
         <div className="no-print fixed inset-0 z-50 grid place-items-center bg-black/55 p-4">
           <form
@@ -2203,7 +2148,7 @@ export default function BillDetailPage() {
                 <tbody>
                   {isCombinedJob && (["service", "repair"] as const).map((section) => {
                     const lines = chargeItems.filter((item) => lineSection(item, bill.job_kind) === section);
-                    const subtotal = lines.reduce((sum, item) => sum + Number(item.line_total), 0);
+                    const subtotal = lines.reduce((sum, item) => sum + (item.is_free ? 0 : Number(item.line_total)), 0);
                     return (
                       <Fragment key={section}>
                         <tr className="border-t border-[#d7d3c8] bg-[#f7f5ef]">
@@ -2231,6 +2176,9 @@ export default function BillDetailPage() {
                             showTechnicianName={canShowTechnicians}
                             showLineDiscount={canLineDiscount}
                             onSaveDiscount={saveLineDiscount}
+                            showFree={canFreeService}
+                            savingFree={savingFreeId === item.id}
+                            onToggleFree={toggleLineFree}
                           />
                         ))}
                       </Fragment>
@@ -2292,6 +2240,9 @@ export default function BillDetailPage() {
                               showTechnicianName={canShowTechnicians}
                               showLineDiscount={canLineDiscount}
                               onSaveDiscount={saveLineDiscount}
+                              showFree={canFreeService}
+                              savingFree={savingFreeId === item.id}
+                              onToggleFree={toggleLineFree}
                             />
                           ))}
                         </Fragment>
@@ -2316,6 +2267,9 @@ export default function BillDetailPage() {
                         showTechnicianName={canShowTechnicians}
                         showLineDiscount={canLineDiscount}
                         onSaveDiscount={saveLineDiscount}
+                        showFree={canFreeService}
+                        savingFree={savingFreeId === row.item.id}
+                        onToggleFree={toggleLineFree}
                       />
                     );
                   })}
@@ -3526,6 +3480,9 @@ function ChargeItemRow({
   showTechnicianName = false,
   showLineDiscount = false,
   onSaveDiscount,
+  showFree = false,
+  savingFree = false,
+  onToggleFree,
   laborAsQty = false,
   canWarranty = false,
   onEditWarranty,
@@ -3543,6 +3500,7 @@ function ChargeItemRow({
     unit_price: string;
     line_total: string;
     line_discount?: string | number | null;
+    is_free?: boolean;
     below_cost?: boolean;
     employee_id?: number | null;
     technician_name?: string | null;
@@ -3564,6 +3522,9 @@ function ChargeItemRow({
   showTechnicianName?: boolean;
   showLineDiscount?: boolean;
   onSaveDiscount?: (itemId: number, discount: string) => void;
+  showFree?: boolean;
+  savingFree?: boolean;
+  onToggleFree?: (itemId: number, free: boolean) => void;
   laborAsQty?: boolean;
   canWarranty?: boolean;
   onEditWarranty?: (item: {
@@ -3743,8 +3704,27 @@ function ChargeItemRow({
           </span>
         ) : (
           <>
-            <span className={`tabular-nums ${hideAmountsOnPrint ? "print:hidden" : ""}`}>{money(item.line_total)}</span>
-            {hideAmountsOnPrint && <span className="hidden print:inline">—</span>}
+            {showFree && !nested && item.type !== "discount" && (
+              <label className={`no-print mb-1 flex items-center justify-end gap-1 text-[10px] font-bold uppercase ${item.is_free ? "text-[#167c73]" : "text-[#6f746e]"} ${isLocked || savingFree ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(item.is_free)}
+                  disabled={isLocked || savingFree || !onToggleFree}
+                  onChange={(event) => onToggleFree?.(item.id, event.target.checked)}
+                  className="size-3 accent-[#167c73]"
+                  aria-label={t("bill.line_free")}
+                />
+                {t("bill.line_free")}
+              </label>
+            )}
+            {item.is_free ? (
+              <span className="text-[11px] font-bold uppercase text-[#167c73]">{t("bill.free")}</span>
+            ) : (
+              <>
+                <span className={`tabular-nums ${hideAmountsOnPrint ? "print:hidden" : ""}`}>{money(item.line_total)}</span>
+                {hideAmountsOnPrint && <span className="hidden print:inline">—</span>}
+              </>
+            )}
           </>
         )}
       </td>

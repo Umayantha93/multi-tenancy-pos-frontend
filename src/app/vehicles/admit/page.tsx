@@ -124,7 +124,7 @@ export default function AdmitVehiclePage() {
 
   useEffect(() => {
     const features = currentFeatures();
-    setCanAssignEmployees(features.includes("employees_management") || features.includes("attendance"));
+    setCanAssignEmployees(features.includes("admit_vehicle") || features.includes("employees_management") || features.includes("attendance"));
     const repair = allowsRepairJobs(profile.type, features);
     const service = allowsServiceJobs(profile.type, features);
     const combined = allowsCombinedJobs(profile.type, features);
@@ -148,7 +148,7 @@ export default function AdmitVehiclePage() {
 
   useEffect(() => {
     if (!canAssignEmployees) return;
-    api<{ data: EmployeeOption[] }>("/employees?active_only=1&per_page=100")
+    api<{ data: EmployeeOption[] }>("/employees/options")
       .then((result) => setEmployees(result.data))
       .catch(() => setEmployees([]));
   }, [canAssignEmployees]);
