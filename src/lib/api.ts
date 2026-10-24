@@ -103,6 +103,13 @@ export type Tenant = {
   id: number;
   business_name: string;
   business_type: BusinessType;
+  commission_type?: "labor_excess" | "line_percent" | string | null;
+  commission_rules?: {
+    excess_percent?: number;
+    service_share_percent?: number;
+    repair_share_percent?: number;
+    uses_employee_percent?: boolean;
+  } | null;
   status: "active" | "inactive";
   dual_financial_view_enabled?: boolean;
   inventory_cost_method?: "average" | "latest" | null;

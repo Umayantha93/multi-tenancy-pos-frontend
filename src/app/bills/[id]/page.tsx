@@ -28,6 +28,19 @@ function partPriceLabel(part: Part): string {
   if (part.pending_price == null || oldLeft <= 0.0001) return money(part.pending_price ?? part.price);
   return `${money(part.price)} · then ${money(part.pending_price)}`;
 }
+
+const COMMISSION_LINE_TYPES = new Set(["labor", "service_addon", "service", "charge"]);
+
+function commissionSharePercent(
+  item: { type: string; section?: string | null },
+  jobKind: string | null | undefined,
+  rules: { service_share_percent: number; repair_share_percent: number },
+): number {
+  if (!COMMISSION_LINE_TYPES.has(item.type)) return 0;
+  if (jobKind === "service") return rules.service_share_percent;
+  if (jobKind === "repair" || jobKind === "parts_sale") return rules.repair_share_percent;
+  return item.section === "service" ? rules.service_share_percent : rules.repair_share_percent;
+}
 type ComposerLabor = { key: string; laborItemId: string; name: string; hours: string; rate: number };
 type ComposerMaterial = { key: string; partId: number; name: string; qty: string; unitPrice: number; stock: number };
 type ServiceAddon = {
@@ -268,6 +281,12 @@ export default function BillDetailPage() {
   const canJobPhotos = features.includes("job_photos");
   const canAdmitPhotos = features.includes("admit_photos");
   const canCommission = features.includes("job_commissions");
+  const laborExcessCommission = (tenant?.commission_type ?? "labor_excess") !== "line_percent";
+  const commissionRules = {
+    excess_percent: Number(tenant?.commission_rules?.excess_percent ?? 10),
+    service_share_percent: Number(tenant?.commission_rules?.service_share_percent ?? 50),
+    repair_share_percent: Number(tenant?.commission_rules?.repair_share_percent ?? 100),
+  };
   const canShowTechnicians = features.includes("show_bill_technicians");
   const canFreeService = features.includes("free_service");
   const canLineDiscount = features.includes("line_discounts");
@@ -2522,6 +2541,31 @@ export default function BillDetailPage() {
                   />
                   {savingEmployees && <p className="text-[11px] text-[#6f746e]">{t("common.saving")}</p>}
                   {canCommission && (bill.employees ?? []).length > 0 && (
+                    laborExcessCommission ? (
+                      <div className="space-y-2 border border-[#d7d3c8] bg-[#fbfaf6] p-2">
+                        <p className="text-[11px] leading-relaxed text-[#6f746e]">
+                          Counts toward the month once this job is paid. Repair labor counts in full. Service labor counts at {commissionRules.service_share_percent}%. Commission is {commissionRules.excess_percent}% of the amount above salary.
+                        </p>
+                        <ul className="space-y-2">
+                          {(bill.employees ?? []).map((employee) => {
+                            const ownLines = (bill.items ?? []).filter((item) => item.employee_id === employee.id && COMMISSION_LINE_TYPES.has(item.type));
+                            const counted = ownLines.reduce((sum, item) => {
+                              const share = commissionSharePercent(item, bill.job_kind, commissionRules);
+                              return sum + Math.round(Number(item.line_total) * share) / 100;
+                            }, 0);
+                            return (
+                              <li key={employee.id} className="text-xs">
+                                <strong>{employee.name}</strong>
+                                <span className="ml-2 text-[#6f746e]">Counts {money(counted)}</span>
+                                {ownLines.length > 0 && (
+                                  <span className="mt-0.5 block text-[11px] text-[#6f746e]">{ownLines.map((item) => item.description).join(", ")}</span>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    ) : (
                     <ul className="space-y-2 border border-[#d7d3c8] bg-[#fbfaf6] p-2">
                       {(bill.employees ?? []).map((employee) => {
                         const ownLines = (bill.items ?? []).filter((item) => item.employee_id === employee.id && ["labor", "service_addon", "service", "charge"].includes(item.type));
@@ -2560,6 +2604,7 @@ export default function BillDetailPage() {
                         );
                       })}
                     </ul>
+                    )
                   )}
                 </div>
               )}

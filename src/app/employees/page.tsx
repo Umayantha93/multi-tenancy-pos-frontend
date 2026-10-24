@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { Eye, Fingerprint, Pencil, Plus, Power, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
-import { api, Branch, currentFeatures, formatDate, money } from "@/lib/api";
+import { api, Branch, currentFeatures, currentUser, formatDate, money } from "@/lib/api";
 
 type Allowance = { name: string; amount: number | string; kind?: string; min_days?: number };
 type Shift = { id: number; name: string };
@@ -48,6 +48,7 @@ export default function EmployeesPage() {
   const [mode, setMode] = useState<Mode>(null);
   const [selected, setSelected] = useState<Employee | null>(null);
   const [error, setError] = useState("");
+  const [payType, setPayType] = useState("monthly");
 
   function load() {
     api<{ data: Employee[] }>(`/employees?per_page=100${showInactive ? "" : "&active_only=1"}`)
@@ -64,6 +65,7 @@ export default function EmployeesPage() {
 
   function openAdd() {
     setSelected(null);
+    setPayType("monthly");
     setMode("add");
     setError("");
   }
@@ -79,6 +81,7 @@ export default function EmployeesPage() {
 
   function openEdit(employee: Employee) {
     setSelected(employee);
+    setPayType(employee.pay_type || "monthly");
     setMode("edit");
     setError("");
   }
@@ -93,9 +96,8 @@ export default function EmployeesPage() {
       nic: data.nic,
       phone: data.phone || null,
       position: data.position || null,
-      pay_type: data.pay_type || "monthly",
-      base_salary: data.base_salary === "" ? null : data.base_salary,
-      daily_rate: data.pay_type === "daily" ? data.daily_rate : null,
+      pay_type: payType,
+      amount: data.amount === "" ? 0 : data.amount,
       commission_percent: data.commission_percent === "" ? null : data.commission_percent,
       overtime_hourly_rate: data.overtime_hourly_rate || 0,
       fingerprint_id: data.fingerprint_id || null,
@@ -184,7 +186,7 @@ export default function EmployeesPage() {
                 <div className="mt-5 grid grid-cols-2 gap-3 border-t border-[#d7d3c8] pt-4 text-xs">
                   <div><p className="text-[#6f746e]">NIC</p><strong>{employee.nic}</strong></div>
                   <div><p className="text-[#6f746e]">Phone</p><strong>{employee.phone}</strong></div>
-                  <div className="col-span-2"><p className="text-[#6f746e]">{employee.pay_type === "daily" ? "Daily rate" : "Base salary"}</p><strong>{money(employee.pay_type === "daily" ? employee.daily_rate || 0 : employee.base_salary)}</strong></div>
+                  <div className="col-span-2"><p className="text-[#6f746e]">Amount · {employee.pay_type === "daily" ? "Daily" : "Monthly"}</p><strong>{money(employee.pay_type === "daily" ? employee.daily_rate || 0 : employee.base_salary)}</strong></div>
                 </div>
               </button>
               <div className="mt-4 flex gap-2 border-t border-[#d7d3c8] pt-4">
@@ -213,9 +215,8 @@ export default function EmployeesPage() {
                 ["Position", selected.position],
                 ["NIC", selected.nic],
                 ["Phone", selected.phone],
-                ["Pay type", selected.pay_type === "daily" ? "End of day" : "Monthly"],
-                ["Base salary", money(selected.base_salary || 0)],
-                ["Daily rate", selected.daily_rate ? money(selected.daily_rate) : "—"],
+                ["Pay type", selected.pay_type === "daily" ? "Daily" : "Monthly"],
+                ["Amount", money(selected.pay_type === "daily" ? selected.daily_rate || 0 : selected.base_salary || 0)],
                 ["OT hourly rate", selected.overtime_hourly_rate ? money(selected.overtime_hourly_rate) : "—"],
                 ["Fingerprint ID", selected.fingerprint_id || "—"],
                 ["Status", selected.active ? "Active" : "Inactive"],
@@ -275,7 +276,7 @@ export default function EmployeesPage() {
 
       {(mode === "add" || mode === "edit") && (
         <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4">
-          <form onSubmit={save} className="my-8 w-full max-w-xl bg-[#f3f0e8]">
+          <form key={selected?.id ?? "new"} onSubmit={save} className="my-8 w-full max-w-xl bg-[#f3f0e8]">
             <div className="flex items-center justify-between border-b border-[#d7d3c8] p-5">
               <h2 className="font-display text-3xl font-semibold uppercase">{mode === "edit" ? "Edit employee" : "Add employee"}</h2>
               <button type="button" onClick={() => setMode(null)} aria-label="Close"><X /></button>
@@ -286,7 +287,6 @@ export default function EmployeesPage() {
                 ["nic", "NIC", selected?.nic ?? "", true],
                 ["phone", "Phone", selected?.phone ?? "", false],
                 ["position", "Position", selected?.position ?? "", false],
-                ["base_salary", "Base salary", selected?.base_salary ?? "", false],
                 ["overtime_hourly_rate", "OT hourly rate", selected?.overtime_hourly_rate ?? "", false],
                 ["fingerprint_id", "Fingerprint ID", selected?.fingerprint_id ?? "", false],
               ].map(([name, label, value, required]) => (
@@ -304,20 +304,35 @@ export default function EmployeesPage() {
               ))}
               <label className="text-xs font-bold uppercase">
                 Pay type
-                <select name="pay_type" defaultValue={selected?.pay_type ?? "monthly"} className={`${inputClass} mt-2`}>
-                  <option value="monthly">Monthly salary</option>
-                  <option value="daily">End of day</option>
+                <select name="pay_type" value={payType} onChange={(event) => setPayType(event.target.value)} className={`${inputClass} mt-2`}>
+                  <option value="monthly">Monthly</option>
+                  <option value="daily">Daily</option>
                 </select>
               </label>
               <label className="text-xs font-bold uppercase">
-                Daily rate
-                <input name="daily_rate" type="number" min="0" step="0.01" defaultValue={selected?.daily_rate ?? ""} className={`${inputClass} mt-2`} />
+                Amount
+                <input
+                  name="amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  defaultValue={selected ? (selected.pay_type === "daily" ? selected.daily_rate ?? "" : selected.base_salary ?? "") : ""}
+                  className={`${inputClass} mt-2`}
+                />
               </label>
-              {currentFeatures().includes("job_commissions") && (
+              {currentFeatures().includes("job_commissions") && (currentUser()?.tenant?.commission_type ?? "labor_excess") === "line_percent" && (
                 <label className="text-xs font-bold uppercase sm:col-span-2">
                   Commission percent of labor and service
                   <input name="commission_percent" type="number" min="0" max="100" step="0.01" defaultValue={selected?.commission_percent ?? ""} className={`${inputClass} mt-2`} />
                 </label>
+              )}
+              {currentFeatures().includes("job_commissions") && (currentUser()?.tenant?.commission_type ?? "labor_excess") !== "line_percent" && (
+                <p className="text-xs font-normal normal-case text-[#6f746e] sm:col-span-2">
+                  {payType === "daily"
+                    ? "Daily: this amount is the rate for one day. Enter days and half days on Attendance. Additions and deductions change the month total."
+                    : "Monthly: this amount is the salary. Additions and deductions on Attendance change the month total."}
+                  {" "}Paid repair labor counts in full and service labor at half. If counted labor is above that salary, the employee receives 10% of the difference.
+                </p>
               )}
               <label className="text-xs font-bold uppercase">
                 Paid leave days / year
