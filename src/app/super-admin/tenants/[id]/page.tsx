@@ -9,10 +9,18 @@ import { AddressField } from "@/components/address-field";
 import { ConfirmModal, ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
 import { api, Branch, mediaUrl, PhoneEntry, Tenant } from "@/lib/api";
 import { BUSINESS_TYPE_OPTIONS, PAYMENT_PLAN_OPTIONS, PLAN_OPTIONS, optionalFeaturesFor, profileFor } from "@/lib/business-profiles";
-import { FeaturePlanToggles } from "@/components/feature-plan-toggles";
+import { CommissionTypeOption, CommissionTypeSelect, FeaturePlanToggles } from "@/components/feature-plan-toggles";
 
 type Feature = { id: number; key: string; name: string; group?: string | null; parent?: string | null };
-type FeatureResponse = { available: Feature[]; enabled: string[]; optional?: string[]; nested?: Record<string, string>; business_type?: string };
+type FeatureResponse = {
+  available: Feature[];
+  enabled: string[];
+  optional?: string[];
+  nested?: Record<string, string>;
+  business_type?: string;
+  commission_type?: string;
+  commission_types?: CommissionTypeOption[];
+};
 type Detail = Tenant & {
   owner_name: string;
   owner_email: string;
@@ -82,6 +90,8 @@ export default function TenantDetailPage() {
   const [tenant, setTenant] = useState<Detail | null>(null);
   const [featureData, setFeatureData] = useState<FeatureResponse | null>(null);
   const [enabled, setEnabled] = useState<string[]>([]);
+  const [commissionType, setCommissionType] = useState("labor_excess");
+  const [commissionTypes, setCommissionTypes] = useState<CommissionTypeOption[]>([]);
   const [contactPhones, setContactPhones] = useState<PhoneEntry[]>([{ label: "Business", number: "" }]);
   const [address, setAddress] = useState("");
   const [error, setError] = useState("");
@@ -122,6 +132,8 @@ export default function TenantDetailPage() {
         setTenant(detail);
         setFeatureData(features);
         setEnabled(features.enabled);
+        setCommissionType(features.commission_type || "labor_excess");
+        setCommissionTypes(features.commission_types ?? []);
         setFeePayments(fees.payments);
         setCurrentMonthPaid(fees.current_month_paid);
         setSetupPayments(setup.payments);
@@ -490,9 +502,14 @@ export default function TenantDetailPage() {
         method: "PUT",
         body: JSON.stringify({
           features: Object.fromEntries(featureData.available.map((feature) => [feature.key, enabled.includes(feature.key)])),
+          commission_type: commissionType,
         }),
       });
+      setFeatureData(result);
       setEnabled(result.enabled);
+      setCommissionType(result.commission_type || commissionType);
+      setCommissionTypes(result.commission_types ?? commissionTypes);
+      setNotice("Feature plan saved.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to update features.");
     } finally {
@@ -1126,6 +1143,14 @@ export default function TenantDetailPage() {
                 optional={featureData.optional ?? optionalFeaturesFor(tenant.business_type)}
                 garageAdmit={tenant.business_type === "garage"}
                 onChange={setEnabled}
+                renderExtra={(feature) => feature.key === "job_commissions" ? (
+                  <CommissionTypeSelect
+                    types={commissionTypes}
+                    value={commissionType}
+                    disabled={!enabled.includes("job_commissions")}
+                    onChange={setCommissionType}
+                  />
+                ) : null}
               />
             </div>
             <button onClick={saveFeatures} disabled={saving} className={`${buttonClass} mt-6`}>

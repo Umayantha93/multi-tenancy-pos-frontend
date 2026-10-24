@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Fingerprint, Plus } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
-import { api } from "@/lib/api";
+import { api, money } from "@/lib/api";
 
 type Employee = { id: number; name: string; position: string; fingerprint_id: string; active: boolean };
 type Attendance = {
@@ -17,6 +17,26 @@ type Attendance = {
   source: string;
   employee: { id: number; name: string; position: string; fingerprint_id: string };
 };
+
+type PayLine = { name: string; amount: string };
+type PayDraft = { days: string; half_days: string; additions: PayLine[]; deductions: PayLine[] };
+type PayEmployee = {
+  employee_id: number;
+  name: string;
+  position?: string | null;
+  pay_type: string;
+  amount: number | string | null;
+  days: number;
+  half_days: number;
+  additions: Array<{ name: string; amount: number }>;
+  deductions: Array<{ name: string; amount: number }>;
+  salary: number;
+  salary_ready: boolean;
+};
+
+function linesFrom(rows: Array<{ name: string; amount: number }>): PayLine[] {
+  return rows.map((row) => ({ name: row.name, amount: String(row.amount) }));
+}
 
 function formatTime(value: string | null) {
   if (!value) return "—";
@@ -34,6 +54,9 @@ export default function AttendancePage() {
   const [loading, setLoading] = useState(true);
   const [fingerprintId, setFingerprintId] = useState("");
   const [punching, setPunching] = useState(false);
+  const [payRows, setPayRows] = useState<PayEmployee[]>([]);
+  const [drafts, setDrafts] = useState<Record<number, PayDraft>>({});
+  const [savingPay, setSavingPay] = useState<number | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -51,7 +74,22 @@ export default function AttendancePage() {
       .catch(() => undefined);
   }, []);
 
+  const loadPay = useCallback(() => {
+    api<{ employees: PayEmployee[] }>(`/attendance/pay?month=${month}&year=${year}`)
+      .then((result) => {
+        setPayRows(result.employees);
+        setDrafts(Object.fromEntries(result.employees.map((row) => [row.employee_id, {
+          days: String(row.days),
+          half_days: String(row.half_days),
+          additions: linesFrom(row.additions),
+          deductions: linesFrom(row.deductions),
+        }])));
+      })
+      .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load month pay."));
+  }, [month, year]);
+
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadPay(); }, [loadPay]);
 
   async function punchFingerprint(event: FormEvent) {
     event.preventDefault();
@@ -90,6 +128,43 @@ export default function AttendancePage() {
       load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save attendance.");
+    }
+  }
+
+  function updateDraft(id: number, patch: Partial<PayDraft>) {
+    setDrafts((current) => ({ ...current, [id]: { ...current[id], ...patch } }));
+  }
+
+  function updateLine(id: number, kind: "additions" | "deductions", index: number, patch: Partial<PayLine>) {
+    const draft = drafts[id];
+    if (!draft) return;
+    const next = draft[kind].map((line, lineIndex) => lineIndex === index ? { ...line, ...patch } : line);
+    updateDraft(id, { [kind]: next });
+  }
+
+  async function savePay(employeeId: number) {
+    const draft = drafts[employeeId];
+    if (!draft) return;
+    setSavingPay(employeeId);
+    setError("");
+    try {
+      const saved = await api<PayEmployee>("/attendance/pay", {
+        method: "PUT",
+        body: JSON.stringify({
+          employee_id: employeeId,
+          year,
+          month,
+          days: Number(draft.days || 0),
+          half_days: Number(draft.half_days || 0),
+          additions: draft.additions,
+          deductions: draft.deductions,
+        }),
+      });
+      setPayRows((current) => current.map((row) => row.employee_id === employeeId ? saved : row));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save month pay.");
+    } finally {
+      setSavingPay(null);
     }
   }
 
@@ -187,8 +262,83 @@ export default function AttendancePage() {
             ))}
           </select>
         </label>
-        <button type="button" onClick={load} className={buttonClass}>Apply</button>
+        <button type="button" onClick={() => { load(); loadPay(); }} className={buttonClass}>Apply</button>
       </div>
+
+      <Panel className="mb-5 overflow-hidden">
+        <div className="border-b border-[#d7d3c8] p-5">
+          <h2 className="font-display text-2xl font-semibold uppercase">Month salary</h2>
+          <p className="mt-2 text-sm text-[#6f746e]">
+            Monthly staff use their amount. Daily staff use days and half days times their amount. Additions increase the month and deductions reduce it. Commission uses this total.
+          </p>
+        </div>
+        {payRows.length === 0 ? (
+          <p className="p-5 text-sm text-[#6f746e]">No active employees.</p>
+        ) : (
+          <ul className="divide-y divide-[#e2ded4]">
+            {payRows.map((row) => {
+              const draft = drafts[row.employee_id];
+              if (!draft) return null;
+              const daily = row.pay_type === "daily";
+              return (
+                <li key={row.employee_id} className="space-y-3 px-5 py-4">
+                  <div className="flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">{row.name}</p>
+                      <p className="text-xs text-[#6f746e]">
+                        {daily ? "Daily" : "Monthly"} · Amount {money(row.amount || 0)}
+                        {row.salary_ready ? ` · Month ${money(row.salary)}` : " · Enter days to build the month"}
+                      </p>
+                    </div>
+                    <button type="button" disabled={savingPay === row.employee_id} onClick={() => savePay(row.employee_id)} className={buttonClass}>
+                      {savingPay === row.employee_id ? "Saving..." : "Save"}
+                    </button>
+                  </div>
+                  {daily ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="text-xs font-bold uppercase">
+                        Days
+                        <input type="number" min="0" max="31" value={draft.days} onChange={(event) => updateDraft(row.employee_id, { days: event.target.value })} className={`${inputClass} mt-2`} />
+                      </label>
+                      <label className="text-xs font-bold uppercase">
+                        Half days
+                        <input type="number" min="0" max="31" value={draft.half_days} onChange={(event) => updateDraft(row.employee_id, { half_days: event.target.value })} className={`${inputClass} mt-2`} />
+                      </label>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-[#6f746e]">The monthly amount is the salary. Days are not multiplied.</p>
+                  )}
+                  {(["additions", "deductions"] as const).map((kind) => (
+                    <div key={kind}>
+                      <div className="mb-2 flex items-center justify-between">
+                        <p className="text-xs font-bold uppercase">{kind === "additions" ? "Additions" : "Deductions"}</p>
+                        <button type="button" onClick={() => updateDraft(row.employee_id, { [kind]: [...draft[kind], { name: "", amount: "" }] })} className="text-xs font-bold uppercase text-[#167c73]">
+                          Add
+                        </button>
+                      </div>
+                      {draft[kind].length === 0 ? (
+                        <p className="text-xs text-[#6f746e]">None</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {draft[kind].map((line, index) => (
+                            <div key={`${kind}-${index}`} className="grid grid-cols-[1fr_8rem_auto] gap-2">
+                              <input value={line.name} onChange={(event) => updateLine(row.employee_id, kind, index, { name: event.target.value })} placeholder="Name" className={inputClass} />
+                              <input type="number" min="0" step="0.01" value={line.amount} onChange={(event) => updateLine(row.employee_id, kind, index, { amount: event.target.value })} placeholder="Amount" className={inputClass} />
+                              <button type="button" onClick={() => updateDraft(row.employee_id, { [kind]: draft[kind].filter((_, lineIndex) => lineIndex !== index) })} className="px-2 text-xs font-bold uppercase text-[#b84837]">
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Panel>
 
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
 

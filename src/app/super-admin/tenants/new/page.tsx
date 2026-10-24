@@ -8,7 +8,7 @@ import { AddressField } from "@/components/address-field";
 import { ErrorMessage, Panel, PasswordInput, buttonClass, inputClass } from "@/components/ui";
 import { api, BusinessType, Tenant } from "@/lib/api";
 import { BUSINESS_TYPE_OPTIONS, PAYMENT_PLAN_OPTIONS, PLAN_OPTIONS, defaultPlanFor, optionalFeaturesFor, profileFor } from "@/lib/business-profiles";
-import { FeaturePlanToggles } from "@/components/feature-plan-toggles";
+import { CommissionTypeOption, CommissionTypeSelect, FeaturePlanToggles } from "@/components/feature-plan-toggles";
 
 type PhoneRow = { label: string; number: string };
 
@@ -22,6 +22,8 @@ export default function NewTenantPage() {
   const [planAmount, setPlanAmount] = useState("");
   const profile = useMemo(() => profileFor(businessType), [businessType]);
   const [features, setFeatures] = useState(profile.defaultFeatures);
+  const [commissionType, setCommissionType] = useState("labor_excess");
+  const [commissionTypes, setCommissionTypes] = useState<CommissionTypeOption[]>([]);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [ownerPhones, setOwnerPhones] = useState<PhoneRow[]>([{ label: "Primary", number: "" }]);
   const [contactPhones, setContactPhones] = useState<PhoneRow[]>([{ label: "Business", number: "" }]);
@@ -30,6 +32,12 @@ export default function NewTenantPage() {
     setFeatures(profile.defaultFeatures);
     setPlan(defaultPlanFor(businessType));
   }, [profile, businessType]);
+
+  useEffect(() => {
+    api<{ commission_types?: CommissionTypeOption[] }>("/super-admin/feature-catalog")
+      .then((result) => setCommissionTypes(result.commission_types ?? []))
+      .catch(() => undefined);
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -42,6 +50,7 @@ export default function NewTenantPage() {
     formData.set("payment_plan", paymentPlan);
     formData.set("plan_amount", planAmount);
     formData.set("features", JSON.stringify(features));
+    formData.set("commission_type", commissionType);
     formData.set("owner_phones", JSON.stringify(ownerPhones.filter((p) => p.number.trim())));
     formData.set("contact_phones", JSON.stringify(contactPhones.filter((p) => p.number.trim())));
     formData.set("owner_phone", ownerPhones.find((p) => p.number.trim())?.number ?? "");
@@ -291,6 +300,14 @@ export default function NewTenantPage() {
               garageAdmit={businessType === "garage"}
               columns={1}
               onChange={setFeatures}
+              renderExtra={(feature) => feature.key === "job_commissions" ? (
+                <CommissionTypeSelect
+                  types={commissionTypes}
+                  value={commissionType}
+                  disabled={!features.includes("job_commissions")}
+                  onChange={setCommissionType}
+                />
+              ) : null}
             />
           </div>
           <button disabled={loading} className={`${buttonClass} mt-6 w-full justify-between`}>

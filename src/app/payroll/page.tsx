@@ -107,7 +107,7 @@ export default function PayrollPage() {
       <Panel className="mb-5 overflow-hidden">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[#d7d3c8] px-5 py-4">
           <div>
-            <h2 className="font-display text-2xl font-semibold uppercase">End of day</h2>
+            <h2 className="font-display text-2xl font-semibold uppercase">Daily</h2>
             <p className="text-sm text-[#6f746e]">Daily employees stay out of monthly payroll. Paying them posts a named line on the finance report.</p>
           </div>
           <label className="text-xs font-bold uppercase">
@@ -116,7 +116,7 @@ export default function PayrollPage() {
           </label>
         </div>
         {dayStaff.length === 0 ? (
-          <p className="p-5 text-sm text-[#6f746e]">No end-of-day employees.</p>
+          <p className="p-5 text-sm text-[#6f746e]">No daily employees.</p>
         ) : (
           <ul className="divide-y divide-[#e2ded4]">
             {dayStaff.map((employee) => (
