@@ -88,6 +88,7 @@ function GarageInstantTill() {
   const [error, setError] = useState("");
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
+  const savingLock = useRef(false);
   const [payLater, setPayLater] = useState(false);
   const [tendered, setTendered] = useState("");
 
@@ -238,7 +239,8 @@ function GarageInstantTill() {
 
   async function checkout(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (cart.length === 0) return;
+    if (cart.length === 0 || savingLock.current) return;
+    savingLock.current = true;
     setSaving(true);
     setError("");
     const form = new FormData(event.currentTarget);
@@ -261,6 +263,7 @@ function GarageInstantTill() {
       router.push(`/bills/${bill.id}`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("instant.failed"));
+      savingLock.current = false;
       setSaving(false);
     }
   }
@@ -462,6 +465,7 @@ function PaintCounterForm() {
   const t = useT();
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const savingLock = useRef(false);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [employeeIds, setEmployeeIds] = useState<number[]>([]);
   const [canAssignEmployees, setCanAssignEmployees] = useState(false);
@@ -480,6 +484,8 @@ function PaintCounterForm() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (savingLock.current) return;
+    savingLock.current = true;
     setSaving(true);
     setError("");
     const form = Object.fromEntries(new FormData(event.currentTarget));
@@ -491,6 +497,7 @@ function PaintCounterForm() {
       router.push(`/bills/${bill.id}`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("instant.failed"));
+      savingLock.current = false;
       setSaving(false);
     }
   }
