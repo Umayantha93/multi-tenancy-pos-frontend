@@ -99,6 +99,7 @@ export default function AdmitVehiclePage() {
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
   const [customerVehicles, setCustomerVehicles] = useState<CustomerDetail["vehicles"]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
+  const [suggestionField, setSuggestionField] = useState<"name" | "phone" | null>(null);
   const [jobKind, setJobKind] = useState<JobKind>("repair");
   const [admissionDate, setAdmissionDate] = useState(todayIsoDate);
   const [canRepair, setCanRepair] = useState(true);
@@ -112,6 +113,7 @@ export default function AdmitVehiclePage() {
   const [openedPlate, setOpenedPlate] = useState("");
   const successRef = useRef<HTMLDivElement>(null);
   const phoneBoxRef = useRef<HTMLLabelElement>(null);
+  const nameBoxRef = useRef<HTMLLabelElement>(null);
 
   function chooseJobKind(next: JobKind) {
     setJobKind(next);
@@ -169,15 +171,25 @@ export default function AdmitVehiclePage() {
   }, [plateQuery]);
 
   useEffect(() => {
-    const digits = customerPhone.replace(/\D/g, "");
-    if (digits.length < 3) {
+    if (selectedCustomerId) {
+      setLookingUpCustomer(false);
+      return;
+    }
+    const phoneDigits = customerPhone.replace(/\D/g, "");
+    const nameQuery = customerName.trim();
+    const lookup = suggestionField === "phone" && phoneDigits.length >= 3
+      ? `phone=${encodeURIComponent(customerPhone.trim())}`
+      : suggestionField === "name" && nameQuery.length >= 2
+        ? `name=${encodeURIComponent(nameQuery)}`
+        : "";
+    if (!lookup) {
       setCustomerMatches([]);
       setLookingUpCustomer(false);
       return;
     }
     setLookingUpCustomer(true);
     const timer = setTimeout(() => {
-      api<{ data: CustomerMatch[] }>(`/customers?phone=${encodeURIComponent(customerPhone.trim())}&per_page=10`)
+      api<{ data: CustomerMatch[] }>(`/customers?${lookup}&per_page=10`)
         .then((result) => {
           setCustomerMatches(result.data);
           setShowCustomerSuggestions(true);
@@ -186,11 +198,12 @@ export default function AdmitVehiclePage() {
         .finally(() => setLookingUpCustomer(false));
     }, 300);
     return () => clearTimeout(timer);
-  }, [customerPhone]);
+  }, [customerPhone, customerName, suggestionField, selectedCustomerId]);
 
   useEffect(() => {
     function onPointer(event: MouseEvent) {
-      if (!phoneBoxRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (!phoneBoxRef.current?.contains(target) && !nameBoxRef.current?.contains(target)) {
         setShowCustomerSuggestions(false);
       }
     }
@@ -218,6 +231,14 @@ export default function AdmitVehiclePage() {
     setCustomerPhone(value);
     setSelectedCustomerId(null);
     setCustomerVehicles([]);
+    setSuggestionField("phone");
+  }
+
+  function onNameChange(value: string) {
+    setCustomerName(value);
+    setSelectedCustomerId(null);
+    setCustomerVehicles([]);
+    setSuggestionField("name");
   }
 
   async function uploadAdmitPhotos(billId: number) {
@@ -517,16 +538,18 @@ export default function AdmitVehiclePage() {
                         value={customerPhone}
                         onChange={(event) => onPhoneChange(event.target.value)}
                         onFocus={() => {
-                          if (customerMatches.length > 0) setShowCustomerSuggestions(true);
+                          if (suggestionField !== "phone") setCustomerMatches([]);
+                          setSuggestionField("phone");
+                          if (suggestionField === "phone" && customerMatches.length > 0) setShowCustomerSuggestions(true);
                         }}
                         autoComplete="off"
                         className={`${inputClass} mt-2`}
                         placeholder={t("admit.phone_placeholder")}
                       />
-                      {lookingUpCustomer && (
+                      {lookingUpCustomer && suggestionField === "phone" && (
                         <p className="mt-1 text-xs font-normal text-[#6f746e]">{t("admit.looking_up")}</p>
                       )}
-                      {showCustomerSuggestions && customerMatches.length > 0 && (
+                      {showCustomerSuggestions && suggestionField === "phone" && customerMatches.length > 0 && (
                         <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto border border-[#d7d3c8] bg-white shadow-lg">
                           {customerMatches.map((match) => (
                             <button
@@ -549,15 +572,42 @@ export default function AdmitVehiclePage() {
                 }
                 if (name === "customer_name") {
                   return (
-                    <label key={name} className="text-xs font-semibold">
+                    <label key={name} ref={nameBoxRef} className="relative text-xs font-semibold">
                       {label}
                       <input
                         name={name}
                         type={type}
                         value={customerName}
-                        onChange={(event) => setCustomerName(event.target.value)}
+                        onChange={(event) => onNameChange(event.target.value)}
+                        onFocus={() => {
+                          if (suggestionField !== "name") setCustomerMatches([]);
+                          setSuggestionField("name");
+                          if (suggestionField === "name" && customerMatches.length > 0) setShowCustomerSuggestions(true);
+                        }}
+                        autoComplete="off"
                         className={`${inputClass} mt-2`}
                       />
+                      {lookingUpCustomer && suggestionField === "name" && (
+                        <p className="mt-1 text-xs font-normal text-[#6f746e]">{t("admit.looking_up")}</p>
+                      )}
+                      {showCustomerSuggestions && suggestionField === "name" && customerMatches.length > 0 && (
+                        <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto border border-[#d7d3c8] bg-white shadow-lg">
+                          {customerMatches.map((match) => (
+                            <button
+                              key={match.id}
+                              type="button"
+                              onClick={() => void pickCustomer(match)}
+                              className="block w-full border-b border-[#e2ded4] px-3 py-2.5 text-left last:border-b-0 hover:bg-[#f7f5ef]"
+                            >
+                              <p className="font-semibold">{match.name}</p>
+                              <p className="text-xs font-normal text-[#6f746e]">
+                                {match.phone}
+                                {match.vehicles_count != null ? ` · ${t(match.vehicles_count === 1 ? "admit.vehicles_one" : "admit.vehicles_many", { count: match.vehicles_count })}` : ""}
+                              </p>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </label>
                   );
                 }
