@@ -848,8 +848,8 @@ function BalanceSheetPageInner() {
       {dayDetail && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
           <div aria-hidden className="absolute inset-0 bg-[#181b19]/55" />
-          <div className="relative z-10 max-h-[90vh] w-full max-w-4xl overflow-y-auto border border-[#d7d3c8] bg-[#fbfaf6]">
-            <div className="flex items-start justify-between border-b border-[#e2ded4] px-5 py-4">
+          <div className="relative z-10 flex max-h-[90vh] w-[min(96vw,76rem)] flex-col overflow-hidden border border-[#d7d3c8] bg-[#fbfaf6]">
+            <div className="flex shrink-0 items-start justify-between border-b border-[#e2ded4] px-5 py-4">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-wide text-[#167c73]">Daily ledger</p>
                 <h2 className="mt-1 font-display text-2xl font-semibold uppercase">{formatDate(dayDetail.date)}</h2>
@@ -862,35 +862,44 @@ function BalanceSheetPageInner() {
                 <X size={16} />
               </button>
             </div>
-            <div className="overflow-x-auto p-5">
-              <table className="w-full min-w-[960px] border-collapse text-left text-sm">
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              <table className="w-full table-fixed border-collapse text-left text-sm">
+                <colgroup>
+                  <col className="w-[24%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[11%]" />
+                  <col className="w-[18%]" />
+                  <col className="w-[13%]" />
+                  <col className="w-[11%]" />
+                  <col className="w-[11%]" />
+                </colgroup>
                 <thead>
                   <tr className="text-[10px] font-bold uppercase tracking-wide">
-                    <th className="border border-[#d7d3c8] bg-[#dceef2] px-3 py-2 text-[#2f4f57]">Description</th>
-                    <th className="border border-[#d7d3c8] bg-[#dceef2] px-3 py-2 text-[#2f4f57]">Reference / Bill #</th>
-                    <th className="border border-[#d7d3c8] bg-[#dceef2] px-3 py-2 text-[#2f4f57]">Vehicle</th>
-                    <th className="border border-[#d7d3c8] bg-[#dceef2] px-3 py-2 text-[#2f4f57]">Details</th>
-                    <th className="border border-[#d7d3c8] bg-[#f3dfc8] px-3 py-2 text-[#6a4a28]">Category</th>
-                    <th className="border border-[#d7d3c8] bg-[#f3dfc8] px-3 py-2 text-right text-[#6a4a28]">Debit</th>
-                    <th className="border border-[#d7d3c8] bg-[#d7ebe4] px-3 py-2 text-right text-[#1f5a52]">Credit</th>
+                    <th className="border border-[#d7d3c8] bg-[#dceef2] px-2 py-2 text-[#2f4f57]">Description</th>
+                    <th className="border border-[#d7d3c8] bg-[#dceef2] px-2 py-2 text-[#2f4f57]">Reference / Bill #</th>
+                    <th className="border border-[#d7d3c8] bg-[#dceef2] px-2 py-2 text-[#2f4f57]">Vehicle</th>
+                    <th className="border border-[#d7d3c8] bg-[#dceef2] px-2 py-2 text-[#2f4f57]">Details</th>
+                    <th className="border border-[#d7d3c8] bg-[#f3dfc8] px-2 py-2 text-[#6a4a28]">Category</th>
+                    <th className="border border-[#d7d3c8] bg-[#f3dfc8] px-2 py-2 text-right text-[#6a4a28]">Debit</th>
+                    <th className="border border-[#d7d3c8] bg-[#d7ebe4] px-2 py-2 text-right text-[#1f5a52]">Credit</th>
                   </tr>
                 </thead>
                 <tbody>
                   {dayDetail.entries.map((row, index) => (
                     <tr key={`${row.reference ?? row.description}-${index}`} className="bg-white">
-                      <td className="border border-[#e2ded4] px-3 py-2.5">{row.description}</td>
-                      <td className="border border-[#e2ded4] px-3 py-2.5 font-medium text-[#4f544e]">{row.reference || "—"}</td>
-                      <td className="border border-[#e2ded4] px-3 py-2.5 whitespace-nowrap font-semibold uppercase">{row.vehicle || "—"}</td>
-                      <td className="border border-[#e2ded4] px-3 py-2.5 text-xs text-[#4f544e]">{row.details || "—"}</td>
-                      <td className="border border-[#e2ded4] px-3 py-2.5">
+                      <td className="border border-[#e2ded4] px-2 py-2.5 break-words">{row.description}</td>
+                      <td className="border border-[#e2ded4] px-2 py-2.5 break-words font-medium text-[#4f544e]">{row.reference || "—"}</td>
+                      <td className="border border-[#e2ded4] px-2 py-2.5 break-words font-semibold uppercase">{row.vehicle || "—"}</td>
+                      <td className="border border-[#e2ded4] px-2 py-2.5 break-words text-xs text-[#4f544e]">{row.details || "—"}</td>
+                      <td className="border border-[#e2ded4] px-2 py-2.5 break-words">
                         <span className={`inline-block px-2 py-0.5 text-[10px] font-bold uppercase ${entryTone(row.type)}`}>
                           {row.category}
                         </span>
                       </td>
-                      <td className="border border-[#e2ded4] px-3 py-2.5 text-right tabular-nums text-[#b84837]">
+                      <td className="border border-[#e2ded4] px-2 py-2.5 text-right text-xs tabular-nums whitespace-nowrap text-[#b84837]">
                         {row.debit > 0 ? money(row.debit) : "—"}
                       </td>
-                      <td className="border border-[#e2ded4] px-3 py-2.5 text-right tabular-nums text-[#167c73]">
+                      <td className="border border-[#e2ded4] px-2 py-2.5 text-right text-xs tabular-nums whitespace-nowrap text-[#167c73]">
                         {row.credit > 0 ? `+${money(row.credit)}` : "—"}
                       </td>
                     </tr>
