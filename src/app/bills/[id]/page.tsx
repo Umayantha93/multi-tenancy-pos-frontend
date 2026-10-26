@@ -2441,7 +2441,7 @@ export default function BillDetailPage() {
                       )}
                     </div>
                     <strong className="tabular-nums">{money(payment.amount)}</strong>
-                    {!isLocked && payment.method === "cheque" && payment.cheque_status === "pending" && (
+                    {!isClosed && payment.method === "cheque" && payment.cheque_status === "pending" && (
                       <>
                         <button
                           type="button"
