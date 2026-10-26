@@ -859,7 +859,7 @@ export default function PartsPage() {
               </label>
               {Number(selected.stock_qty) > 0 && (
                 <label className="-mt-2 flex items-start gap-2 text-xs text-[#6f746e]">
-                  <input type="checkbox" name="price_after_old_stock" value="1" defaultChecked className="mt-0.5 size-4 accent-[#167c73]" />
+                  <input type="checkbox" name="price_after_old_stock" value="1" className="mt-0.5 size-4 accent-[#167c73]" />
                   <span>
                     If the selling price changes, keep {money(selected.price || 0)} until the old {formatStockQty(selected.stock_qty, selected.stock_unit, isPaint)} are sold, then switch by itself.
                   </span>
