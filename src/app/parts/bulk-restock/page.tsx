@@ -105,7 +105,7 @@ function emptyRow(key: string): SheetRow {
     unitCost: "",
     markupPercent: "",
     sellPrice: "",
-    afterOldStock: true,
+    afterOldStock: false,
     isFree: false,
     savedUnitCost: "",
     serials: "",
@@ -340,6 +340,7 @@ export default function BulkRestockPage() {
         savedUnitCost: cost,
         markupPercent: "",
         sellPrice: part.price ? String(Number(part.price)) : "",
+        afterOldStock: false,
       }));
       return next.at(-1)?.part ? [...next, emptyRow(nextKey())] : next;
     });
@@ -349,7 +350,7 @@ export default function BulkRestockPage() {
   }
 
   function clearPart(key: string) {
-    patchRow(key, { part: null, isNew: false, newItem: blankNewItem(), query: "", unitCost: "", markupPercent: "", sellPrice: "", quantity: "", serials: "", isFree: false, savedUnitCost: "" });
+    patchRow(key, { part: null, isNew: false, newItem: blankNewItem(), query: "", unitCost: "", markupPercent: "", sellPrice: "", quantity: "", serials: "", isFree: false, afterOldStock: false, savedUnitCost: "" });
     setActiveKey(key);
   }
 
