@@ -300,7 +300,7 @@ export default function BillsPage() {
                     {kind ? (
                       <span className={`px-2 py-1 text-[10px] font-bold uppercase ${billJobKindClass(bill, profile.type)}`}>{kind}</span>
                     ) : <span />}
-                    <p className={`text-right text-lg font-semibold ${urgent ? "text-[#b84837]" : ""}`}>{money(bill.balance_due)}</p>
+                    <p className={`text-right text-lg font-semibold tabular-nums ${Number(bill.balance_due) > 0 ? "text-[#b84837]" : ""}`}>{money(bill.balance_due)}</p>
                   </div>
                 </Panel>
               </Link>
@@ -371,7 +371,7 @@ export default function BillsPage() {
                         );
                       })()}
                     </td>
-                    <td className={`pr-5 text-right font-semibold ${urgent ? "text-[#b84837]" : ""}`}>{money(bill.balance_due)}</td>
+                    <td className={`pr-5 text-right font-semibold tabular-nums ${Number(bill.balance_due) > 0 ? "text-[#b84837]" : ""}`}>{money(bill.balance_due)}</td>
                     <td className="pr-4">
                       <Link href={`/bills/${bill.id}`} className="text-[#167c73]"><ArrowRight size={18} /></Link>
                     </td>
