@@ -1003,10 +1003,10 @@ export default function BulkRestockPage() {
                           <input type="date" value={editDue} onChange={(event) => setEditDue(event.target.value)} required={editStatus === "credit"} disabled={editStatus !== "credit"} className={`${cell} mt-0.5 disabled:bg-[#eeece5]`} />
                         </label>
                         <div className="flex items-end gap-1">
-                          <button type="submit" disabled={editSaving} className={`${buttonClass} h-7 px-2 text-[10px]`}>
+                          <button type="submit" disabled={editSaving} className="inline-flex h-7 items-center justify-center bg-[#20221f] px-2 text-[10px] font-semibold text-white hover:bg-[#167c73] disabled:opacity-50">
                             {editSaving ? "Saving…" : "Save"}
                           </button>
-                          <button type="button" onClick={() => setEditingReceiptId(null)} className="h-7 border border-[#c9c5b9] bg-white px-2 text-[10px] font-semibold">Cancel</button>
+                          <button type="button" onClick={() => setEditingReceiptId(null)} className="inline-flex h-7 items-center justify-center border border-[#c9c5b9] bg-white px-2 text-[10px] font-semibold text-[#20221f]">Cancel</button>
                         </div>
                       </div>
                       <div className="space-y-1">

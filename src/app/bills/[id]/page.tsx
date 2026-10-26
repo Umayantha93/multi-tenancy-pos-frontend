@@ -2,7 +2,7 @@
 
 import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { ChevronDown, CreditCard, Lock, MessageCircle, MessageSquare, Plus, Printer, RotateCcw, ShieldCheck, Trash2, X } from "lucide-react";
+import { ChevronDown, CreditCard, Lock, MessageCircle, MessageSquare, Percent, Plus, Printer, RotateCcw, ShieldCheck, Trash2, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { EmployeePicker } from "@/components/employee-picker";
 import { LaborCatalogPicker, type LaborCategory } from "@/components/labor-catalog-picker";
@@ -172,11 +172,43 @@ type RefundDraftLine = {
   quantity: string;
   disposition: "restock" | "write_off" | "none";
   maxQty: number;
+  soldQty: number;
+  netTotal: number;
+  refundedAmount: number;
   unitPrice: number;
   description: string;
   type: string;
   canRestock: boolean;
 };
+
+const REFUND_CHARGE_TYPES = ["labor", "charge", "part", "service", "service_addon", "session", "package", "print", "addon", "product", "alteration", "room", "amenity", "meal"];
+
+function roundMoney(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function lineNetRefund(item: { type: string; is_free?: boolean; line_total: string }, items: Array<{ type: string; is_free?: boolean; line_total: string }>, bill: { is_free?: boolean; vat_amount?: string | number | null; sscl_amount?: string | number | null }) {
+  if (item.is_free || !REFUND_CHARGE_TYPES.includes(item.type)) return 0;
+  const charges = items
+    .filter((row) => REFUND_CHARGE_TYPES.includes(row.type) && !row.is_free)
+    .reduce((sum, row) => sum + Number(row.line_total), 0);
+  if (charges <= 0) return 0;
+  const discounts = items
+    .filter((row) => row.type === "discount")
+    .reduce((sum, row) => sum + Number(row.line_total), 0);
+  const taxable = Math.max(0, charges - discounts);
+  const net = bill.is_free ? 0 : taxable + Number(bill.vat_amount || 0) + Number(bill.sscl_amount || 0);
+  return roundMoney((Number(item.line_total) / charges) * net);
+}
+
+function draftRefundAmount(line: RefundDraftLine) {
+  const quantity = Number(line.quantity || 0);
+  if (quantity <= 0 || line.soldQty <= 0) return 0;
+  if (Math.abs(quantity - line.maxQty) < 0.00001) {
+    return Math.max(0, roundMoney(line.netTotal - line.refundedAmount));
+  }
+  return Math.max(0, roundMoney(line.netTotal * (quantity / line.soldQty)));
+}
 
 type PendingDelete =
   | { kind: "item"; id: number; label: string }
@@ -263,6 +295,10 @@ export default function BillDetailPage() {
   const [composerMaterials, setComposerMaterials] = useState<ComposerMaterial[]>([]);
   const [mixQuery, setMixQuery] = useState("");
   const [addingPanel, setAddingPanel] = useState(false);
+  const [addingItem, setAddingItem] = useState(false);
+  const [recordingPayment, setRecordingPayment] = useState(false);
+  const [addingOweDiscount, setAddingOweDiscount] = useState(false);
+  const submitLock = useRef(false);
   const [expandedPanels, setExpandedPanels] = useState<Record<string, boolean>>({});
   const composerKey = useRef(0);
   const [savingLaborHours, setSavingLaborHours] = useState<number | null>(null);
@@ -414,6 +450,7 @@ export default function BillDetailPage() {
   const isClosed = bill?.status === "closed";
   const isOweIn = bill?.status === "owe_in";
   const isLocked = isClosed || isOweIn;
+  const owePaneBillId = useRef<number | null>(null);
   const chargeableLines = (bill?.items ?? []).filter((item) => !["discount", "advance", "customer_part"].includes(item.type));
   const allLinesFree = chargeableLines.some((item) => item.is_free) && chargeableLines.every((item) => item.is_free || Number(item.line_total) <= 0);
   const isPaid = Boolean(bill && Number(bill.balance_due) <= 0 && (Number(bill.amount_paid) > 0 || bill.is_free || allLinesFree));
@@ -427,9 +464,15 @@ export default function BillDetailPage() {
   const refundTotal = useMemo(
     () => refundLines
       .filter((line) => line.selected)
-      .reduce((sum, line) => sum + Number(line.quantity || 0) * line.unitPrice, 0),
+      .reduce((sum, line) => sum + draftRefundAmount(line), 0),
     [refundLines],
   );
+
+  useEffect(() => {
+    if (!bill || bill.status !== "owe_in" || owePaneBillId.current === bill.id) return;
+    owePaneBillId.current = bill.id;
+    setMode("payment");
+  }, [bill]);
 
   useEffect(() => {
     try {
@@ -848,8 +891,11 @@ export default function BillDetailPage() {
 
   async function addItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isLocked) return;
+    if (isLocked || submitLock.current) return;
+    submitLock.current = true;
+    setAddingItem(true);
     setError("");
+    try {
     const form = event.currentTarget;
     const formData = new FormData(form);
     const lineType = activeType;
@@ -983,6 +1029,39 @@ export default function BillDetailPage() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("bill.err_item"));
     }
+    } finally {
+      submitLock.current = false;
+      setAddingItem(false);
+    }
+  }
+
+  async function addOweInDiscount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!isOweIn || submitLock.current) return;
+    submitLock.current = true;
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const payload: Record<string, string> = { type: "discount", quantity: "1" };
+    if (selectedDiscountTypeId) {
+      payload.discount_type_id = selectedDiscountTypeId;
+    } else {
+      payload.description = String(formData.get("description") || "");
+      payload.unit_price = String(formData.get("unit_price") || "");
+    }
+    if (isCombinedJob) payload.section = "discount";
+    setAddingOweDiscount(true);
+    setError("");
+    try {
+      await api(`/bills/${id}/items`, { method: "POST", body: JSON.stringify(payload) });
+      setSelectedDiscountTypeId("");
+      form.reset();
+      load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t("bill.err_item"));
+    } finally {
+      submitLock.current = false;
+      setAddingOweDiscount(false);
+    }
   }
 
   async function saveWarranty(event: FormEvent<HTMLFormElement>) {
@@ -1023,7 +1102,8 @@ export default function BillDetailPage() {
   }
 
   async function addAddon(addon: ServiceAddon) {
-    if (isLocked || needsServiceClass) return;
+    if (isLocked || needsServiceClass || submitLock.current) return;
+    submitLock.current = true;
     setError("");
     setAddingAddonId(addon.id);
     try {
@@ -1041,13 +1121,14 @@ export default function BillDetailPage() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("bill.err_service"));
     } finally {
+      submitLock.current = false;
       setAddingAddonId(null);
     }
   }
 
   async function addCustomService(event?: FormEvent) {
     event?.preventDefault();
-    if (isLocked) return;
+    if (isLocked || submitLock.current) return;
     const description = customServiceName.trim();
     const unitPrice = Number(customServicePrice);
     const quantity = Math.max(1, Number(addonQty) || 1);
@@ -1055,6 +1136,7 @@ export default function BillDetailPage() {
       setError(t("bill.custom_service_required"));
       return;
     }
+    submitLock.current = true;
     setError("");
     setAddingCustomService(true);
     try {
@@ -1075,6 +1157,7 @@ export default function BillDetailPage() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("bill.err_service"));
     } finally {
+      submitLock.current = false;
       setAddingCustomService(false);
     }
   }
@@ -1166,8 +1249,11 @@ export default function BillDetailPage() {
 
   async function addPayment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isClosed) return;
+    if (isClosed || submitLock.current) return;
+    submitLock.current = true;
+    setRecordingPayment(true);
     const form = event.currentTarget;
+    setError("");
     try {
       await api(`/bills/${id}/payments`, { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(form))) });
       form.reset();
@@ -1175,6 +1261,9 @@ export default function BillDetailPage() {
       load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("bill.err_payment"));
+    } finally {
+      submitLock.current = false;
+      setRecordingPayment(false);
     }
   }
 
@@ -1207,8 +1296,8 @@ export default function BillDetailPage() {
   }
 
   async function remove(itemId: number) {
-    if (isLocked) return;
     const item = bill?.items.find((entry) => entry.id === itemId);
+    if (isClosed || (isOweIn && item?.type !== "discount")) return;
     const grouped = item?.panel_group_id
       ? bill?.items.filter((entry) => entry.panel_group_id === item.panel_group_id) ?? []
       : [];
@@ -1383,19 +1472,30 @@ export default function BillDetailPage() {
         refundedQty.set(line.bill_item_id, (refundedQty.get(line.bill_item_id) ?? 0) + Number(line.quantity));
       }
     }
+    const refundedAmount = new Map<number, number>();
+    for (const refund of bill.refunds ?? []) {
+      for (const line of refund.items ?? []) {
+        refundedAmount.set(line.bill_item_id, (refundedAmount.get(line.bill_item_id) ?? 0) + Number(line.amount));
+      }
+    }
     const drafts: RefundDraftLine[] = bill.items
       .filter((item) => item.type !== "discount")
       .map((item) => {
-        const maxQty = Math.max(0, Number(item.quantity) - (refundedQty.get(item.id) ?? 0));
+        const soldQty = Number(item.quantity);
+        const maxQty = Math.max(0, soldQty - (refundedQty.get(item.id) ?? 0));
         const canRestock = item.type === "part" && Boolean(item.part_id);
         const disposition: RefundDraftLine["disposition"] = canRestock ? "restock" : "none";
+        const netTotal = lineNetRefund(item, bill.items, bill);
         return {
           bill_item_id: item.id,
           selected: maxQty > 0,
           quantity: maxQty > 0 ? String(maxQty) : "0",
           disposition,
           maxQty,
-          unitPrice: Number(item.unit_price),
+          soldQty,
+          netTotal,
+          refundedAmount: refundedAmount.get(item.id) ?? 0,
+          unitPrice: soldQty > 0 ? netTotal / soldQty : Number(item.unit_price),
           description: item.description,
           type: item.type,
           canRestock,
@@ -1812,7 +1912,7 @@ export default function BillDetailPage() {
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#d7d3c8] pt-4">
               <p className="text-sm font-semibold">{t("bill.refund_total", { amount: money(refundTotal) })}</p>
               <div className="flex gap-2">
-                <button type="button" disabled={refunding} onClick={() => setRefundOpen(false)} className={`${buttonClass} bg-white`}>
+                <button type="button" disabled={refunding} onClick={() => setRefundOpen(false)} className="inline-flex h-8 items-center justify-center border border-[#cbc7bc] bg-white px-2.5 text-[11px] font-semibold text-[#20221f] disabled:opacity-50">
                   {t("common.cancel")}
                 </button>
                 <button type="submit" disabled={refunding || refundTotal <= 0} className={buttonClass}>
@@ -1841,7 +1941,7 @@ export default function BillDetailPage() {
               />
             </div>
             <div className="mt-4 flex gap-2">
-              <button type="button" onClick={() => setWarrantyItem(null)} className={`${buttonClass} flex-1 bg-white`}>{t("common.cancel")}</button>
+              <button type="button" onClick={() => setWarrantyItem(null)} className="inline-flex h-8 flex-1 items-center justify-center border border-[#cbc7bc] bg-white px-2.5 text-[11px] font-semibold text-[#20221f]">{t("common.cancel")}</button>
               <button disabled={savingWarranty} className={`${buttonClass} flex-1`}>{savingWarranty ? t("common.saving") : t("warranty.save")}</button>
             </div>
           </form>
@@ -2299,6 +2399,11 @@ export default function BillDetailPage() {
                         <td className="bill-col-total px-3 py-2 whitespace-nowrap text-right font-semibold tabular-nums">
                           <span className={hidePrintMoney ? "print:hidden" : ""}>-{money(item.line_total)}</span>
                           {hidePrintMoney && <span className="hidden print:inline">—</span>}
+                          {isOweIn && (
+                            <button type="button" onClick={() => remove(item.id)} className="no-print ml-2 align-middle text-[#b84837]" title={t("bill.remove_item")}>
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </td>
                         {!isLocked && (
                           <td className="no-print px-2 py-2">
@@ -2622,12 +2727,64 @@ export default function BillDetailPage() {
             </>
             )}
             {isOweIn && (
-              <div className="border-b border-[#d7d3c8] px-5 py-3">
-                <p className="text-xs font-bold uppercase text-[#2b6cb0]">{t("bill.record_payment")}</p>
+              <div className="grid grid-cols-2 border-b border-[#d7d3c8]">
+                <button type="button" onClick={() => setMode("item")} className={`inline-flex h-8 items-center justify-center gap-1 text-[11px] font-semibold ${mode === "item" ? "bg-[#20221f] text-white" : ""}`}>
+                  <Percent size={14} /> {t("common.discount")}
+                </button>
+                <button type="button" onClick={() => setMode("payment")} className={`inline-flex h-8 items-center justify-center gap-1 text-[11px] font-semibold ${mode === "payment" ? "bg-[#167c73] text-white" : ""}`}>
+                  <CreditCard size={14} /> {t("bill.record_payment")}
+                </button>
               </div>
             )}
-
-            {mode === "item" && !isOweIn ? (
+            {isOweIn && mode === "item" ? (
+              <form onSubmit={addOweInDiscount} className="space-y-3 p-5">
+                {(isGarage || isPaint) && (
+                  <label className="block text-xs font-bold uppercase">
+                    {t("bill.discount_type")}
+                    <select
+                      value={selectedDiscountTypeId}
+                      onChange={(event) => setSelectedDiscountTypeId(event.target.value)}
+                      className={`${inputClass} mt-2`}
+                    >
+                      <option value="">{t("bill.custom_discount")}</option>
+                      {discountTypes.map((row) => (
+                        <option key={row.id} value={row.id}>
+                          {row.name}
+                          {row.mode === "percent" ? ` · ${Number(row.value)}%` : ` · ${money(row.value)}`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {selectedDiscountType ? (
+                  <p className="text-sm text-[#167c73]">
+                    {selectedDiscountType.mode === "percent"
+                      ? t("bill.discount_percent_preview", {
+                          name: selectedDiscountType.name,
+                          percent: Number(selectedDiscountType.value),
+                        })
+                      : t("bill.discount_amount_preview", {
+                          name: selectedDiscountType.name,
+                          amount: money(selectedDiscountType.value),
+                        })}
+                  </p>
+                ) : (
+                  <>
+                    <label className="block text-xs font-bold uppercase">
+                      {t("common.description")}
+                      <input name="description" required className={`${inputClass} mt-2`} placeholder={t("bill.discount_placeholder")} />
+                    </label>
+                    <label className="block text-xs font-bold uppercase">
+                      {t("common.amount")}
+                      <input name="unit_price" type="number" min="0.01" step="0.01" required className={`${inputClass} mt-2`} />
+                    </label>
+                  </>
+                )}
+                <button disabled={addingOweDiscount} className={`${buttonClass} w-full`}>
+                  <Plus size={17} />{addingOweDiscount ? t("bill.adding") : t("bill.add_to_bill")}
+                </button>
+              </form>
+            ) : mode === "item" ? (
               serviceWorkspace && serviceAddMode === "services" ? (
                 <div className="flex max-h-[min(78vh,46rem)] flex-col">
                   <div className="space-y-3 overflow-y-auto p-4">
@@ -2703,7 +2860,7 @@ export default function BillDetailPage() {
                         </label>
                         <button
                           type="submit"
-                          disabled={addingCustomService || isLocked}
+                          disabled={addingCustomService || addingItem || isLocked}
                           className={`${buttonClass} w-full`}
                         >
                           {addingCustomService ? t("bill.adding") : t("bill.add_to_bill")}
@@ -2720,7 +2877,7 @@ export default function BillDetailPage() {
                               <button
                                 key={addon.id}
                                 type="button"
-                                disabled={Boolean(addingAddonId) || needsServiceClass}
+                                disabled={Boolean(addingAddonId) || addingItem || addingCustomService || needsServiceClass}
                                 onClick={() => addAddon(addon)}
                                 className={`min-h-16 border px-2 py-2 text-left ${
                                   addon.is_full_service
@@ -3340,8 +3497,8 @@ export default function BillDetailPage() {
                 </div>
 
                 <div className="shrink-0 border-t border-[#d7d3c8] bg-white p-4">
-                  <button disabled={addingPanel} className={`${buttonClass} w-full`}>
-                    <Plus size={17} />{addingPanel ? t("bill.adding") : isPanelComposer ? t("bill.add_panel") : t("bill.add_to_bill")}
+                  <button disabled={addingItem || addingPanel} className={`${buttonClass} w-full`}>
+                    <Plus size={17} />{addingItem || addingPanel ? t("bill.adding") : isPanelComposer ? t("bill.add_panel") : t("bill.add_to_bill")}
                   </button>
                 </div>
               </form>
@@ -3397,8 +3554,8 @@ export default function BillDetailPage() {
                     <input name="reference" className={`${inputClass} mt-2`} />
                   </label>
                 )}
-                <button className={`${buttonClass} w-full bg-[#167c73]`}>
-                  <CreditCard size={17} />{t("bill.record_pay")}
+                <button disabled={recordingPayment} className={`${buttonClass} w-full bg-[#167c73]`}>
+                  <CreditCard size={17} />{recordingPayment ? t("common.saving") : t("bill.record_pay")}
                 </button>
               </form>
             )}
