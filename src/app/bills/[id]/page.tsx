@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, Fragment, MouseEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, Fragment, type MouseEvent as ReactMouseEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { ChevronDown, CreditCard, Lock, MessageCircle, MessageSquare, Percent, Plus, Printer, RotateCcw, ShieldCheck, Trash2, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
@@ -1398,7 +1398,7 @@ export default function BillDetailPage() {
     setNextServiceDueDraft(source.next_service_due_on ? String(source.next_service_due_on).slice(0, 10) : "");
   }
 
-  function beginHeaderEdit(event: MouseEvent<HTMLButtonElement>) {
+  function beginHeaderEdit(event: ReactMouseEvent<HTMLButtonElement>) {
     event.preventDefault();
     event.stopPropagation();
     if (isLocked || !bill?.vehicle) return;
