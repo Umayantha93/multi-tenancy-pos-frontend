@@ -3,10 +3,10 @@
 import { CSSProperties, FormEvent, Fragment, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ArrowLeft, ChevronDown, ChevronRight, Loader2, Pencil, Plus, ScanBarcode, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Download, Loader2, Pencil, Plus, ScanBarcode, Search, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { buttonClass, ErrorMessage, inputClass, ListPager, LIST_PAGE_SIZE, Panel, SuccessMessage } from "@/components/ui";
-import { api, currentFeatures, currentUser, formatDate, money } from "@/lib/api";
+import { API_URL, api, currentBranchId, currentFeatures, currentLocale, currentUser, formatDate, money } from "@/lib/api";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 import { formatStockQty, sellPriceFromMarkup, STOCK_UNIT_OPTIONS, stockAllowsDecimal, stockUnitLabel } from "@/lib/stock-unit";
 
@@ -129,6 +129,10 @@ function parseSerials(raw: string): string[] {
   return raw.split(/[\n,;]+/).map((code) => code.trim()).filter(Boolean);
 }
 
+function isoDate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 export default function BulkRestockPage() {
   const profile = useBusinessProfile();
   const isPaint = profile.type === "paint";
@@ -153,6 +157,12 @@ export default function BulkRestockPage() {
   const [dropdown, setDropdown] = useState<CSSProperties | null>(null);
   const itemInputs = useRef<Record<string, HTMLInputElement | null>>({});
 
+  const [reportFrom, setReportFrom] = useState(() => {
+    const today = new Date();
+    return isoDate(new Date(today.getFullYear(), today.getMonth(), 1));
+  });
+  const [reportTo, setReportTo] = useState(() => isoDate(new Date()));
+  const [downloadingReport, setDownloadingReport] = useState(false);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [receiptSearch, setReceiptSearch] = useState("");
   const [receiptPage, setReceiptPage] = useState(1);
@@ -267,6 +277,50 @@ export default function BulkRestockPage() {
     const handle = window.setTimeout(() => loadReceipts(receiptSearch, 1, false), receiptSearch.trim() ? 250 : 0);
     return () => window.clearTimeout(handle);
   }, [receiptSearch, loadReceipts]);
+
+  async function downloadGrnReport() {
+    if (!reportFrom || !reportTo) {
+      setError("Choose the entered-date range for the GRN report.");
+      return;
+    }
+    if (reportFrom > reportTo) {
+      setError("The start date has to be on or before the end date.");
+      return;
+    }
+    setDownloadingReport(true);
+    setError("");
+    try {
+      const params = new URLSearchParams({ from: reportFrom, to: reportTo });
+      const token = localStorage.getItem("garage_token");
+      const headers = new Headers({ Accept: "application/pdf", "X-Locale": currentLocale() });
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+      const branchId = currentBranchId();
+      if (branchId) headers.set("X-Branch-Id", String(branchId));
+      const response = await fetch(`${API_URL}/stock-receipts/report?${params}`, { headers });
+      if (response.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({ message: "Could not download the GRN report." }));
+        const validation = body.errors ? Object.values(body.errors).flat().join(" ") : null;
+        throw new Error(validation || body.message || "Could not download the GRN report.");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `grn-report-${reportFrom}-to-${reportTo}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not download the GRN report.");
+    } finally {
+      setDownloadingReport(false);
+    }
+  }
 
   function beginEditReceipt(receipt: Receipt) {
     setOpenReceiptId(receipt.id);
@@ -936,8 +990,32 @@ export default function BulkRestockPage() {
         </form>
 
         <Panel className="p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="font-display text-lg font-semibold uppercase">Previous GRNs</h2>
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div className="min-w-0">
+              <h2 className="font-display text-lg font-semibold uppercase">Previous GRNs</h2>
+              <p className="mt-0.5 max-w-md text-[10px] text-[#6f746e]">
+                The PDF uses the date each GRN was entered, not the payment due date.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="text-[9px] font-bold uppercase text-[#6f746e]">
+                Entered from
+                <input type="date" value={reportFrom} onChange={(event) => setReportFrom(event.target.value)} className={`${inputClass} mt-0.5`} />
+              </label>
+              <label className="text-[9px] font-bold uppercase text-[#6f746e]">
+                Entered to
+                <input type="date" value={reportTo} onChange={(event) => setReportTo(event.target.value)} className={`${inputClass} mt-0.5`} />
+              </label>
+              <button
+                type="button"
+                onClick={() => void downloadGrnReport()}
+                disabled={downloadingReport}
+                className="inline-flex h-8 items-center gap-1 border border-[#20221f] bg-[#20221f] px-2.5 text-[11px] font-semibold text-white disabled:opacity-50"
+              >
+                {downloadingReport ? <Loader2 className="animate-spin" size={14} /> : <Download size={14} />}
+                {downloadingReport ? "Preparing..." : "GRN report PDF"}
+              </button>
+            </div>
             <label className="relative w-full max-w-xs">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6f746e]" size={14} />
               <input

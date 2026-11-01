@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, Fragment, MouseEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { ChevronDown, CreditCard, Lock, MessageCircle, MessageSquare, Percent, Plus, Printer, RotateCcw, ShieldCheck, Trash2, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
@@ -101,8 +101,8 @@ type Bill = {
   warranty_months?: number | null;
   warranty_starts_on?: string | null;
   warranty_until?: string | null;
-  customer: { name: string; phone: string; address?: string | null } | null;
-  vehicle: { number_plate: string; chassis_number?: string | null; make?: string; model?: string } | null;
+  customer: { name: string; phone?: string | null; address?: string | null } | null;
+  vehicle: { number_plate: string; chassis_number?: string | null; make?: string | null; model?: string | null; year?: number | string | null } | null;
   employees?: Array<{
     id: number;
     name: string;
@@ -182,6 +182,17 @@ type RefundDraftLine = {
 };
 
 const REFUND_CHARGE_TYPES = ["labor", "charge", "part", "service", "service_addon", "session", "package", "print", "addon", "product", "alteration", "room", "amenity", "meal"];
+const headerInputClass = "no-print mt-1 h-8 w-full border border-[#c9c5b9] bg-white px-2 text-[12px] normal-case outline-none focus:border-[#167c73]";
+const headerSideButton = "inline-flex h-8 min-w-[4.5rem] items-center justify-center border px-2 text-[10px] font-bold uppercase leading-none";
+
+function HeaderField({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
+  return (
+    <label className={`block min-w-0 text-[9px] font-bold uppercase tracking-wide text-[#6f746e] ${className ?? ""}`}>
+      {label}
+      {children}
+    </label>
+  );
+}
 
 function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
@@ -273,12 +284,22 @@ export default function BillDetailPage() {
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [clearingPaymentId, setClearingPaymentId] = useState<number | null>(null);
   const [mileageDraft, setMileageDraft] = useState("");
+  const [customerNameDraft, setCustomerNameDraft] = useState("");
+  const [customerPhoneDraft, setCustomerPhoneDraft] = useState("");
+  const [customerAddressDraft, setCustomerAddressDraft] = useState("");
   const [driverNameDraft, setDriverNameDraft] = useState("");
   const [plateDraft, setPlateDraft] = useState("");
+  const [chassisDraft, setChassisDraft] = useState("");
+  const [makeDraft, setMakeDraft] = useState("");
+  const [modelDraft, setModelDraft] = useState("");
+  const [yearDraft, setYearDraft] = useState("");
   const [driverPhoneDraft, setDriverPhoneDraft] = useState("");
   const [nextServiceMileageDraft, setNextServiceMileageDraft] = useState("");
   const [nextServiceDueDraft, setNextServiceDueDraft] = useState("");
-  const [savingMileage, setSavingMileage] = useState(false);
+  const [headerEditing, setHeaderEditing] = useState(false);
+  const headerEditingRef = useRef(false);
+  const skipHeaderSubmit = useRef(false);
+  const [savingHeader, setSavingHeader] = useState(false);
   const [savingFloor, setSavingFloor] = useState(false);
   const [internalNotes, setInternalNotes] = useState("");
   const [noteColor, setNoteColor] = useState<"blue" | "red">("blue");
@@ -673,9 +694,20 @@ export default function BillDetailPage() {
     api<Bill>(`/bills/${id}`)
       .then((result) => {
         setBill(result);
+        if (!headerEditingRef.current) {
+          setHeaderEditing(false);
+        }
+        if (headerEditingRef.current) return;
+        setCustomerNameDraft(result.customer?.name ?? "");
+        setCustomerPhoneDraft(result.customer?.phone ?? "");
+        setCustomerAddressDraft(result.customer?.address ?? "");
         setDriverNameDraft(result.driver_name ?? "");
         setDriverPhoneDraft(result.driver_phone ?? "");
         setPlateDraft(result.vehicle?.number_plate ?? "");
+        setChassisDraft(result.vehicle?.chassis_number ?? "");
+        setMakeDraft(result.vehicle?.make ?? "");
+        setModelDraft(result.vehicle?.model ?? "");
+        setYearDraft(result.vehicle?.year != null && result.vehicle.year !== "" ? String(result.vehicle.year) : "");
         setMileageDraft(result.mileage != null && result.mileage !== "" ? String(result.mileage) : "");
         setNextServiceMileageDraft(result.next_service_mileage != null && result.next_service_mileage !== "" ? String(result.next_service_mileage) : "");
         setNextServiceDueDraft(result.next_service_due_on ? String(result.next_service_due_on).slice(0, 10) : "");
@@ -1348,53 +1380,83 @@ export default function BillDetailPage() {
     }
   }
 
-  async function saveDriver() {
-    if (isLocked || !bill) return;
-    const name = driverNameDraft.trim();
-    const phone = driverPhoneDraft.trim();
-    if (name === (bill.driver_name ?? "") && phone === (bill.driver_phone ?? "")) return;
-    setError("");
-    try {
-      const updated = await api<Bill>(`/bills/${id}`, {
-        method: "PUT",
-        body: JSON.stringify({ driver_name: name || null, driver_phone: phone || null }),
-      });
-      setBill({ ...bill, driver_name: updated.driver_name, driver_phone: updated.driver_phone });
-      setDriverNameDraft(updated.driver_name ?? "");
-      setDriverPhoneDraft(updated.driver_phone ?? "");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("bill.err_driver"));
-    }
+  function fillHeaderDrafts(source: Bill) {
+    setCustomerNameDraft(source.customer?.name ?? "");
+    setCustomerPhoneDraft(source.customer?.phone ?? "");
+    setCustomerAddressDraft(source.customer?.address ?? "");
+    setDriverNameDraft(source.driver_name ?? "");
+    setDriverPhoneDraft(source.driver_phone ?? "");
+    setPlateDraft(source.vehicle?.number_plate ?? "");
+    setChassisDraft(source.vehicle?.chassis_number ?? "");
+    setMakeDraft(source.vehicle?.make ?? "");
+    setModelDraft(source.vehicle?.model ?? "");
+    setYearDraft(source.vehicle?.year != null && source.vehicle.year !== "" ? String(source.vehicle.year) : "");
+    setMileageDraft(source.mileage != null && source.mileage !== "" ? String(source.mileage) : "");
+    setNextServiceMileageDraft(
+      source.next_service_mileage != null && source.next_service_mileage !== "" ? String(source.next_service_mileage) : "",
+    );
+    setNextServiceDueDraft(source.next_service_due_on ? String(source.next_service_due_on).slice(0, 10) : "");
   }
 
-  async function savePlate() {
+  function beginHeaderEdit(event: MouseEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    event.stopPropagation();
     if (isLocked || !bill?.vehicle) return;
+    skipHeaderSubmit.current = true;
+    window.setTimeout(() => {
+      skipHeaderSubmit.current = false;
+    }, 0);
+    fillHeaderDrafts(bill);
+    headerEditingRef.current = true;
+    setHeaderEditing(true);
+  }
+
+  function cancelHeaderEdit() {
+    if (bill) fillHeaderDrafts(bill);
+    headerEditingRef.current = false;
+    setHeaderEditing(false);
+  }
+
+  async function saveHeader(event?: FormEvent) {
+    event?.preventDefault();
+    if (skipHeaderSubmit.current) return;
+    if (!headerEditingRef.current || isLocked || !bill?.vehicle) return;
     const plate = plateDraft.trim().toUpperCase();
-    if (!plate || plate === bill.vehicle.number_plate) {
-      setPlateDraft(bill.vehicle.number_plate);
+    const removed = (current: string | number | null | undefined, draft: string, message: string) =>
+      String(current ?? "").trim() !== "" && draft.trim() === "" ? message : "";
+    const blocked = [
+      removed(bill.customer?.name, customerNameDraft, "The customer name cannot be removed."),
+      removed(bill.customer?.phone, customerPhoneDraft, "The customer phone cannot be removed."),
+      removed(bill.customer?.address, customerAddressDraft, "The customer address cannot be removed."),
+      removed(bill.driver_name, driverNameDraft, "The driver name cannot be removed."),
+      removed(bill.driver_phone, driverPhoneDraft, "The driver phone cannot be removed."),
+      removed(bill.vehicle.number_plate, plate, "The vehicle number cannot be removed."),
+      removed(bill.vehicle.chassis_number, chassisDraft, "The chassis number cannot be removed."),
+      removed(bill.vehicle.make, makeDraft, "The make cannot be removed."),
+      removed(bill.vehicle.model, modelDraft, "The model cannot be removed."),
+      removed(bill.vehicle.year, yearDraft, "The vehicle year cannot be removed."),
+      removed(bill.mileage, mileageDraft, "The mileage cannot be removed."),
+      showsServiceFields ? removed(bill.next_service_mileage, nextServiceMileageDraft, "The next service km cannot be removed.") : "",
+      showsServiceFields && canReminders ? removed(bill.next_service_due_on, nextServiceDueDraft, "The next service date cannot be removed.") : "",
+    ].find(Boolean);
+    if (!plate || blocked) {
+      setError(blocked || "Enter the vehicle number.");
       return;
     }
-    setError("");
-    try {
-      const updated = await api<Bill>(`/bills/${id}`, {
-        method: "PUT",
-        body: JSON.stringify({ number_plate: plate }),
-      });
-      setBill(updated);
-      setPlateDraft(updated.vehicle?.number_plate ?? plate);
-    } catch (caught) {
-      setPlateDraft(bill.vehicle.number_plate);
-      setError(caught instanceof Error ? caught.message : "Could not save the vehicle number.");
-    }
-  }
-
-  async function saveMileage(event: FormEvent) {
-    event.preventDefault();
-    if (isLocked || !bill) return;
-    setSavingMileage(true);
+    setSavingHeader(true);
     setError("");
     try {
       const payload: Record<string, number | string | null> = {
+        customer_name: customerNameDraft.trim() || null,
+        customer_phone: customerPhoneDraft.trim() || null,
+        customer_address: customerAddressDraft.trim() || null,
+        driver_name: driverNameDraft.trim() || null,
+        driver_phone: driverPhoneDraft.trim() || null,
+        number_plate: plate,
+        chassis_number: chassisDraft.trim() || null,
+        make: makeDraft.trim() || null,
+        model: modelDraft.trim() || null,
+        year: yearDraft.trim() === "" ? null : Number(yearDraft),
         mileage: mileageDraft === "" ? null : Number(mileageDraft),
       };
       if (showsServiceFields) {
@@ -1408,17 +1470,13 @@ export default function BillDetailPage() {
         body: JSON.stringify(payload),
       });
       setBill(updated);
-      setMileageDraft(updated.mileage != null && updated.mileage !== "" ? String(updated.mileage) : "");
-      setNextServiceMileageDraft(
-        updated.next_service_mileage != null && updated.next_service_mileage !== ""
-          ? String(updated.next_service_mileage)
-          : "",
-      );
-      setNextServiceDueDraft(updated.next_service_due_on ? String(updated.next_service_due_on).slice(0, 10) : "");
+      fillHeaderDrafts(updated);
+      headerEditingRef.current = false;
+      setHeaderEditing(false);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("bill.err_mileage"));
+      setError(caught instanceof Error ? caught.message : "Could not save the vehicle details.");
     } finally {
-      setSavingMileage(false);
+      setSavingHeader(false);
     }
   }
 
@@ -2034,158 +2092,140 @@ export default function BillDetailPage() {
           </Panel>
 
           <Panel className={isGarageInstant ? "bill-instant-meta" : undefined}>
-            <div className="bill-meta grid gap-x-3 gap-y-2 p-2.5 sm:grid-cols-2 sm:p-3 lg:grid-cols-4">
-              <div className="bill-customer min-w-0">
-                <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{t("common.customer")}</p>
-                <p className="mt-0.5 text-[13px] font-semibold leading-tight">{bill.customer?.name ?? t("common.walk_in")}</p>
-                {bill.customer?.phone && (
-                  <p className="text-[11px] leading-tight text-[#6f746e]">{bill.customer.phone}</p>
-                )}
-                {bill.customer?.address && (
-                  <p className="mt-0.5 text-[10px] leading-tight text-[#6f746e]">{bill.customer.address}</p>
-                )}
-                {bill.vehicle && (bill.driver_name || bill.driver_phone) && (
-                  <p className={`mt-1 text-[11px] leading-tight ${!isLocked ? "hidden print:block" : ""}`}>
-                    <span className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{t("bill.driver")} </span>
-                    {[bill.driver_name, bill.driver_phone].filter(Boolean).join(" · ")}
-                  </p>
+            <form onSubmit={saveHeader}>
+              <div className="flex items-stretch">
+                <div className={`bill-meta grid min-w-0 flex-1 gap-x-3 gap-y-2 p-2.5 sm:grid-cols-2 sm:p-3 lg:grid-cols-4 ${headerEditing ? "hidden print:grid" : ""}`}>
+                  <div className="bill-customer min-w-0">
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{t("common.customer")}</p>
+                    <p className="mt-0.5 text-[13px] font-semibold leading-tight">{bill.customer?.name ?? t("common.walk_in")}</p>
+                    {bill.customer?.phone && (
+                      <p className="text-[11px] leading-tight text-[#6f746e]">{bill.customer.phone}</p>
+                    )}
+                    {bill.customer?.address && (
+                      <p className="mt-0.5 text-[10px] leading-tight text-[#6f746e]">{bill.customer.address}</p>
+                    )}
+                    {bill.vehicle && (bill.driver_name || bill.driver_phone) && (
+                      <p className="mt-1 text-[11px] leading-tight">
+                        <span className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{t("bill.driver")} </span>
+                        {[bill.driver_name, bill.driver_phone].filter(Boolean).join(" · ")}
+                      </p>
+                    )}
+                  </div>
+                  {bill.vehicle ? (
+                    <>
+                      <div className="min-w-0">
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{profile.type === "device_repair" ? t("admit.device") : t("common.vehicle")}</p>
+                        <p className="mt-0.5 text-[13px] font-semibold leading-tight tracking-wide">{bill.vehicle.number_plate}</p>
+                        <p className="text-[11px] leading-tight text-[#6f746e]">
+                          {[bill.vehicle.make, bill.vehicle.model, bill.vehicle.year].filter((part) => part != null && String(part).trim() !== "").join(" ") || "—"}
+                        </p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{t("bill.chassis")}</p>
+                        <p className="mt-0.5 break-all text-[11px] leading-tight">{bill.vehicle.chassis_number || "—"}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{t("bill.mileage")}</p>
+                        <p className="mt-0.5 text-[12px] font-semibold leading-tight">
+                          {bill.mileage != null && bill.mileage !== "" ? t("common.km", { count: Number(bill.mileage).toLocaleString() }) : "—"}
+                          {showsServiceFields && (bill.next_service_mileage != null && bill.next_service_mileage !== ""
+                            ? ` · ${t("bill.next_service")} ${Number(bill.next_service_mileage).toLocaleString()} km`
+                            : "")}
+                          {showsServiceFields && bill.next_service_due_on ? ` · ${formatDate(bill.next_service_due_on)}` : ""}
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="bill-instant-kind sm:col-span-2">
+                      <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">
+                        {isStore ? (bill.job_kind === "repair" ? t("bill.repair") : t("bill.sale")) : bill.job_kind === "parts_sale" ? t("bill.instant_bill") : t("common.type")}
+                      </p>
+                      <p className="mt-0.5 text-[13px] font-semibold leading-tight">
+                        {isStore
+                          ? (bill.notes || (bill.job_kind === "repair" ? t("bill.repair_job") : t("bill.counter_sale")))
+                          : (bill.job_kind === "parts_sale" ? t("bill.no_vehicle") : t(`terms.${profile.label}`))}
+                      </p>
+                    </div>
+                  )}
+                  {(bill.warranty_until || Number(bill.warranty_months) > 0) && (
+                    <div className="min-w-0">
+                      <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{t("common.warranty")}</p>
+                      <p className="mt-0.5 text-[12px] font-semibold leading-tight">
+                        {warrantyLabel(bill.warranty_months, bill.warranty_until, bill.warranty_starts_on, t)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                {headerEditing && bill.vehicle && (
+                  <div className="no-print grid min-w-0 flex-1 grid-cols-2 gap-x-3 gap-y-3 p-3 lg:grid-cols-4">
+                    <p className="col-span-2 text-[10px] font-bold uppercase tracking-wide text-[#20221f] lg:col-span-4">{t("common.customer")}</p>
+                    <HeaderField label={t("admit.customer_name")}>
+                      <input value={customerNameDraft} onChange={(event) => setCustomerNameDraft(event.target.value)} className={headerInputClass} />
+                    </HeaderField>
+                    <HeaderField label={t("admit.customer_phone")}>
+                      <input type="tel" value={customerPhoneDraft} onChange={(event) => setCustomerPhoneDraft(event.target.value)} className={headerInputClass} />
+                    </HeaderField>
+                    <HeaderField label={t("admit.customer_address")} className="col-span-2">
+                      <input value={customerAddressDraft} onChange={(event) => setCustomerAddressDraft(event.target.value)} className={headerInputClass} />
+                    </HeaderField>
+                    <p className="col-span-2 mt-1 text-[10px] font-bold uppercase tracking-wide text-[#20221f] lg:col-span-4">{t("bill.driver")}</p>
+                    <HeaderField label={t("admit.driver_name")}>
+                      <input value={driverNameDraft} onChange={(event) => setDriverNameDraft(event.target.value)} className={headerInputClass} />
+                    </HeaderField>
+                    <HeaderField label={t("admit.driver_phone")}>
+                      <input type="tel" value={driverPhoneDraft} onChange={(event) => setDriverPhoneDraft(event.target.value)} className={headerInputClass} />
+                    </HeaderField>
+                    <p className="col-span-2 mt-1 text-[10px] font-bold uppercase tracking-wide text-[#20221f] lg:col-span-4">{profile.type === "device_repair" ? t("admit.device") : t("common.vehicle")}</p>
+                    <HeaderField label={profile.type === "device_repair" ? t("admit.device") : t("admit.number_plate")}>
+                      <input value={plateDraft} onChange={(event) => setPlateDraft(event.target.value.toUpperCase())} className={`${headerInputClass} font-semibold uppercase tracking-wide`} />
+                    </HeaderField>
+                    <HeaderField label={t("bill.chassis")}>
+                      <input value={chassisDraft} onChange={(event) => setChassisDraft(event.target.value.toUpperCase())} className={`${headerInputClass} uppercase`} />
+                    </HeaderField>
+                    <HeaderField label={t("admit.make")}>
+                      <input value={makeDraft} onChange={(event) => setMakeDraft(event.target.value)} className={headerInputClass} />
+                    </HeaderField>
+                    <HeaderField label={t("admit.model")}>
+                      <input value={modelDraft} onChange={(event) => setModelDraft(event.target.value)} className={headerInputClass} />
+                    </HeaderField>
+                    <HeaderField label={profile.type === "device_repair" ? t("admit.year_device") : t("admit.year")}>
+                      <input type="number" min="1900" max={new Date().getFullYear() + 1} value={yearDraft} onChange={(event) => setYearDraft(event.target.value)} className={headerInputClass} />
+                    </HeaderField>
+                    <HeaderField label={t("bill.current_km")}>
+                      <input type="number" min="0" step="1" value={mileageDraft} onChange={(event) => setMileageDraft(event.target.value)} className={`${headerInputClass} tabular-nums`} />
+                    </HeaderField>
+                    {showsServiceFields && (
+                      <HeaderField label={t("bill.next_km")}>
+                        <input type="number" min="0" step="1" value={nextServiceMileageDraft} onChange={(event) => setNextServiceMileageDraft(event.target.value)} className={`${headerInputClass} tabular-nums`} />
+                      </HeaderField>
+                    )}
+                    {showsServiceFields && canReminders && (
+                      <HeaderField label={t("bill.next_due")}>
+                        <input type="date" value={nextServiceDueDraft} onChange={(event) => setNextServiceDueDraft(event.target.value)} className={headerInputClass} />
+                      </HeaderField>
+                    )}
+                  </div>
                 )}
                 {bill.vehicle && !isLocked && (
-                  <div className="no-print mt-1.5 grid max-w-[15rem] grid-cols-2 gap-1">
-                    <input
-                      value={driverNameDraft}
-                      onChange={(event) => setDriverNameDraft(event.target.value)}
-                      onBlur={() => void saveDriver()}
-                      className="h-6 w-full border border-[#c9c5b9] bg-white px-1.5 text-[10px] outline-none focus:border-[#167c73]"
-                      placeholder={t("admit.driver_name")}
-                      aria-label={t("admit.driver_name")}
-                    />
-                    <input
-                      type="tel"
-                      value={driverPhoneDraft}
-                      onChange={(event) => setDriverPhoneDraft(event.target.value)}
-                      onBlur={() => void saveDriver()}
-                      className="h-6 w-full border border-[#c9c5b9] bg-white px-1.5 text-[10px] outline-none focus:border-[#167c73]"
-                      placeholder={t("admit.driver_phone")}
-                      aria-label={t("admit.driver_phone")}
-                    />
+                  <div className="no-print flex shrink-0 flex-col justify-start gap-1 border-l border-[#e8e4da] px-2 pt-3">
+                    {headerEditing ? (
+                      <>
+                        <button type="button" onClick={() => void saveHeader()} disabled={savingHeader} className={`${headerSideButton} border-[#20221f] bg-[#20221f] text-white disabled:opacity-50`}>
+                          {savingHeader ? "..." : t("common.save")}
+                        </button>
+                        <button type="button" onClick={cancelHeaderEdit} disabled={savingHeader} className={`${headerSideButton} border-[#c9c5b9] bg-white`}>
+                          {t("common.cancel")}
+                        </button>
+                      </>
+                    ) : (
+                      <button type="button" onClick={beginHeaderEdit} className={`${headerSideButton} border-[#20221f] bg-white`}>
+                        {t("common.edit")}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
-              {bill.vehicle ? (
-                <>
-                  <div className="min-w-0">
-                    <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{profile.type === "device_repair" ? t("admit.device") : t("common.vehicle")}</p>
-                    {isLocked ? (
-                      <p className="mt-0.5 text-[13px] font-semibold leading-tight tracking-wide">{bill.vehicle.number_plate}</p>
-                    ) : (
-                      <input
-                        value={plateDraft}
-                        onChange={(event) => setPlateDraft(event.target.value.toUpperCase())}
-                        onBlur={() => void savePlate()}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") event.currentTarget.blur();
-                        }}
-                        className="no-print mt-0.5 h-7 w-full max-w-[12rem] border border-[#c9c5b9] bg-white px-1.5 text-[13px] font-semibold uppercase tracking-wide outline-none focus:border-[#167c73]"
-                        aria-label={profile.type === "device_repair" ? t("admit.device") : t("common.vehicle")}
-                      />
-                    )}
-                    {!isLocked && (
-                      <p className="mt-0.5 hidden text-[13px] font-semibold leading-tight tracking-wide print:block">{bill.vehicle.number_plate}</p>
-                    )}
-                    <p className="text-[11px] leading-tight text-[#6f746e]">{bill.vehicle.make} {bill.vehicle.model}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{t("bill.chassis")}</p>
-                    <p className="mt-0.5 break-all text-[11px] leading-tight">{bill.vehicle.chassis_number || "—"}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{t("bill.mileage")}</p>
-                    <p className="mt-0.5 text-[12px] font-semibold leading-tight">
-                      {bill.mileage != null && bill.mileage !== "" ? t("common.km", { count: Number(bill.mileage).toLocaleString() }) : "—"}
-                      {showsServiceFields && (bill.next_service_mileage != null && bill.next_service_mileage !== ""
-                        ? ` · ${t("bill.next_service")} ${Number(bill.next_service_mileage).toLocaleString()} km`
-                        : "")}
-                      {showsServiceFields && bill.next_service_due_on ? ` · ${formatDate(bill.next_service_due_on)}` : ""}
-                    </p>
-                    {!isLocked && (
-                      <form
-                        onSubmit={saveMileage}
-                        className="no-print mt-1.5 grid max-w-[15rem] grid-cols-2 gap-1"
-                      >
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={mileageDraft}
-                          onChange={(event) => setMileageDraft(event.target.value)}
-                          className="h-6 w-full border border-[#c9c5b9] bg-white px-1.5 text-[10px] tabular-nums outline-none focus:border-[#167c73]"
-                          placeholder={t("bill.current_km")}
-                          aria-label={t("bill.current_km")}
-                        />
-                        {showsServiceFields ? (
-                          <input
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={nextServiceMileageDraft}
-                            onChange={(event) => setNextServiceMileageDraft(event.target.value)}
-                            className="h-6 w-full border border-[#c9c5b9] bg-white px-1.5 text-[10px] tabular-nums outline-none focus:border-[#167c73]"
-                            placeholder={t("bill.next_km")}
-                            aria-label={t("bill.next_km")}
-                          />
-                        ) : (
-                          <button
-                            type="submit"
-                            disabled={savingMileage}
-                            className="inline-flex h-6 w-full items-center justify-center border border-[#20221f] px-2 text-[9px] font-bold uppercase leading-none"
-                          >
-                            {savingMileage ? "..." : t("common.save")}
-                          </button>
-                        )}
-                        {showsServiceFields && canReminders && (
-                          <input
-                            type="date"
-                            value={nextServiceDueDraft}
-                            onChange={(event) => setNextServiceDueDraft(event.target.value)}
-                            className="h-6 w-full border border-[#c9c5b9] bg-white px-1 text-[10px] outline-none focus:border-[#167c73]"
-                            aria-label={t("bill.next_due")}
-                          />
-                        )}
-                        {showsServiceFields && (
-                          <button
-                            type="submit"
-                            disabled={savingMileage}
-                            className={`inline-flex h-6 w-full items-center justify-center border border-[#20221f] px-2 text-[9px] font-bold uppercase leading-none ${!canReminders ? "col-start-2" : ""}`}
-                          >
-                            {savingMileage ? "..." : t("common.save")}
-                          </button>
-                        )}
-                      </form>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div className="bill-instant-kind sm:col-span-2">
-                  <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">
-                    {isStore ? (bill.job_kind === "repair" ? t("bill.repair") : t("bill.sale")) : bill.job_kind === "parts_sale" ? t("bill.instant_bill") : t("common.type")}
-                  </p>
-                  <p className="mt-0.5 text-[13px] font-semibold leading-tight">
-                    {isStore
-                      ? (bill.notes || (bill.job_kind === "repair" ? t("bill.repair_job") : t("bill.counter_sale")))
-                      : (bill.job_kind === "parts_sale" ? t("bill.no_vehicle") : t(`terms.${profile.label}`))}
-                  </p>
-                </div>
-              )}
-              {(bill.warranty_until || Number(bill.warranty_months) > 0) && (
-                <div className="min-w-0">
-                  <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{t("common.warranty")}</p>
-                  <p className="mt-0.5 text-[12px] font-semibold leading-tight">
-                    {warrantyLabel(bill.warranty_months, bill.warranty_until, bill.warranty_starts_on, t)}
-                  </p>
-                </div>
-              )}
-            </div>
+            </form>
           </Panel>
 
           {bill.is_free && bill.free_reason && (
