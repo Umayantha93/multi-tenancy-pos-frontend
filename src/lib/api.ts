@@ -79,6 +79,7 @@ export type FeatureKey =
   | "photo_bookings"
   | "photo_packages"
   | "retail_pos"
+  | "customer_display"
   | "product_catalog"
   | "cottage_rooms"
   | "cottage_stays"
@@ -88,6 +89,7 @@ export type FeatureKey =
   | "station_consumables"
   | "expense_job_split"
   | "finance_report_export"
+  | "owe_in_register"
   | "job_videos"
   | "job_photos"
   | "job_commissions"
@@ -121,7 +123,12 @@ export type Tenant = {
   setup_fee_balance?: number | string | null;
   setup_fee_settled?: boolean;
   payment_due_soon?: boolean;
+  payment_due_kind?: "month_end" | "overdue" | null;
+  payment_due_year?: number | null;
+  payment_due_month?: number | null;
+  show_overdue_fee_banner?: boolean;
   current_month_paid?: boolean;
+  created_at?: string | null;
   logo?: string | null;
   logo_url?: string | null;
   bill_prefix?: string | null;
