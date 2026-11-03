@@ -46,7 +46,7 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
   const pathname = usePathname();
   const router = useRouter();
   const t = useT();
-  const { setLocale } = useLocale();
+  const { setLocale, locale } = useLocale();
   const navRef = useRef<HTMLElement>(null);
   const [user, setUser] = useState<User | null>(cachedUser);
   const [features, setFeatures] = useState<string[]>(cachedFeatures);
@@ -58,6 +58,9 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
   const navigation = profile.navigation;
   const showPaymentReminder = Boolean(user?.tenant?.payment_due_soon);
   const paymentAmount = user?.tenant?.plan_amount;
+  const paymentDueKind = user?.tenant?.payment_due_kind;
+  const paymentDueYear = user?.tenant?.payment_due_year;
+  const paymentDueMonth = user?.tenant?.payment_due_month;
 
   useEffect(() => {
     if (!localStorage.getItem("garage_token")) {
@@ -266,6 +269,9 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
   const logoUrl = mediaUrl(user?.tenant?.logo_url || user?.tenant?.logo);
   const roleLabel = user?.role ? t(`roles.${user.role}`) : t("shell.account");
   const amountLabel = paymentAmount != null ? money(paymentAmount) : t("shell.plan_amount");
+  const duePeriodLabel = paymentDueYear && paymentDueMonth
+    ? new Date(paymentDueYear, paymentDueMonth - 1, 1).toLocaleString(locale === "si" ? "si-LK" : "en-LK", { month: "long", year: "numeric" })
+    : "";
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[240px_1fr]">
@@ -371,7 +377,9 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
         {showPaymentReminder && (
           <div className="no-print flex min-h-20 items-center justify-center bg-[#6b1e2a] px-4 py-5 text-center sm:min-h-24 sm:px-7 sm:py-6">
             <p className="max-w-3xl font-display text-xl font-semibold uppercase leading-snug text-[#f8ebea] sm:text-2xl md:text-3xl">
-              {t("shell.payment_due", { amount: amountLabel })}
+              {paymentDueKind === "overdue"
+                ? t("shell.payment_due_overdue", { amount: amountLabel, period: duePeriodLabel })
+                : t("shell.payment_due", { amount: amountLabel })}
             </p>
           </div>
         )}

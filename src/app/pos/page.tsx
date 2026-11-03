@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ScanBarcode, Trash2, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, QtyStepper, buttonClass, inputClass } from "@/components/ui";
-import { api, currentFeatures, money } from "@/lib/api";
+import { api, currentFeatures, currentUser, money } from "@/lib/api";
 import { usesStoreCounter } from "@/lib/business-profiles";
 import { salePriceLayers } from "@/lib/stock-unit";
 import { useBusinessProfile } from "@/lib/use-business-profile";
@@ -74,8 +74,12 @@ export default function PosPage() {
   const canSerial = sessionReady && isStore && currentFeatures().includes("serial_inventory");
 
   useEffect(() => {
+    if (currentUser()?.tenant?.business_type === "clothing") {
+      router.replace("/clothing");
+      return;
+    }
     setSessionReady(true);
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     if (!sessionReady) return;

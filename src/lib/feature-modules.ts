@@ -22,6 +22,7 @@ const FALLBACK_GROUP: Record<string, string> = {
   photo_bookings: "Service Intake",
   photo_packages: "Service Intake",
   retail_pos: "Service Intake",
+  customer_display: "Service Intake",
   cottage_stays: "Service Intake",
   customers: "Service Intake",
   billing: "Service Intake",
@@ -56,6 +57,7 @@ const FALLBACK_GROUP: Record<string, string> = {
   service_ops_report: "Finance",
   expense_job_split: "Finance",
   finance_report_export: "Finance",
+  owe_in_register: "Finance",
 };
 
 export const FEATURE_PARENTS: Record<string, string> = {
@@ -73,12 +75,14 @@ export const FEATURE_PARENTS: Record<string, string> = {
   free_service: "billing",
   show_bill_technicians: "billing",
   line_discounts: "billing",
+  customer_display: "retail_pos",
   serial_inventory: "parts_inventory",
   inventory_edit: "parts_inventory",
   station_consumables: "parts_inventory",
   bill_whatsapp: "billing",
   expense_job_split: "balance_sheet",
   finance_report_export: "balance_sheet",
+  owe_in_register: "balance_sheet",
 };
 
 /** Full catalog fallback — prefer profileFor(type).moduleCatalog when type is known. */

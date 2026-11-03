@@ -42,7 +42,31 @@ type FeePayment = {
   notes?: string | null;
   marked_by?: { id: number; name: string; email: string } | null;
 };
-type FeePaymentsResponse = { current_month_paid: boolean; payments: FeePayment[] };
+type FeeMonth = {
+  year: number;
+  month: number;
+  period: string;
+  status: "paid" | "unpaid" | "upcoming" | "before";
+  amount: number | string | null;
+  paid_at?: string | null;
+  marked_by?: { id: number; name: string; email: string } | null;
+};
+type LastMonthFee = {
+  year: number;
+  month: number;
+  period: string;
+  applies: boolean;
+  paid: boolean;
+  amount: number | string | null;
+};
+type FeePaymentsResponse = {
+  year: number;
+  current_month_paid: boolean;
+  show_overdue_fee_banner: boolean;
+  last_month: LastMonthFee;
+  months: FeeMonth[];
+  payments: FeePayment[];
+};
 type SetupFeePayment = {
   id: number;
   amount: number | string;
@@ -63,8 +87,10 @@ type ConfirmState = {
   message: string;
   confirmLabel: string;
   tone: "default" | "danger" | "teal";
-  action: "status" | "dual-enable" | "dual-disable" | "fee-paid" | "fee-unpaid" | "delete" | "setup-remove" | "reset-bills";
+  action: "status" | "dual-enable" | "dual-disable" | "fee-paid" | "fee-unpaid" | "banner-show" | "banner-hide" | "delete" | "setup-remove" | "reset-bills";
   paymentId?: number;
+  year?: number;
+  month?: number;
 };
 
 function money(value: number | string | null | undefined) {
@@ -81,6 +107,15 @@ function periodLabel(period: string) {
 function localToday() {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function feeYearOptions(createdAt?: string | null) {
+  const current = new Date().getFullYear();
+  const created = createdAt ? new Date(createdAt).getFullYear() : current;
+  const from = Number.isFinite(created) ? Math.min(created, current) : current;
+  const years: string[] = [];
+  for (let year = current; year >= from; year -= 1) years.push(String(year));
+  return years.length > 0 ? years : [String(current)];
 }
 
 export default function TenantDetailPage() {
@@ -106,6 +141,10 @@ export default function TenantDetailPage() {
   const [secondaryEmail, setSecondaryEmail] = useState("");
   const [secondaryPassword, setSecondaryPassword] = useState("");
   const [feePayments, setFeePayments] = useState<FeePayment[]>([]);
+  const [feeMonths, setFeeMonths] = useState<FeeMonth[]>([]);
+  const [feeYear, setFeeYear] = useState(String(new Date().getFullYear()));
+  const [lastMonthFee, setLastMonthFee] = useState<LastMonthFee | null>(null);
+  const [showOverdueBanner, setShowOverdueBanner] = useState(false);
   const [currentMonthPaid, setCurrentMonthPaid] = useState(false);
   const [setupPayments, setSetupPayments] = useState<SetupFeePayment[]>([]);
   const [setupPaid, setSetupPaid] = useState(0);
@@ -124,7 +163,7 @@ export default function TenantDetailPage() {
     Promise.all([
       api<Detail>(`/super-admin/tenants/${id}`),
       api<FeatureResponse>(`/super-admin/tenants/${id}/features`),
-      api<FeePaymentsResponse>(`/super-admin/tenants/${id}/fee-payments`),
+      api<FeePaymentsResponse>(`/super-admin/tenants/${id}/fee-payments?year=${new Date().getFullYear()}`),
       api<SetupFeeResponse>(`/super-admin/tenants/${id}/setup-fee-payments`),
       api<Branch[]>(`/super-admin/tenants/${id}/branches`),
     ])
@@ -134,8 +173,7 @@ export default function TenantDetailPage() {
         setEnabled(features.enabled);
         setCommissionType(features.commission_type || "labor_excess");
         setCommissionTypes(features.commission_types ?? []);
-        setFeePayments(fees.payments);
-        setCurrentMonthPaid(fees.current_month_paid);
+        applyFees(fees);
         setSetupPayments(setup.payments);
         setSetupPaid(Number(setup.setup_fee_paid || 0));
         setSetupBalance(Number(setup.setup_fee_balance || 0));
@@ -336,39 +374,94 @@ export default function TenantDetailPage() {
     }
   }
 
-  function requestFeeChange(paid: boolean) {
+  function applyFees(fees: FeePaymentsResponse) {
+    setFeePayments(fees.payments);
+    setFeeMonths(fees.months ?? []);
+    setLastMonthFee(fees.last_month ?? null);
+    setShowOverdueBanner(Boolean(fees.show_overdue_fee_banner));
+    setCurrentMonthPaid(fees.current_month_paid);
+    if (fees.year) setFeeYear(String(fees.year));
+    setTenant((current) => (current ? { ...current, current_month_paid: fees.current_month_paid, show_overdue_fee_banner: fees.show_overdue_fee_banner } : current));
+  }
+
+  async function changeFeeYear(year: string) {
+    setFeeYear(year);
+    setFeeSaving(true);
+    setError("");
+    try {
+      applyFees(await api<FeePaymentsResponse>(`/super-admin/tenants/${id}/fee-payments?year=${year}`));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to load that year.");
+    } finally {
+      setFeeSaving(false);
+    }
+  }
+
+  function requestFeeChange(paid: boolean, year: number, month: number) {
     if (!tenant) return;
+    const period = periodLabel(`${year}-${String(month).padStart(2, "0")}`);
     setConfirm({
       title: paid ? "Mark monthly fee paid" : "Mark monthly fee unpaid",
       message: paid
-        ? `Mark ${tenant.business_name}'s fee as paid for the current month (${money(tenant.plan_amount)})?`
-        : `Mark ${tenant.business_name}'s fee as unpaid for the current month?`,
+        ? `Mark ${tenant.business_name}'s fee as paid for ${period} (${money(tenant.plan_amount)})?`
+        : `Mark ${tenant.business_name}'s fee as unpaid for ${period}?`,
       confirmLabel: paid ? "Mark paid" : "Mark unpaid",
       tone: paid ? "teal" : "danger",
       action: paid ? "fee-paid" : "fee-unpaid",
+      year,
+      month,
     });
   }
 
-  async function saveFeePayment(paid: boolean) {
+  function requestBannerChange(show: boolean) {
+    if (!tenant || !lastMonthFee) return;
+    const period = periodLabel(lastMonthFee.period);
+    setConfirm({
+      title: show ? "Show last month due" : "Hide last month due",
+      message: show
+        ? `Show ${period} (${money(lastMonthFee.amount)}) at the top of ${tenant.business_name}'s system until it is marked paid?`
+        : `Hide the last-month banner on ${tenant.business_name}'s system?`,
+      confirmLabel: show ? "Show banner" : "Hide banner",
+      tone: show ? "teal" : "danger",
+      action: show ? "banner-show" : "banner-hide",
+    });
+  }
+
+  async function saveFeePayment(paid: boolean, year: number, month: number) {
     if (!tenant) return;
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1;
+    const period = periodLabel(`${year}-${String(month).padStart(2, "0")}`);
     setFeeSaving(true);
     setError("");
     setNotice("");
     try {
       const result = await api<FeePaymentsResponse>(
-        `/super-admin/tenants/${id}/fee-payments/${year}/${month}`,
+        `/super-admin/tenants/${id}/fee-payments/${year}/${month}?year=${feeYear}`,
         { method: "PUT", body: JSON.stringify({ paid }) },
       );
-      setFeePayments(result.payments);
-      setCurrentMonthPaid(result.current_month_paid);
-      setTenant((current) => (current ? { ...current, current_month_paid: result.current_month_paid } : current));
-      setNotice(paid ? "Current month marked as paid." : "Current month marked as unpaid.");
+      applyFees(result);
+      setNotice(paid ? `${period} marked as paid.` : `${period} marked as unpaid.`);
       setConfirm(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to update fee payment.");
+    } finally {
+      setFeeSaving(false);
+    }
+  }
+
+  async function saveOverdueBanner(show: boolean) {
+    setFeeSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await api<FeePaymentsResponse>(
+        `/super-admin/tenants/${id}/fee-banner?year=${feeYear}`,
+        { method: "PUT", body: JSON.stringify({ show }) },
+      );
+      applyFees(result);
+      setNotice(show ? "Last month's due is now showing at the top of their system." : "The last-month banner is hidden.");
+      setConfirm(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to update the banner.");
     } finally {
       setFeeSaving(false);
     }
@@ -488,8 +581,10 @@ export default function TenantDetailPage() {
     if (confirm.action === "reset-bills") await resetBillNumbers();
     if (confirm.action === "dual-enable") await saveDualFinancialView(true);
     if (confirm.action === "dual-disable") await saveDualFinancialView(false);
-    if (confirm.action === "fee-paid") await saveFeePayment(true);
-    if (confirm.action === "fee-unpaid") await saveFeePayment(false);
+    if (confirm.action === "fee-paid" && confirm.year && confirm.month) await saveFeePayment(true, confirm.year, confirm.month);
+    if (confirm.action === "fee-unpaid" && confirm.year && confirm.month) await saveFeePayment(false, confirm.year, confirm.month);
+    if (confirm.action === "banner-show") await saveOverdueBanner(true);
+    if (confirm.action === "banner-hide") await saveOverdueBanner(false);
     if (confirm.action === "setup-remove" && confirm.paymentId) await removeSetupPayment(confirm.paymentId);
   }
 
@@ -859,68 +954,136 @@ export default function TenantDetailPage() {
             </Panel>
 
             <Panel className="p-5">
-              <h2 className="font-display text-2xl font-semibold uppercase">Monthly fee payments</h2>
-              <p className="mt-2 text-sm text-[#6f746e]">
-                Track SaaS fee collection for this business. Mark the current month paid after payment is received.
-              </p>
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h2 className="font-display text-2xl font-semibold uppercase">Monthly fee payments</h2>
+                  <p className="mt-2 text-sm text-[#6f746e]">
+                    Each month for this business. The top banner shows itself in the last five days, then stays off in the new month until you show last month&apos;s due.
+                  </p>
+                </div>
+                {tenant.payment_plan === "monthly" && (
+                  <label className="text-xs font-bold uppercase">
+                    Year
+                    <select
+                      value={feeYear}
+                      onChange={(event) => changeFeeYear(event.target.value)}
+                      className={`${inputClass} mt-2 w-28`}
+                    >
+                      {feeYearOptions(tenant.created_at).map((year) => (
+                        <option key={year} value={year}>{year}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
               {tenant.payment_plan === "monthly" ? (
                 <>
-                  <div className="mt-4 flex items-center justify-between border border-[#d7d3c8] px-4 py-3">
-                    <div>
-                      <p className="text-sm font-semibold">
-                        Current month · {money(tenant.plan_amount)}
-                      </p>
-                      <p className="mt-1 text-xs text-[#6f746e]">
-                        {periodLabel(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`)}
-                      </p>
+                  <div className="mt-4 border border-[#d7d3c8] px-4 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold">
+                          Last month
+                          {lastMonthFee ? ` · ${periodLabel(lastMonthFee.period)} · ${money(lastMonthFee.amount)}` : ""}
+                        </p>
+                        <p className="mt-1 text-xs text-[#6f746e]">
+                          {!lastMonthFee?.applies
+                            ? "No previous month on this plan yet. The banner stays off."
+                            : lastMonthFee.paid
+                              ? "Paid. Their banner stays off for this month."
+                              : showOverdueBanner
+                                ? "Showing at the top of their system until you mark it paid."
+                                : "Hidden in the new month. Show it when you want them to pay this amount."}
+                        </p>
+                      </div>
+                      <span
+                        className={`px-2 py-1 text-[10px] font-bold uppercase ${
+                          !lastMonthFee?.applies
+                            ? "bg-[#e7e4db] text-[#6f746e]"
+                            : lastMonthFee.paid
+                              ? "bg-[#167c73]/10 text-[#167c73]"
+                              : "bg-[#b84837]/10 text-[#b84837]"
+                        }`}
+                      >
+                        {!lastMonthFee?.applies ? "Not due" : lastMonthFee.paid ? "Paid" : "Unpaid"}
+                      </span>
                     </div>
-                    <span
-                      className={`px-2 py-1 text-[10px] font-bold uppercase ${
-                        currentMonthPaid ? "bg-[#167c73]/10 text-[#167c73]" : "bg-[#b84837]/10 text-[#b84837]"
-                      }`}
-                    >
-                      {currentMonthPaid ? "Paid" : "Unpaid"}
-                    </span>
-                  </div>
-                  <button
-                    disabled={feeSaving}
-                    onClick={() => requestFeeChange(!currentMonthPaid)}
-                    className={`${buttonClass} mt-4 w-full ${currentMonthPaid ? "!bg-[#b84837]" : ""}`}
-                  >
-                    {feeSaving ? "Saving..." : currentMonthPaid ? "Mark unpaid" : "Mark paid"}
-                  </button>
-                  <div className="mt-6 overflow-x-auto">
-                    <table className="w-full min-w-[420px] text-left text-sm">
-                      <thead className="bg-[#e7e4db] text-[10px] uppercase text-[#6f746e]">
-                        <tr>
-                          <th className="px-3 py-2">Period</th>
-                          <th>Amount</th>
-                          <th>Paid at</th>
-                          <th>Marked by</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {feePayments.map((payment) => (
-                          <tr key={payment.id} className="border-t border-[#dedad0]">
-                            <td className="px-3 py-3 font-semibold">{periodLabel(payment.period)}</td>
-                            <td>{money(payment.amount)}</td>
-                            <td className="text-xs text-[#6f746e]">
-                              {payment.paid_at
-                                ? new Date(payment.paid_at).toLocaleString("en-LK", {
-                                    dateStyle: "medium",
-                                    timeStyle: "short",
-                                  })
-                                : "—"}
-                            </td>
-                            <td className="text-xs">{payment.marked_by?.name ?? "—"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {feePayments.length === 0 && (
-                      <p className="mt-3 text-sm text-[#6f746e]">No fee payments recorded yet.</p>
+                    {lastMonthFee?.applies && !lastMonthFee.paid && (
+                      <button
+                        type="button"
+                        disabled={feeSaving || tenant.plan_amount == null}
+                        onClick={() => requestBannerChange(!showOverdueBanner)}
+                        className={`${buttonClass} mt-3 ${showOverdueBanner ? "!bg-[#b84837]" : ""}`}
+                      >
+                        {feeSaving ? "Saving..." : showOverdueBanner ? "Hide last month due" : "Show last month due"}
+                      </button>
                     )}
                   </div>
+                  <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {feeMonths.map((month) => {
+                      const actionable = month.status === "paid" || month.status === "unpaid";
+                      const isCurrent = month.year === new Date().getFullYear() && month.month === new Date().getMonth() + 1;
+                      return (
+                        <button
+                          key={month.period}
+                          type="button"
+                          disabled={!actionable || feeSaving}
+                          onClick={() => actionable && requestFeeChange(month.status !== "paid", month.year, month.month)}
+                          className={`border px-3 py-2 text-left disabled:cursor-default disabled:opacity-60 ${
+                            month.status === "paid"
+                              ? "border-[#167c73] bg-[#167c73]/8"
+                              : month.status === "unpaid"
+                                ? "border-[#b84837]/50 bg-[#b84837]/8"
+                                : "border-[#d7d3c8] bg-[#f3f0e8]"
+                          } ${isCurrent ? "ring-2 ring-[#20221f]" : ""}`}
+                        >
+                          <span className="block text-[10px] font-bold uppercase text-[#6f746e]">
+                            {new Date(month.year, month.month - 1, 1).toLocaleString("en-LK", { month: "short" })}
+                            {isCurrent ? " · now" : ""}
+                          </span>
+                          <span className="mt-1 block text-sm font-semibold">
+                            {month.status === "paid" ? "Paid" : month.status === "unpaid" ? "Unpaid" : month.status === "upcoming" ? "Upcoming" : "—"}
+                          </span>
+                          {month.amount != null && month.status !== "before" && month.status !== "upcoming" && (
+                            <span className="mt-1 block text-[11px] text-[#6f746e]">{money(month.amount)}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-3 text-xs text-[#6f746e]">
+                    {feeYear === String(new Date().getFullYear())
+                      ? `This month is ${currentMonthPaid ? "paid" : "unpaid"}. `
+                      : ""}
+                    Click a past or current month to mark it. Upcoming months stay closed.
+                  </p>
+                  {feePayments.some((payment) => String(payment.year) === feeYear) && (
+                    <div className="mt-4 overflow-x-auto">
+                      <table className="w-full min-w-[420px] text-left text-sm">
+                        <thead className="bg-[#e7e4db] text-[10px] uppercase text-[#6f746e]">
+                          <tr>
+                            <th className="px-3 py-2">Recorded</th>
+                            <th>Amount</th>
+                            <th>Paid at</th>
+                            <th>Marked by</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {feePayments.filter((payment) => String(payment.year) === feeYear).map((payment) => (
+                            <tr key={payment.id} className="border-t border-[#dedad0]">
+                              <td className="px-3 py-3 font-semibold">{periodLabel(payment.period)}</td>
+                              <td>{money(payment.amount)}</td>
+                              <td className="text-xs text-[#6f746e]">
+                                {payment.paid_at
+                                  ? new Date(payment.paid_at).toLocaleString("en-LK", { dateStyle: "medium", timeStyle: "short" })
+                                  : "—"}
+                              </td>
+                              <td className="text-xs">{payment.marked_by?.name ?? "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </>
               ) : (
                 <p className="mt-4 text-sm text-[#6f746e]">

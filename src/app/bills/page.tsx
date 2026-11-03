@@ -10,6 +10,7 @@ import { allowsServiceJobs, usesLaborCatalog, usesServiceAddonWorkspace, usesSto
 import { useBusinessProfile } from "@/lib/use-business-profile";
 import { billListStatus, billStatusClass, billStatusLabel, isOweInUrgent } from "@/lib/bill-stamp";
 import { BillingBranchBanner } from "@/components/branch-chip";
+import { HalfToggle, useHalfView } from "@/components/half-toggle";
 import { useRouter } from "next/navigation";
 import { useT } from "@/lib/locale";
 
@@ -76,6 +77,7 @@ export default function BillsPage() {
   const [quickSaving, setQuickSaving] = useState(false);
   const [payNow, setPayNow] = useState(true);
   const profile = useBusinessProfile();
+  const [half, setHalf] = useHalfView();
   const t = useT();
   const router = useRouter();
   const isStore = usesStoreCounter(profile.type);
@@ -100,6 +102,7 @@ export default function BillsPage() {
     if (status === "closed" && closedKind) params.set("closed_kind", closedKind);
     if (dateFrom) params.set("date_from", dateFrom);
     if (dateTo) params.set("date_to", dateTo);
+    if (profile.type === "clothing" && half) params.set("half_view", "1");
 
     api<BillPage>(`/bills?${params}`)
       .then((result) => {
@@ -109,7 +112,7 @@ export default function BillsPage() {
       })
       .catch((caught) => setError(caught.message))
       .finally(() => setLoading(false));
-  }, [search, status, closedKind, dateFrom, dateTo, rangeInvalid, profile.type, t]);
+  }, [search, status, closedKind, dateFrom, dateTo, rangeInvalid, profile.type, half, t]);
 
   useEffect(() => {
     const timer = setTimeout(() => loadBills(1), 250);
@@ -192,6 +195,7 @@ export default function BillsPage() {
               <Zap size={14} /><span className="hidden sm:inline">{t("bills.quick_bill")}</span>
             </button>
           )}
+          {profile.type === "clothing" && <HalfToggle on={half} onChange={setHalf} tone="light" />}
           <Link href={profile.primaryCta.href} className="flex h-8 items-center gap-2 bg-[#f5c842] px-2.5 text-[11px] font-semibold">
             <ClipboardPlus size={14} /><span className="hidden sm:inline">{t(`nav.${profile.primaryCta.label}`)}</span>
           </Link>

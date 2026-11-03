@@ -3,8 +3,10 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { HalfToggle, halfQty, useHalfView } from "@/components/half-toggle";
 import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
 import { api, money } from "@/lib/api";
+import { useBusinessProfile } from "@/lib/use-business-profile";
 
 type Product = {
   id: number;
@@ -17,20 +19,33 @@ type Product = {
   stock_qty: number;
 };
 
+type Insights = { worth: number; income: number; profit: number; units: number };
+
 export default function CatalogPage() {
+  const profile = useBusinessProfile();
+  const clothing = profile.type === "clothing";
+  const [half, setHalf] = useHalfView();
+  const [insights, setInsights] = useState<Insights | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
   function load() {
     setLoading(true);
-    api<{ data: Product[] }>("/products?per_page=100")
+    api<{ data: Product[] }>("/products?per_page=500")
       .then((result) => setProducts(result.data))
       .catch((caught) => setError(caught.message))
       .finally(() => setLoading(false));
   }
 
   useEffect(load, []);
+
+  useEffect(() => {
+    if (!clothing) return;
+    api<Insights>(`/clothing/insights${half ? "?half_view=1" : ""}`)
+      .then(setInsights)
+      .catch(() => setInsights(null));
+  }, [clothing, half]);
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -59,7 +74,22 @@ export default function CatalogPage() {
   }
 
   return (
-    <AppShell title="Catalog" eyebrow="Clothing stock">
+    <AppShell title="Catalog" eyebrow="Clothing stock" action={clothing ? <HalfToggle on={half} onChange={setHalf} tone="light" /> : undefined}>
+      {clothing && insights && (
+        <div className="mb-5 grid gap-3 sm:grid-cols-3">
+          {[
+            ["Worth", insights.worth, "Units on hand × selling price"],
+            ["Income", insights.income, "Units on hand × cost"],
+            ["Profit", insights.profit, "Worth minus the cost of that stock"],
+          ].map(([label, value, hint]) => (
+            <Panel key={String(label)} className="p-5">
+              <p className="text-[10px] font-bold uppercase text-[#6f746e]">{label}</p>
+              <p className="mt-2 font-display text-3xl font-semibold">{money(Number(value))}</p>
+              <p className="mt-1 text-xs text-[#6f746e]">{hint}</p>
+            </Panel>
+          ))}
+        </div>
+      )}
       <div className="grid gap-5 xl:grid-cols-[0.85fr_1.15fr]">
         <Panel className="p-5">
           <h2 className="font-display text-2xl font-semibold uppercase">Add product</h2>
@@ -89,7 +119,7 @@ export default function CatalogPage() {
                       <td className="px-5 py-3 font-semibold">{product.name}<div className="text-xs font-normal text-[#6f746e]">{product.sku || product.category || ""}</div></td>
                       <td>{product.size || "—"}</td>
                       <td>{product.color || "—"}</td>
-                      <td>{product.stock_qty}</td>
+                      <td>{clothing && half ? halfQty(product.stock_qty) : product.stock_qty}</td>
                       <td className="pr-5 text-right font-semibold">{money(product.price)}</td>
                     </tr>
                   ))}
