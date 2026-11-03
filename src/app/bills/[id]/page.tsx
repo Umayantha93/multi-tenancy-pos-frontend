@@ -3589,10 +3589,26 @@ export default function BillDetailPage() {
                     </p>
                   </>
                 ) : (
-                  <label className="block text-xs font-bold uppercase">
-                    {t("bill.reference")}
-                    <input name="reference" className={`${inputClass} mt-2`} />
-                  </label>
+                  <>
+                    {isOweIn && (
+                      <label className="block text-xs font-bold uppercase">
+                        {t("bill.paid_on")}
+                        <input
+                          name="paid_at"
+                          type="date"
+                          required
+                          max={new Date().toISOString().slice(0, 10)}
+                          defaultValue={new Date().toISOString().slice(0, 10)}
+                          className={`${inputClass} mt-2`}
+                        />
+                        <span className="mt-1 block text-[11px] font-medium normal-case text-[#6f746e]">{t("bill.paid_on_hint")}</span>
+                      </label>
+                    )}
+                    <label className="block text-xs font-bold uppercase">
+                      {t("bill.reference")}
+                      <input name="reference" className={`${inputClass} mt-2`} />
+                    </label>
+                  </>
                 )}
                 <button disabled={recordingPayment} className={`${buttonClass} w-full bg-[#167c73]`}>
                   <CreditCard size={17} />{recordingPayment ? t("common.saving") : t("bill.record_pay")}

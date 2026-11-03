@@ -50,6 +50,24 @@ type PayableItem = {
   settlements?: Array<{ id: number; amount: number; settled_on: string | null }>;
 };
 
+type OweRow = {
+  bill_id: number;
+  bill_number: string;
+  customer_name: string;
+  phone?: string | null;
+  vehicle_number?: string | null;
+  amount: number;
+  due_date?: string | null;
+};
+
+type OwePage = {
+  receivables_total: number;
+  count: number;
+  data: OweRow[];
+  current_page: number;
+  last_page: number;
+};
+
 type Sheet = {
   income: number;
   expenses: number;
@@ -116,6 +134,15 @@ function BalanceSheetPageInner() {
   const isGarage = useBusinessProfile().type === "garage";
   const jobSplitOn = useSyncExternalStore(noopSubscribe, () => currentFeatures().includes("expense_job_split"), () => false) && isGarage;
   const exportOn = useSyncExternalStore(noopSubscribe, () => currentFeatures().includes("finance_report_export"), () => false) && isGarage;
+  const oweRegisterOn = useSyncExternalStore(noopSubscribe, () => currentFeatures().includes("owe_in_register"), () => false) && isGarage;
+  const [oweFrom, setOweFrom] = useState("");
+  const [oweTo, setOweTo] = useState("");
+  const [owePage, setOwePage] = useState(1);
+  const [oweRows, setOweRows] = useState<OweRow[]>([]);
+  const [oweTotal, setOweTotal] = useState<number | null>(null);
+  const [oweLastPage, setOweLastPage] = useState(1);
+  const [oweLoading, setOweLoading] = useState(false);
+  const [oweDownloading, setOweDownloading] = useState(false);
   const [exportFormat, setExportFormat] = useState<"xlsx" | "pdf">("xlsx");
   const [exportType, setExportType] = useState<"full" | "table">("full");
   const [exporting, setExporting] = useState(false);
@@ -127,6 +154,66 @@ function BalanceSheetPageInner() {
   }, [month, year, shopFilter]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (!oweRegisterOn) return;
+    if (oweFrom && oweTo && oweFrom > oweTo) return;
+    setOweLoading(true);
+    const params = new URLSearchParams({ page: String(owePage), per_page: "15" });
+    if (oweFrom) params.set("date_from", oweFrom);
+    if (oweTo) params.set("date_to", oweTo);
+    if (shopFilter) params.set("branch_id", shopFilter);
+    api<OwePage>(`/finance/owe-in?${params}`)
+      .then((result) => {
+        setOweRows(result.data);
+        setOweTotal(result.receivables_total);
+        setOweLastPage(Math.max(1, result.last_page || 1));
+      })
+      .catch((caught) => setError(caught instanceof Error ? caught.message : "Unable to load owe-in customers."))
+      .finally(() => setOweLoading(false));
+  }, [oweRegisterOn, oweFrom, oweTo, owePage, shopFilter]);
+
+  async function downloadOweReport() {
+    if (oweFrom && oweTo && oweFrom > oweTo) {
+      setError("The due date range is backwards.");
+      return;
+    }
+    setOweDownloading(true);
+    setError("");
+    try {
+      const params = new URLSearchParams();
+      if (oweFrom) params.set("date_from", oweFrom);
+      if (oweTo) params.set("date_to", oweTo);
+      if (shopFilter) params.set("branch_id", shopFilter);
+      const token = localStorage.getItem("garage_token");
+      const headers = new Headers({ Accept: "application/pdf", "X-Locale": currentLocale() });
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+      const branchId = currentBranchId();
+      if (branchId) headers.set("X-Branch-Id", String(branchId));
+      const response = await fetch(`${API_URL}/finance/owe-in/pdf?${params}`, { headers });
+      if (response.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({ message: "Could not download the owe-in report." }));
+        throw new Error(body.message || "Could not download the owe-in report.");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `owe-in${oweFrom ? `-${oweFrom}` : ""}${oweTo ? `-to-${oweTo}` : ""}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not download the owe-in report.");
+    } finally {
+      setOweDownloading(false);
+    }
+  }
 
   function localToday() {
     const date = new Date();
@@ -727,11 +814,63 @@ function BalanceSheetPageInner() {
               <Panel className="p-5">
                 <h2 className="font-display text-2xl font-semibold uppercase">Customer owe in</h2>
                 <p className="mt-1 text-sm text-[#6f746e]">
-                  {sheet.bill_receivables?.count ?? 0} credit bills still collecting.
+                  {oweRegisterOn
+                    ? "Credit bills still collecting. Dates use the owe-in due date."
+                    : `${sheet.bill_receivables?.count ?? 0} credit bills still collecting.`}
                 </p>
                 <p className="mt-4 font-display text-3xl font-semibold text-[#b84837]">
-                  {money(sheet.bill_receivables?.receivables_total ?? 0)}
+                  {money(oweRegisterOn && oweTotal != null ? oweTotal : (sheet.bill_receivables?.receivables_total ?? 0))}
                 </p>
+                {oweRegisterOn && (
+                  <div className="mt-5">
+                    <div className="flex flex-wrap items-end gap-2">
+                      <label className="text-[10px] font-bold uppercase text-[#6f746e]">
+                        Due from
+                        <input type="date" value={oweFrom} onChange={(event) => { setOweFrom(event.target.value); setOwePage(1); }} className={`${inputClass} mt-1`} />
+                      </label>
+                      <label className="text-[10px] font-bold uppercase text-[#6f746e]">
+                        Due to
+                        <input type="date" value={oweTo} onChange={(event) => { setOweTo(event.target.value); setOwePage(1); }} className={`${inputClass} mt-1`} />
+                      </label>
+                      <button type="button" onClick={downloadOweReport} disabled={oweDownloading} className={`${buttonClass} gap-2`}>
+                        <Download size={14} />
+                        {oweDownloading ? "Preparing..." : "Download PDF"}
+                      </button>
+                    </div>
+                    {oweFrom && oweTo && oweFrom > oweTo && <p className="mt-2 text-xs text-[#b84837]">The due date range is backwards.</p>}
+                    <div className="mt-4 overflow-x-auto">
+                      <table className="w-full min-w-[520px] text-left text-sm">
+                        <thead className="text-[10px] uppercase text-[#6f746e]">
+                          <tr>
+                            <th className="py-2">Name</th>
+                            <th className="py-2">Phone</th>
+                            <th className="py-2">Vehicle</th>
+                            <th className="py-2 text-right">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {oweRows.map((row) => (
+                            <tr key={row.bill_id} className="border-t border-[#e2ded4]">
+                              <td className="py-2 font-semibold">{row.customer_name}</td>
+                              <td className="py-2">{row.phone || "—"}</td>
+                              <td className="py-2">{row.vehicle_number || "—"}</td>
+                              <td className="py-2 text-right font-semibold text-[#b84837]">{money(row.amount)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {oweLoading && <p className="py-4 text-sm text-[#6f746e]">Loading customers...</p>}
+                      {!oweLoading && oweRows.length === 0 && <p className="py-4 text-sm text-[#6f746e]">No customers owe in this range.</p>}
+                    </div>
+                    {oweLastPage > 1 && (
+                      <div className="mt-3 flex items-center justify-end gap-2">
+                        <button type="button" disabled={owePage <= 1} onClick={() => setOwePage(owePage - 1)} className="h-8 border border-[#c9c5b9] bg-white px-3 text-[11px] font-semibold disabled:opacity-40">Previous</button>
+                        <span className="text-xs text-[#6f746e]">Page {owePage} of {oweLastPage}</span>
+                        <button type="button" disabled={owePage >= oweLastPage} onClick={() => setOwePage(owePage + 1)} className="h-8 border border-[#c9c5b9] bg-white px-3 text-[11px] font-semibold disabled:opacity-40">Next</button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </Panel>
             </div>
           )}

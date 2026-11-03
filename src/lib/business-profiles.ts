@@ -181,6 +181,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { key: "service_ops_report", name: "Service operations report", group: "Finance" },
       { key: "expense_job_split", name: "Repair / service expenses", group: "Finance" },
       { key: "finance_report_export", name: "Finance report download", group: "Finance" },
+      { key: "owe_in_register", name: "Owe-in register", group: "Finance" },
     ],
     navigation: [
       { href: "/dashboard", label: "Overview", icon: Gauge },
@@ -300,9 +301,9 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
     openBillsLabel: "Open sales",
     recentBillsTitle: "Latest sales",
     recentBillsHint: "Counter receipts and balances due",
-    primaryCta: { href: "/pos", label: "New sale", feature: "retail_pos" },
+    primaryCta: { href: "/clothing", label: "New sale", feature: "retail_pos" },
     quickActions: [
-      { href: "/pos", label: "New sale", feature: "retail_pos" },
+      { href: "/clothing", label: "New sale", feature: "retail_pos" },
       { href: "/catalog", label: "Catalog", feature: "product_catalog" },
       { href: "/bills", label: "Take payment", feature: "billing" },
       { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
@@ -313,13 +314,14 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
     ],
     moduleCatalog: [
       { key: "retail_pos", name: "Point of sale", group: "Service Intake" },
+      { key: "customer_display", name: "Customer display", group: "Service Intake" },
       { key: "product_catalog", name: "Product catalog", group: "Inventory" },
       { key: "suppliers", name: "Suppliers", group: "Inventory" },
       ...sharedPeopleFinance.map((m) => m.key === "billing" ? { ...m, name: "Sales" } : m),
     ],
     navigation: [
       { href: "/dashboard", label: "Overview", icon: Gauge },
-      { href: "/pos", label: "New sale", icon: ShoppingBag, feature: "retail_pos" },
+      { href: "/clothing", label: "New sale", icon: ShoppingBag, feature: "retail_pos" },
       { href: "/catalog", label: "Catalog", icon: Package, feature: "product_catalog" },
       { href: "/bills", label: "Sales", icon: ReceiptText, feature: "billing" },
       billProfitsNav,
@@ -717,11 +719,12 @@ export function optionalFeaturesFor(type?: string | null): FeatureKey[] {
       "admit_combined", "admit_photos",
       "job_board", "job_bookings", "service_reminders",
       "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp", "station_consumables",
-      "expense_job_split", "finance_report_export",
+      "expense_job_split", "finance_report_export", "owe_in_register",
     ];
   }
   if (type === "tyre" || type === "paint") return ["job_bookings", "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp", "line_discounts"];
   if (type === "device_repair") return ["job_bookings", "purchase_orders", "part_fitment", "serial_inventory", "cash_up", "bill_whatsapp", "line_discounts"];
+  if (type === "clothing") return ["customer_display", "cash_up", "bill_whatsapp", "line_discounts"];
   return ["cash_up", "bill_whatsapp", "line_discounts"];
 }
 
