@@ -307,8 +307,8 @@ export default function BillProfitsPage() {
             {periodLabel}
             {effectiveKind === "service" ? (isPaint ? " · Package jobs" : " · Service bills") : effectiveKind === "repair" ? (isPaint ? " · Panel jobs" : " · Repair bills") : effectiveKind === "parts_sale" ? (isPaint ? " · Counter sales" : isStore ? " · Sales" : " · Instant bills") : ""}
           </p>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Panel className="p-5">
+          <div className="grid items-stretch gap-3 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,0.95fr)_minmax(0,1.9fr)]">
+            <Panel className="h-full p-5">
               <p className="text-xs font-bold uppercase text-[#6f746e]">
                 {jobKind ? `${summary.title} revenue` : "Total revenue (bills)"}
               </p>
@@ -317,35 +317,32 @@ export default function BillProfitsPage() {
                 {summary.count} bill{summary.count === 1 ? "" : "s"}
               </p>
             </Panel>
-            <Panel className="p-5">
+            <Panel className="h-full p-5">
               <p className="text-xs font-bold uppercase text-[#6f746e]">
                 {jobKind ? `${summary.title} cost of goods` : "Cost of goods sold"}
               </p>
               <p className="mt-3 font-display text-3xl font-semibold">{money(summary.cogs)}</p>
             </Panel>
-            <Panel className="bg-[#242723] p-5 text-white">
-              <p className="text-xs font-bold uppercase text-white/50">
-                {jobKind ? `${summary.title} gross profit` : "Gross profit"}
-              </p>
-              <p className="mt-3 font-display text-3xl font-semibold">{money(summary.profit)}</p>
-              <p className="mt-2 text-xs text-white/50">Gross margin {summary.margin}%</p>
-            </Panel>
-          </div>
-
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <Panel className="p-5">
-              <p className="text-xs font-bold uppercase text-[#6f746e]">Services profit</p>
-              <p className="mt-3 font-display text-3xl font-semibold text-[#167c73]">{money(report.work_profit)}</p>
-              <p className="mt-2 text-xs text-[#6f746e]">
-                Charged {money(report.work_revenue)} · cost {money(report.work_cogs)}
-              </p>
-            </Panel>
-            <Panel className="p-5">
-              <p className="text-xs font-bold uppercase text-[#6f746e]">Sold goods profit</p>
-              <p className="mt-3 font-display text-3xl font-semibold text-[#167c73]">{money(report.goods_profit)}</p>
-              <p className="mt-2 text-xs text-[#6f746e]">
-                Sold {money(report.goods_revenue)} · cost {money(report.goods_cogs)}
-              </p>
+            <Panel className="h-full bg-[#242723] p-5 text-white">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase text-white/50">
+                    {jobKind ? `${summary.title} gross profit` : "Gross profit"}
+                  </p>
+                  <p className="mt-3 font-display text-3xl font-semibold">{money(summary.profit)}</p>
+                  <p className="mt-2 text-xs text-white/50">Gross margin {summary.margin}%</p>
+                </div>
+                <div className="shrink-0 space-y-2 text-right">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-white/50">Services profit</p>
+                    <p className="text-lg font-semibold leading-tight">{money(report.work_profit)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-white/50">Sold goods profit</p>
+                    <p className="text-lg font-semibold leading-tight">{money(report.goods_profit)}</p>
+                  </div>
+                </div>
+              </div>
             </Panel>
           </div>
 

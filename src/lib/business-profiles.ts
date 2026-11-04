@@ -165,6 +165,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { key: "job_board", name: "Job status board", group: "Service Intake" },
       { key: "owner_bill_sms", name: "Owner bill SMS", group: "Service Intake" },
       { key: "job_photos", name: "Job photos", group: "Service Intake" },
+      { key: "job_progress", name: "Job progress", group: "Service Intake" },
       { key: "job_videos", name: "Job videos", group: "Service Intake" },
       { key: "job_bookings", name: "Bay calendar", group: "Service Intake" },
       { key: "warranties", name: "Warranties", group: "Service Intake" },
@@ -231,6 +232,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { key: "suppliers", name: "Suppliers", group: "Inventory" },
       ...inventoryPlanExtras,
       { key: "job_bookings", name: "Bay calendar", group: "Service Intake" },
+      { key: "job_progress", name: "Job progress", group: "Service Intake" },
       ...sharedPeopleFinance.map((m) => m.key === "billing" ? { ...m, name: "Paint jobs" } : m),
     ],
     navigation: [
@@ -719,10 +721,11 @@ export function optionalFeaturesFor(type?: string | null): FeatureKey[] {
       "admit_combined", "admit_photos",
       "job_board", "job_bookings", "service_reminders",
       "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp", "station_consumables",
-      "expense_job_split", "finance_report_export", "owe_in_register",
+      "expense_job_split", "finance_report_export", "owe_in_register", "job_progress",
     ];
   }
-  if (type === "tyre" || type === "paint") return ["job_bookings", "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp", "line_discounts"];
+  if (type === "tyre") return ["job_bookings", "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp", "line_discounts"];
+  if (type === "paint") return ["job_progress", "job_bookings", "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp", "line_discounts"];
   if (type === "device_repair") return ["job_bookings", "purchase_orders", "part_fitment", "serial_inventory", "cash_up", "bill_whatsapp", "line_discounts"];
   if (type === "clothing") return ["customer_display", "cash_up", "bill_whatsapp", "line_discounts"];
   return ["cash_up", "bill_whatsapp", "line_discounts"];
