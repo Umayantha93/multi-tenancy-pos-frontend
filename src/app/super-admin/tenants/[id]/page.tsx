@@ -87,7 +87,7 @@ type ConfirmState = {
   message: string;
   confirmLabel: string;
   tone: "default" | "danger" | "teal";
-  action: "status" | "dual-enable" | "dual-disable" | "fee-paid" | "fee-unpaid" | "banner-show" | "banner-hide" | "delete" | "setup-remove" | "reset-bills";
+  action: "status" | "dual-enable" | "dual-disable" | "fee-paid" | "fee-unpaid" | "delete" | "setup-remove" | "reset-bills";
   paymentId?: number;
   year?: number;
   month?: number;
@@ -144,7 +144,6 @@ export default function TenantDetailPage() {
   const [feeMonths, setFeeMonths] = useState<FeeMonth[]>([]);
   const [feeYear, setFeeYear] = useState(String(new Date().getFullYear()));
   const [lastMonthFee, setLastMonthFee] = useState<LastMonthFee | null>(null);
-  const [showOverdueBanner, setShowOverdueBanner] = useState(false);
   const [currentMonthPaid, setCurrentMonthPaid] = useState(false);
   const [setupPayments, setSetupPayments] = useState<SetupFeePayment[]>([]);
   const [setupPaid, setSetupPaid] = useState(0);
@@ -378,7 +377,6 @@ export default function TenantDetailPage() {
     setFeePayments(fees.payments);
     setFeeMonths(fees.months ?? []);
     setLastMonthFee(fees.last_month ?? null);
-    setShowOverdueBanner(Boolean(fees.show_overdue_fee_banner));
     setCurrentMonthPaid(fees.current_month_paid);
     if (fees.year) setFeeYear(String(fees.year));
     setTenant((current) => (current ? { ...current, current_month_paid: fees.current_month_paid, show_overdue_fee_banner: fees.show_overdue_fee_banner } : current));
@@ -413,20 +411,6 @@ export default function TenantDetailPage() {
     });
   }
 
-  function requestBannerChange(show: boolean) {
-    if (!tenant || !lastMonthFee) return;
-    const period = periodLabel(lastMonthFee.period);
-    setConfirm({
-      title: show ? "Show last month due" : "Hide last month due",
-      message: show
-        ? `Show ${period} (${money(lastMonthFee.amount)}) at the top of ${tenant.business_name}'s system until it is marked paid?`
-        : `Hide the last-month banner on ${tenant.business_name}'s system?`,
-      confirmLabel: show ? "Show banner" : "Hide banner",
-      tone: show ? "teal" : "danger",
-      action: show ? "banner-show" : "banner-hide",
-    });
-  }
-
   async function saveFeePayment(paid: boolean, year: number, month: number) {
     if (!tenant) return;
     const period = periodLabel(`${year}-${String(month).padStart(2, "0")}`);
@@ -443,25 +427,6 @@ export default function TenantDetailPage() {
       setConfirm(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to update fee payment.");
-    } finally {
-      setFeeSaving(false);
-    }
-  }
-
-  async function saveOverdueBanner(show: boolean) {
-    setFeeSaving(true);
-    setError("");
-    setNotice("");
-    try {
-      const result = await api<FeePaymentsResponse>(
-        `/super-admin/tenants/${id}/fee-banner?year=${feeYear}`,
-        { method: "PUT", body: JSON.stringify({ show }) },
-      );
-      applyFees(result);
-      setNotice(show ? "Last month's due is now showing at the top of their system." : "The last-month banner is hidden.");
-      setConfirm(null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to update the banner.");
     } finally {
       setFeeSaving(false);
     }
@@ -583,8 +548,6 @@ export default function TenantDetailPage() {
     if (confirm.action === "dual-disable") await saveDualFinancialView(false);
     if (confirm.action === "fee-paid" && confirm.year && confirm.month) await saveFeePayment(true, confirm.year, confirm.month);
     if (confirm.action === "fee-unpaid" && confirm.year && confirm.month) await saveFeePayment(false, confirm.year, confirm.month);
-    if (confirm.action === "banner-show") await saveOverdueBanner(true);
-    if (confirm.action === "banner-hide") await saveOverdueBanner(false);
     if (confirm.action === "setup-remove" && confirm.paymentId) await removeSetupPayment(confirm.paymentId);
   }
 
@@ -958,7 +921,7 @@ export default function TenantDetailPage() {
                 <div>
                   <h2 className="font-display text-2xl font-semibold uppercase">Monthly fee payments</h2>
                   <p className="mt-2 text-sm text-[#6f746e]">
-                    Each month for this business. The top banner shows itself in the last five days, then stays off in the new month until you show last month&apos;s due.
+                    Each month for this business. If last month is unpaid, that month and amount stay on their top banner until you mark it paid.
                   </p>
                 </div>
                 {tenant.payment_plan === "monthly" && (
@@ -987,12 +950,10 @@ export default function TenantDetailPage() {
                         </p>
                         <p className="mt-1 text-xs text-[#6f746e]">
                           {!lastMonthFee?.applies
-                            ? "No previous month on this plan yet. The banner stays off."
+                            ? "No previous month on this plan yet."
                             : lastMonthFee.paid
-                              ? "Paid. Their banner stays off for this month."
-                              : showOverdueBanner
-                                ? "Showing at the top of their system until you mark it paid."
-                                : "Hidden in the new month. Show it when you want them to pay this amount."}
+                              ? "Paid. The last-month banner is hidden."
+                              : "Unpaid, so their top banner is showing this amount."}
                         </p>
                       </div>
                       <span
@@ -1007,16 +968,6 @@ export default function TenantDetailPage() {
                         {!lastMonthFee?.applies ? "Not due" : lastMonthFee.paid ? "Paid" : "Unpaid"}
                       </span>
                     </div>
-                    {lastMonthFee?.applies && !lastMonthFee.paid && (
-                      <button
-                        type="button"
-                        disabled={feeSaving || tenant.plan_amount == null}
-                        onClick={() => requestBannerChange(!showOverdueBanner)}
-                        className={`${buttonClass} mt-3 ${showOverdueBanner ? "!bg-[#b84837]" : ""}`}
-                      >
-                        {feeSaving ? "Saving..." : showOverdueBanner ? "Hide last month due" : "Show last month due"}
-                      </button>
-                    )}
                   </div>
                   <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {feeMonths.map((month) => {

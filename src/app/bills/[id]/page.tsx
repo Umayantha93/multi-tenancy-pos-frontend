@@ -16,6 +16,7 @@ import { BillWatermark } from "@/components/bill-watermark";
 import { BillingBranchBanner } from "@/components/branch-chip";
 import { WarrantyFields, warrantyFromForm } from "@/components/warranty-fields";
 import { JobPhotos } from "@/components/job-photos";
+import { JobProgress } from "@/components/job-progress";
 import { JobVideos } from "@/components/job-videos";
 import { useLocale, useT } from "@/lib/locale";
 import { formatStockQty, stockAllowsDecimal, stockUnitLabel } from "@/lib/stock-unit";
@@ -335,6 +336,7 @@ export default function BillDetailPage() {
   const canOwnerSms = features.includes("owner_bill_sms");
   const canJobVideos = features.includes("job_videos");
   const canJobPhotos = features.includes("job_photos");
+  const canJobProgress = features.includes("job_progress");
   const canAdmitPhotos = features.includes("admit_photos");
   const canCommission = features.includes("job_commissions");
   const laborExcessCommission = (tenant?.commission_type ?? "labor_excess") !== "line_percent";
@@ -2733,6 +2735,17 @@ export default function BillDetailPage() {
           </Panel>
           )}
 
+          {canJobProgress && (isGarage || isPaint) && bill.job_kind !== "parts_sale" && (
+            <JobProgress
+              billId={bill.id}
+              readOnly={isClosed}
+              customerName={bill.customer?.name}
+              customerPhone={bill.customer?.phone}
+              vehicleNumber={bill.vehicle?.number_plate}
+              shopName={tenant?.business_name}
+              workRevision={bill.items.map((item) => `${item.id}:${item.type}:${item.description}:${item.panel_name ?? ""}`).join("|")}
+            />
+          )}
           {canAdmitPhotos && isGarage && bill.job_kind !== "parts_sale" && (
             <JobPhotos billId={bill.id} readOnly={isClosed} kind="admit" max={5} />
           )}
