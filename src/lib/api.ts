@@ -92,6 +92,7 @@ export type FeatureKey =
   | "owe_in_register"
   | "job_videos"
   | "job_photos"
+  | "job_progress"
   | "job_commissions"
   | "free_service"
   | "show_bill_technicians"

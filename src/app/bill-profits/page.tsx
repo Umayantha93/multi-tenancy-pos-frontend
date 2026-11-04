@@ -41,6 +41,12 @@ type ProfitBill = {
   cogs: number;
   profit: number;
   margin: number;
+  work_revenue?: number;
+  work_cogs?: number;
+  work_profit?: number;
+  goods_revenue?: number;
+  goods_cogs?: number;
+  goods_profit?: number;
   billing_type: "instant" | "credit";
   payment_status: string;
   refund_status?: string;
@@ -71,6 +77,14 @@ type Report = {
   parts_sale_gross_profit: number;
   parts_sale_margin: number;
   parts_sale_count: number;
+  work_revenue: number;
+  work_cogs: number;
+  work_profit: number;
+  work_margin: number;
+  goods_revenue: number;
+  goods_cogs: number;
+  goods_profit: number;
+  goods_margin: number;
   credit_count: number;
   credit_generated: number;
   credit_collected: number;
@@ -293,8 +307,8 @@ export default function BillProfitsPage() {
             {periodLabel}
             {effectiveKind === "service" ? (isPaint ? " · Package jobs" : " · Service bills") : effectiveKind === "repair" ? (isPaint ? " · Panel jobs" : " · Repair bills") : effectiveKind === "parts_sale" ? (isPaint ? " · Counter sales" : isStore ? " · Sales" : " · Instant bills") : ""}
           </p>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Panel className="p-5">
+          <div className="grid items-stretch gap-3 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,0.95fr)_minmax(0,1.9fr)]">
+            <Panel className="h-full p-5">
               <p className="text-xs font-bold uppercase text-[#6f746e]">
                 {jobKind ? `${summary.title} revenue` : "Total revenue (bills)"}
               </p>
@@ -303,18 +317,32 @@ export default function BillProfitsPage() {
                 {summary.count} bill{summary.count === 1 ? "" : "s"}
               </p>
             </Panel>
-            <Panel className="p-5">
+            <Panel className="h-full p-5">
               <p className="text-xs font-bold uppercase text-[#6f746e]">
                 {jobKind ? `${summary.title} cost of goods` : "Cost of goods sold"}
               </p>
               <p className="mt-3 font-display text-3xl font-semibold">{money(summary.cogs)}</p>
             </Panel>
-            <Panel className="bg-[#242723] p-5 text-white">
-              <p className="text-xs font-bold uppercase text-white/50">
-                {jobKind ? `${summary.title} gross profit` : "Gross profit"}
-              </p>
-              <p className="mt-3 font-display text-3xl font-semibold">{money(summary.profit)}</p>
-              <p className="mt-2 text-xs text-white/50">Gross margin {summary.margin}%</p>
+            <Panel className="h-full bg-[#242723] p-5 text-white">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase text-white/50">
+                    {jobKind ? `${summary.title} gross profit` : "Gross profit"}
+                  </p>
+                  <p className="mt-3 font-display text-3xl font-semibold">{money(summary.profit)}</p>
+                  <p className="mt-2 text-xs text-white/50">Gross margin {summary.margin}%</p>
+                </div>
+                <div className="shrink-0 space-y-2 text-right">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-white/50">Services profit</p>
+                    <p className="text-lg font-semibold leading-tight">{money(report.work_profit)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-white/50">Sold goods profit</p>
+                    <p className="text-lg font-semibold leading-tight">{money(report.goods_profit)}</p>
+                  </div>
+                </div>
+              </div>
             </Panel>
           </div>
 
@@ -452,6 +480,18 @@ export default function BillProfitsPage() {
                     <div className="border border-[#e2ded4] p-3"><p className="text-[10px] font-bold uppercase text-[#6f746e]">Revenue</p><p className="mt-1 font-semibold">{money(detail.revenue)}</p></div>
                     <div className="border border-[#e2ded4] p-3"><p className="text-[10px] font-bold uppercase text-[#6f746e]">COGS</p><p className="mt-1 font-semibold">{money(detail.cogs)}</p></div>
                     <div className="border border-[#e2ded4] p-3"><p className="text-[10px] font-bold uppercase text-[#6f746e]">Profit</p><p className="mt-1 font-semibold text-[#167c73]">{money(detail.profit)}</p></div>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2 text-sm">
+                    <div className="border border-[#e2ded4] p-3">
+                      <p className="text-[10px] font-bold uppercase text-[#6f746e]">Services profit</p>
+                      <p className="mt-1 font-semibold text-[#167c73]">{money(detail.work_profit ?? 0)}</p>
+                      <p className="mt-1 text-xs text-[#6f746e]">Charged {money(detail.work_revenue ?? 0)} · cost {money(detail.work_cogs ?? 0)}</p>
+                    </div>
+                    <div className="border border-[#e2ded4] p-3">
+                      <p className="text-[10px] font-bold uppercase text-[#6f746e]">Sold goods profit</p>
+                      <p className="mt-1 font-semibold text-[#167c73]">{money(detail.goods_profit ?? 0)}</p>
+                      <p className="mt-1 text-xs text-[#6f746e]">Sold {money(detail.goods_revenue ?? 0)} · cost {money(detail.goods_cogs ?? 0)}</p>
+                    </div>
                   </div>
                   {Number(detail.amount_refunded ?? 0) > 0 && (
                     <p className="text-sm text-[#b84837]">
