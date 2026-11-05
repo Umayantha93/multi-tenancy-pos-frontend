@@ -329,9 +329,9 @@ export default function EmployeesPage() {
               {currentFeatures().includes("job_commissions") && (currentUser()?.tenant?.commission_type ?? "labor_excess") !== "line_percent" && (
                 <p className="text-xs font-normal normal-case text-[#6f746e] sm:col-span-2">
                   {payType === "daily"
-                    ? "Daily: this amount is the rate for one day. Enter days and half days on Attendance. Additions and deductions change the month total."
-                    : "Monthly: this amount is the salary. Additions and deductions on Attendance change the month total."}
-                  {" "}Paid repair labor counts in full and service labor at half. If counted labor is above that salary, the employee receives 10% of the difference.
+                    ? "Daily: this amount is the rate for one day. Enter days and half days on Attendance. Additions and deductions change the month total on payroll, not the commission comparison."
+                    : "Monthly: this amount is the salary commission compares. Additions and deductions on Attendance change the payroll total, not the commission comparison."}
+                  {" "}Paid repair labor counts in full and service labor at half. If counted labor is above that pay, the employee receives 10% of the difference.
                 </p>
               )}
               <label className="text-xs font-bold uppercase">
