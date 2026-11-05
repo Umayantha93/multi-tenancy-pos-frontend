@@ -269,7 +269,7 @@ export default function AttendancePage() {
         <div className="border-b border-[#d7d3c8] p-5">
           <h2 className="font-display text-2xl font-semibold uppercase">Month salary</h2>
           <p className="mt-2 text-sm text-[#6f746e]">
-            Monthly staff use their amount. Daily staff use days and half days times their amount. Additions increase the month and deductions reduce it. Commission uses this total.
+            Monthly staff use their amount. Daily staff use days and half days times their amount. Additions increase the month and deductions reduce it. Commission uses only the days and half days. Payroll lists the additions, deductions, and commission.
           </p>
         </div>
         {payRows.length === 0 ? (
