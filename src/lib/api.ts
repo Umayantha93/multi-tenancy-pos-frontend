@@ -96,7 +96,8 @@ export type FeatureKey =
   | "job_commissions"
   | "free_service"
   | "show_bill_technicians"
-  | "line_discounts";
+  | "line_discounts"
+  | "line_vat";
 
 export type BusinessType = "garage" | "tyre" | "device_repair" | "paint" | "photography" | "clothing" | "salon" | "cottage" | "store" | "mobile_shop";
 
