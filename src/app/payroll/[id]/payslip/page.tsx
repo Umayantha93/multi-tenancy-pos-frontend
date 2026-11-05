@@ -21,6 +21,9 @@ type Payslip = {
   allowances_total?: string;
   target_incentive?: string;
   bonus: string;
+  commission?: string;
+  addition_lines?: Array<{ name: string; amount: number | string }> | null;
+  deduction_lines?: Array<{ name: string; amount: number | string }> | null;
   gross_pay?: string;
   epf_employee?: string;
   epf_employer?: string;
@@ -62,16 +65,21 @@ export default function PayslipPage() {
   }
 
   const logo = mediaUrl(row.tenant?.logo_url || row.tenant?.logo);
+  const namedAdditions = (row.addition_lines ?? []).filter((line) => Number(line.amount) > 0);
+  const namedDeductions = (row.deduction_lines ?? []).filter((line) => Number(line.amount) > 0);
   const earnings = [
     ["Basic salary", row.base_salary],
     ["Overtime", row.overtime_pay],
-    ["Allowances", row.allowances_total || "0"],
+    ...(namedAdditions.length > 0 ? namedAdditions.map((line) => [line.name, line.amount] as [string, string | number]) : [["Allowances", row.allowances_total || "0"] as [string, string]]),
     ["Target incentive", row.target_incentive || "0"],
     ["Bonus", row.bonus],
+    ["Commission", row.commission || "0"],
   ].filter(([, value]) => Number(value) > 0);
   const deductions = [
     ["EPF employee (8%)", row.epf_employee || "0"],
-    ["Unpaid leave / other", row.deductions],
+    ...(namedDeductions.length > 0
+      ? namedDeductions.map((line) => [line.name, line.amount] as [string, string | number])
+      : [["Deductions", row.deductions] as [string, string]]),
   ].filter(([, value]) => Number(value) > 0);
 
   return (
