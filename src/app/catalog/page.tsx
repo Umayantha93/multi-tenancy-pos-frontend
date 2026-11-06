@@ -394,10 +394,13 @@ export default function CatalogPage() {
               <label className="text-xs font-bold uppercase sm:col-span-2">Images
                 <input name="images[]" type="file" accept="image/*" multiple className="mt-2 block w-full border border-[#c9c5b9] bg-white p-3 text-sm" />
               </label>
-              {selected?.image_urls?.[0] && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={mediaUrl(selected.image_urls[0])} alt="" className="h-20 w-20 object-contain border border-[#d7d3c8] bg-white" />
-              )}
+              {(() => {
+                const src = mediaUrl(selected?.image_urls?.[0]);
+                return src ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={src} alt="" className="h-20 w-20 object-contain border border-[#d7d3c8] bg-white" />
+                ) : null;
+              })()}
             </div>
             <div className="flex justify-end gap-2 border-t border-[#d7d3c8] p-5">
               <button type="button" onClick={() => setMode(null)} className="h-10 border border-[#c9c5b9] bg-white px-4 text-sm font-semibold">Cancel</button>
