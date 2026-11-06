@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AddressField } from "@/components/address-field";
 import { ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
+import { HalfToggle } from "@/components/half-toggle";
 import { api, currentFeatures, currentUser, mediaUrl, storeSession, User } from "@/lib/api";
 
 export default function ProfilePage() {
@@ -13,6 +14,8 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [lockingBills, setLockingBills] = useState(false);
   const [billPrefix, setBillPrefix] = useState("");
+  const [halfView, setHalfView] = useState(false);
+  const [savingHalf, setSavingHalf] = useState(false);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   useEffect(() => {
@@ -20,13 +23,16 @@ export default function ProfilePage() {
     api<{ user: User }>("/user").then((result) => {
       setUser(result.user);
       setBillPrefix(result.user.tenant?.bill_prefix ?? "");
+      setHalfView(Boolean(result.user.tenant?.half_view));
     }).catch((caught) => setError(caught.message));
   }, []);
 
   const isOwner = user?.role === "business_owner";
   const tenant = user?.tenant;
-  const canShortBills = tenant?.business_type === "garage" || tenant?.business_type === "paint";
+  const isClothing = tenant?.business_type === "clothing";
+  const canShortBills = tenant?.business_type === "garage" || tenant?.business_type === "paint" || isClothing;
   const billLocked = Boolean(tenant?.bill_number_locked || tenant?.bill_number_locked_at);
+  const billsFrozen = isClothing && halfView;
   const previewPrefix = (billPrefix || tenant?.bill_prefix || "BILL").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12) || "BILL";
   const shopCode = String(tenant?.id ?? 0).padStart(2, "0");
   const previewNext = `${previewPrefix}-${shopCode}-${String((Number(tenant?.bill_sequence) || 0) + 1).padStart(4, "0")}`;
@@ -37,7 +43,7 @@ export default function ProfilePage() {
     setError("");
     setNotice("");
     const formData = new FormData(event.currentTarget);
-    if (canShortBills && !billLocked) {
+    if (canShortBills && !billLocked && !billsFrozen) {
       formData.set("bill_prefix", billPrefix);
     }
     try {
@@ -56,8 +62,29 @@ export default function ProfilePage() {
     }
   }
 
+  async function saveHalf(next: boolean) {
+    setSavingHalf(true);
+    setError("");
+    setNotice("");
+    const formData = new FormData();
+    formData.set("half_view", next ? "1" : "0");
+    try {
+      const updated = await api<NonNullable<User["tenant"]>>("/tenant/profile", { method: "POST", body: formData });
+      const nextUser = { ...user!, tenant: { ...tenant!, ...updated } };
+      setUser(nextUser);
+      setHalfView(Boolean(updated.half_view));
+      const token = localStorage.getItem("garage_token");
+      if (token) storeSession(token, nextUser, currentFeatures());
+      setNotice(next ? "Half is on. Bill numbers stay as they are and show in order." : "Half is off. Bill numbers can be changed.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save Half.");
+    } finally {
+      setSavingHalf(false);
+    }
+  }
+
   async function lockBillNumbers() {
-    if (!canShortBills || billLocked) return;
+    if (!canShortBills || billLocked || billsFrozen) return;
     const prefix = billPrefix.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
     if (!prefix) {
       setError("Enter a short bill prefix before locking.");
@@ -152,6 +179,16 @@ export default function ProfilePage() {
               // eslint-disable-next-line @next/next/no-img-element
               <img src={logo} alt="" className="h-20 w-20 object-contain border border-[#d7d3c8] bg-white p-1" />
             ) : null}
+            {isClothing && (
+              <div className="flex items-center justify-between gap-4 border border-[#d7d3c8] bg-[#fbfaf6] p-4">
+                <div>
+                  <p className="text-xs font-bold uppercase">Half</p>
+                  <p className="mt-1 text-sm text-[#6f746e]">When Half is on, bill numbers cannot be changed. They stay as they are and show in order.</p>
+                </div>
+                <HalfToggle on={halfView} onChange={(next) => void saveHalf(next)} tone="light" />
+                {savingHalf ? <span className="text-xs text-[#6f746e]">Saving...</span> : null}
+              </div>
+            )}
             {canShortBills && (
               <div className="border border-[#d7d3c8] bg-[#fbfaf6] p-4">
                 <p className="text-xs font-bold uppercase">Bill numbers</p>
@@ -163,7 +200,7 @@ export default function ProfilePage() {
                   <input
                     value={billPrefix}
                     onChange={(event) => setBillPrefix(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12))}
-                    disabled={billLocked || saving || lockingBills}
+                    disabled={billLocked || billsFrozen || saving || lockingBills}
                     placeholder="e.g. B06"
                     className={`${inputClass} mt-2 font-normal normal-case disabled:bg-[#eeece5]`}
                   />
@@ -171,8 +208,9 @@ export default function ProfilePage() {
                 <p className="mt-2 text-sm">
                   Next bill: <strong className="tabular-nums">{billLocked ? (tenant?.next_bill_number ?? previewNext) : previewNext}</strong>
                   {billLocked ? " · locked" : ""}
+                  {billsFrozen ? " · unchanged while Half is on" : ""}
                 </p>
-                {!billLocked && (
+                {!billLocked && !billsFrozen && (
                   <button
                     type="button"
                     disabled={lockingBills || saving || !billPrefix}

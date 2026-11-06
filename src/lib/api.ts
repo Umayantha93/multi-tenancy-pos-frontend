@@ -137,6 +137,7 @@ export type Tenant = {
   bill_sequence?: number | null;
   bill_number_locked_at?: string | null;
   bill_number_locked?: boolean;
+  half_view?: boolean;
   next_bill_number?: string | null;
   owner_email?: string | null;
   owner_phone?: string | null;

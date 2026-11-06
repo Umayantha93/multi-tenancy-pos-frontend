@@ -3,8 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LayoutGrid, Monitor, PackageSearch, Plus, ScanBarcode, ShoppingCart, Trash2, X } from "lucide-react";
-import { HalfToggle, halfQty, useHalfView } from "@/components/half-toggle";
+import { LayoutGrid, Monitor, PackageSearch, Plus, ScanBarcode, Search, ShoppingCart, Trash2, X } from "lucide-react";
 import { api, currentBranch, currentFeatures, currentUser, mediaUrl, money, storeSession, type SessionPayload, type User } from "@/lib/api";
 
 type Product = {
@@ -47,8 +46,8 @@ type Held = { id: string; label: string; lines: CartLine[]; customerId: number |
 const CATEGORIES = ["All", "Men", "Women", "Kids", "Accessories", "Footwear", "Sale"];
 const DISCOUNTS = [0, 5, 10, 15];
 const METHODS = [
-  { id: "card", label: "Card" },
   { id: "cash", label: "Cash" },
+  { id: "card", label: "Card" },
   { id: "qr", label: "QR" },
   { id: "credit", label: "Credit" },
 ] as const;
@@ -86,17 +85,18 @@ export default function ClothingFloorPage() {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [customerId, setCustomerId] = useState<number | null>(null);
   const [percent, setPercent] = useState(0);
-  const [method, setMethod] = useState<(typeof METHODS)[number]["id"]>("card");
+  const [method, setMethod] = useState<(typeof METHODS)[number]["id"]>("cash");
+  const [tendered, setTendered] = useState("");
   const [sizePick, setSizePick] = useState<Record<string, string>>({});
   const [held, setHeld] = useState<Held[]>([]);
   const [heldOpen, setHeldOpen] = useState(false);
   const [stockOpen, setStockOpen] = useState(false);
+  const [stockQuery, setStockQuery] = useState("");
   const [customerOpen, setCustomerOpen] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [now, setNow] = useState<Date | null>(null);
-  const [half, setHalf] = useHalfView();
   const [user, setUser] = useState<User | null>(null);
   const branch = ready ? currentBranch() : null;
 
@@ -140,11 +140,10 @@ export default function ClothingFloorPage() {
   }, []);
 
   function loadFloor() {
-    const halfQuery = readHalfParam();
     Promise.all([
       api<{ data: Product[] }>("/products?active_only=1&per_page=500"),
       api<{ data: Customer[] }>("/customers?per_page=100"),
-      api<Insights>(`/clothing/insights${halfQuery}`),
+      api<Insights>("/clothing/insights"),
     ]).then(([catalog, people, figures]) => {
       setProducts(catalog.data);
       setCustomers(people.data);
@@ -155,7 +154,7 @@ export default function ClothingFloorPage() {
   useEffect(() => {
     if (!allowed) return;
     loadFloor();
-  }, [allowed, half]);
+  }, [allowed]);
 
   const customer = customers.find((row) => row.id === customerId) ?? null;
   const vipPercent = customer?.is_vip ? 10 : 0;
@@ -222,7 +221,7 @@ export default function ClothingFloorPage() {
   }, [snapshot, displayOn, allowed]);
 
   function shownStock(product: Product) {
-    return half ? halfQty(product.stock_qty) : product.stock_qty;
+    return product.stock_qty;
   }
 
   function add(product: Product) {
@@ -307,23 +306,31 @@ export default function ClothingFloorPage() {
 
   async function checkout() {
     if (cart.length === 0 || saving) return;
+    const handed = Number(tendered);
+    if (method === "cash" && tendered.trim() !== "" && (!Number.isFinite(handed) || handed + 0.009 < total)) {
+      setError("Cash received is less than the total.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
-      await api("/retail-sales", {
+      const sale = await api<{ change?: number | string }>("/retail-sales", {
         method: "POST",
         body: JSON.stringify({
           customer_name: customer?.name || null,
           customer_phone: customer?.phone || null,
           discount: discount || null,
           payment_method: method,
+          cash_tendered: method === "cash" && tendered.trim() !== "" ? handed : null,
           items: cart.map((line) => ({ product_id: line.id, quantity: line.quantity })),
         }),
       });
+      const balance = round2(Number(sale.change || 0));
       setCart([]);
       setPercent(0);
-      setNotice(method === "credit" ? "Sale saved on credit." : "Sale completed.");
-      window.setTimeout(() => setNotice(""), 2500);
+      setTendered("");
+      setNotice(method === "credit" ? "Sale saved on credit." : balance > 0 ? `Sale completed. Balance ${money(balance)}.` : "Sale completed.");
+      window.setTimeout(() => setNotice(""), balance > 0 ? 12000 : 2500);
       loadFloor();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to complete the sale.");
@@ -378,8 +385,7 @@ export default function ClothingFloorPage() {
             </div>
           )}
         </div>
-        <button type="button" onClick={() => setStockOpen(true)} className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/80">Stock status</button>
-        <HalfToggle on={half} onChange={setHalf} />
+        <button type="button" onClick={() => { setStockQuery(""); setStockOpen(true); }} className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/80">Stock status</button>
         {displayOn && (
           <button
             type="button"
@@ -567,17 +573,23 @@ export default function ClothingFloorPage() {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setMethod(item.id)}
+                onClick={() => {
+                  setMethod(item.id);
+                  if (item.id !== "cash") setTendered("");
+                }}
                 className={`h-12 rounded-xl text-xs ${method === item.id ? "border border-violet-400 bg-violet-600/20" : "bg-white/5 text-white/70"}`}
               >
                 {item.label}
               </button>
             ))}
           </div>
+          {method === "cash" && total > 0 && (
+            <CashTender total={total} tendered={tendered} onChange={setTendered} />
+          )}
           {notice && <p className="mt-3 text-sm text-emerald-300">{notice}</p>}
           <button
             type="button"
-            disabled={saving || cart.length === 0}
+            disabled={saving || cart.length === 0 || (method === "cash" && tendered.trim() !== "" && Number(tendered) + 0.009 < total)}
             onClick={checkout}
             className="mt-3 h-12 w-full rounded-xl bg-emerald-500 text-sm font-semibold text-black disabled:opacity-40"
           >
@@ -588,29 +600,55 @@ export default function ClothingFloorPage() {
 
       {stockOpen && (
         <div className="fixed inset-0 z-30 grid place-items-center bg-black/60 p-4" onClick={() => setStockOpen(false)}>
-          <div className="max-h-[80vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-white/10 bg-[#101624]" onClick={(event) => event.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4">
+          <div className="flex h-[80vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#101624]" onClick={(event) => event.stopPropagation()}>
+            <div className="flex shrink-0 items-center justify-between px-5 py-4">
               <h2 className="text-sm font-semibold">Stock status overview</h2>
               <button type="button" onClick={() => setStockOpen(false)} aria-label="Close"><X size={16} /></button>
             </div>
-            <div className="max-h-[64vh] overflow-auto">
+            <label className="relative mx-5 mb-3 block shrink-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/35" size={14} />
+              <input
+                value={stockQuery}
+                onChange={(event) => setStockQuery(event.target.value)}
+                placeholder="Search name, size, SKU or category"
+                aria-label="Search stock"
+                className="h-10 w-full rounded-xl border border-white/10 bg-[#070b14] pl-9 pr-9 text-sm outline-none placeholder:text-white/30"
+              />
+              {stockQuery && (
+                <button
+                  type="button"
+                  onClick={() => setStockQuery("")}
+                  aria-label="Clear search"
+                  className="absolute right-2 top-1/2 grid size-6 -translate-y-1/2 place-items-center text-white/50 hover:text-white"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </label>
+            <div className="min-h-0 flex-1 overflow-auto">
               <table className="w-full text-left text-sm">
                 <thead className="text-[10px] uppercase tracking-wide text-white/40">
                   <tr>
                     <th className="px-5 py-2">Code</th>
                     <th className="py-2">Garment</th>
+                    <th className="py-2">Size</th>
                     <th className="py-2">Category</th>
                     <th className="py-2">Stock</th>
                     <th className="px-5 py-2 text-right">Unit price</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {products.map((product) => {
+                  {products.filter((product) => {
+                    const needle = stockQuery.trim().toLowerCase();
+                    if (!needle) return true;
+                    return [product.name, product.sku, product.barcode, product.category, product.color, product.size].filter(Boolean).join(" ").toLowerCase().includes(needle);
+                  }).map((product) => {
                     const qty = shownStock(product);
                     return (
                       <tr key={product.id} className="border-t border-white/5">
                         <td className="px-5 py-2.5 text-white/70">{product.sku || "—"}</td>
-                        <td className="py-2.5">{product.name}{product.size ? ` · ${product.size}` : ""}</td>
+                        <td className="py-2.5">{product.name}</td>
+                        <td className="py-2.5">{product.size || "One"}</td>
                         <td className="py-2.5 text-white/60">{product.category || "—"}</td>
                         <td className={`py-2.5 font-semibold ${qty < 10 ? "text-rose-400" : "text-emerald-400"}`}>{qty} units</td>
                         <td className="px-5 py-2.5 text-right">{money(product.price)}</td>
@@ -619,6 +657,11 @@ export default function ClothingFloorPage() {
                   })}
                 </tbody>
               </table>
+              {products.filter((product) => {
+                const needle = stockQuery.trim().toLowerCase();
+                if (!needle) return true;
+                return [product.name, product.sku, product.barcode, product.category, product.color, product.size].filter(Boolean).join(" ").toLowerCase().includes(needle);
+              }).length === 0 && <p className="px-5 py-6 text-sm text-white/40">No garments match that search.</p>}
             </div>
           </div>
         </div>
@@ -654,9 +697,53 @@ export default function ClothingFloorPage() {
   );
 }
 
-function readHalfParam() {
-  if (typeof window === "undefined") return "";
-  return localStorage.getItem("clothing_half_view") === "1" ? "?half_view=1" : "";
+function roundUp(amount: number, step: number) {
+  const stepCents = Math.round(step * 100);
+  return (Math.ceil(Math.round(amount * 100) / stepCents) * stepCents) / 100;
+}
+
+function CashTender({ total, tendered, onChange }: { total: number; tendered: string; onChange: (value: string) => void }) {
+  const handed = Number(tendered);
+  const hasAmount = tendered.trim() !== "" && Number.isFinite(handed);
+  const short = hasAmount && handed + 0.009 < total ? round2(total - handed) : 0;
+  const balance = hasAmount && short === 0 ? round2(handed - total) : 0;
+  const quick = [1000, 5000]
+    .map((step) => roundUp(total, step))
+    .filter((amount, index, list) => amount > total + 0.009 && list.indexOf(amount) === index);
+
+  return (
+    <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3">
+      <label className="block text-[10px] font-semibold uppercase tracking-wide text-white/40">
+        Cash received
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          inputMode="decimal"
+          value={tendered}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={total.toFixed(2)}
+          aria-label="Cash received"
+          className="mt-1 h-11 w-full rounded-xl border border-white/10 bg-[#070b14] px-3 text-sm text-white outline-none"
+        />
+      </label>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button type="button" onClick={() => onChange(total.toFixed(2))} className="h-8 rounded-lg bg-white/10 px-3 text-xs">Exact</button>
+        {quick.map((amount) => (
+          <button key={amount} type="button" onClick={() => onChange(amount.toFixed(2))} className="h-8 rounded-lg bg-white/10 px-3 text-xs">
+            {money(amount)}
+          </button>
+        ))}
+      </div>
+      {short > 0 && <p className="mt-3 text-sm font-semibold text-rose-300">Short by {money(short)}</p>}
+      {hasAmount && short === 0 && (
+        <div className="mt-3 flex items-end justify-between text-white">
+          <span className="text-xs uppercase tracking-wide text-white/50">Balance</span>
+          <span className="text-2xl font-semibold text-emerald-300">{money(balance)}</span>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function GarmentPhoto({ src, name }: { src: string; name: string }) {
