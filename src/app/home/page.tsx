@@ -5,7 +5,7 @@ import { IubitsLogo } from "@/components/iubits-logo";
 export const metadata: Metadata = {
   title: "IUBits | POS, ERP, and websites",
   description:
-    "IUBits builds a point-of-sale system for garages, shops, studios, salons, and cottages, plus ERP systems and responsive websites.",
+    "IUBits builds a point-of-sale system for garages, shops, garments, clothing shops, salons, and cottages, plus ERP systems and responsive websites.",
 };
 
 const trades = [
@@ -40,19 +40,19 @@ const trades = [
       "Sell handsets and accessories, look up a unit by IMEI, and run repair bills and warranties beside the sales counter.",
   },
   {
-    name: "Garment shops",
+    name: "Garments",
     detail:
       "Ring up clothing at the counter, keep a catalog with sizes, bill alterations, and set sales targets for the team.",
+  },
+  {
+    name: "Clothing shops",
+    detail:
+      "Sell from the clothing floor: browse by category, scan a barcode, show the sale on a customer display, and take cash, card, QR, or credit.",
   },
   {
     name: "Salons",
     detail:
       "Book appointments, sell service packages and add-ons, and ring up retail products from the same till.",
-  },
-  {
-    name: "Photography studios",
-    detail:
-      "Book a shoot, price packages and prints, and take payment on an order that stays tied to the customer.",
   },
   {
     name: "Cottages",
@@ -89,8 +89,7 @@ const featureGroups = [
       ["Free service", "Mark a job free for the customer, including parts. Technician commission still uses the line prices."],
       ["Job commission", "Monthly commission for the team on paid jobs. Repair labor counts in full, service labor at half, and the employee receives 10% of the amount above salary."],
       ["Next-service reminders", "An SMS or WhatsApp before the next service date, for garages that run service jobs and bill SMS."],
-      ["Studio bookings and packages", "Photography sessions, priced packages, prints, and add-ons."],
-      ["Salon appointments", "The same booking book used for salon appointments, packages, and add-ons."],
+      ["Salon appointments", "Book salon appointments, packages, and add-ons."],
       ["Cottage stays", "Rooms, nightly rates, check-in, and charges for meals and extras."],
       ["Store and phone repairs", "A repair bill next to counter sales, with its own profit, for stores and mobile shops."],
     ],
@@ -203,7 +202,7 @@ export default function CompanyHomePage() {
               A shop owner signs in and works in their own business. Staff sign in on the same account with only the modules the owner has turned on for them. Bills, stock, attendance, and finance stay inside that business. A second shop can be added, and stock can move between shops.
             </p>
             <p>
-              The screens change with the trade. A garage admits a vehicle and writes a job card. A clothing shop rings up a garment. A cottage checks a guest into a room. The shared pieces — customers, payments, payroll, and reports — sit under that difference, so a tyre shop is not asked to run a photography package, and a studio is not asked to count engine oil.
+              The screens change with the trade. A garage admits a vehicle and writes a job card. A clothing shop rings up a garment. A cottage checks a guest into a room. The shared pieces — customers, payments, payroll, and reports — sit under that difference, so a tyre shop is not asked to run a clothing catalog, and a clothing shop is not asked to count engine oil.
             </p>
           </div>
           <dl className="mt-10 grid gap-px bg-[#d7d3c8] sm:grid-cols-3">
