@@ -5,7 +5,8 @@ import Link from "next/link";
 import { Boxes, Download, PackagePlus, Pencil, Plus, Upload, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
-import { API_URL, api, mediaUrl, money } from "@/lib/api";
+import { halfQty } from "@/components/half-toggle";
+import { API_URL, api, currentUser, mediaUrl, money } from "@/lib/api";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 
 type Product = {
@@ -59,6 +60,7 @@ export default function CatalogPage() {
   const [importPayment, setImportPayment] = useState("paid");
   const [importDue, setImportDue] = useState("");
   const [importSupplierId, setImportSupplierId] = useState("");
+  const [half, setHalf] = useState(false);
 
   function load() {
     setLoading(true);
@@ -72,6 +74,10 @@ export default function CatalogPage() {
   }
 
   useEffect(load, []);
+
+  useEffect(() => {
+    setHalf(Boolean(currentUser()?.tenant?.half_view));
+  }, []);
 
   useEffect(() => {
     if (!clothing) return;
@@ -283,15 +289,18 @@ export default function CatalogPage() {
                   <h2 className="mt-1 truncate font-display text-lg font-semibold uppercase leading-none">{product.name}</h2>
                   <p className="mt-2 text-xs text-[#6f746e]">{product.color || product.sku || "—"}</p>
                   <div className="mt-2 flex flex-wrap gap-1">
-                    {style.products.map((row) => (
-                      <button key={row.id} type="button" onClick={() => openEdit(row)} className={`px-1.5 py-0.5 text-[10px] font-bold ${row.stock_qty < 10 ? "bg-[#b84837]/10 text-[#b84837]" : "bg-[#167c73]/10 text-[#167c73]"}`}>
-                        {row.size || "One"} {row.stock_qty}
-                      </button>
-                    ))}
+                    {style.products.map((row) => {
+                      const qty = half ? halfQty(row.stock_qty) : Number(row.stock_qty);
+                      return (
+                        <button key={row.id} type="button" onClick={() => openEdit(row)} className={`px-1.5 py-0.5 text-[10px] font-bold ${qty < 10 ? "bg-[#b84837]/10 text-[#b84837]" : "bg-[#167c73]/10 text-[#167c73]"}`}>
+                          {row.size || "One"} {qty}
+                        </button>
+                      );
+                    })}
                   </div>
                   <div className="mt-2 flex items-center justify-between">
                     <p className="font-display text-lg font-semibold">{money(product.price)}</p>
-                    <span className="text-[10px] font-bold uppercase text-[#6f746e]">{style.products.reduce((sum, row) => sum + Number(row.stock_qty), 0)} total</span>
+                    <span className="text-[10px] font-bold uppercase text-[#6f746e]">{style.products.reduce((sum, row) => sum + (half ? halfQty(row.stock_qty) : Number(row.stock_qty)), 0)} total</span>
                   </div>
                 </div>
                 <div className="mt-auto flex border-t border-[#d7d3c8]">

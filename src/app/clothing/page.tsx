@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LayoutGrid, Monitor, PackageSearch, Plus, ScanBarcode, Search, ShoppingCart, Trash2, X } from "lucide-react";
+import { halfQty } from "@/components/half-toggle";
 import { api, currentBranch, currentFeatures, currentUser, mediaUrl, money, storeSession, type SessionPayload, type User } from "@/lib/api";
 
 type Product = {
@@ -221,7 +222,8 @@ export default function ClothingFloorPage() {
   }, [snapshot, displayOn, allowed]);
 
   function shownStock(product: Product) {
-    return product.stock_qty;
+    const qty = Number(product.stock_qty) || 0;
+    return user?.tenant?.half_view ? halfQty(qty) : qty;
   }
 
   function add(product: Product) {
