@@ -10,6 +10,7 @@ import { ShopFilter } from "@/components/branch-chip";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 
 const noopSubscribe = () => () => {};
+const payablePageSize = 7;
 
 type AccountRow = {
   date: string;
@@ -242,7 +243,7 @@ function BalanceSheetPageInner() {
     if (!highlightPayableId || !sheet) return;
     const items = sheet.inventory_payables?.items ?? [];
     const index = items.findIndex((item) => item.id === highlightPayableId);
-    if (index >= 0) setPayablePage(Math.floor(index / 5) + 1);
+    if (index >= 0) setPayablePage(Math.floor(index / payablePageSize) + 1);
     const timer = window.setTimeout(() => {
       payableRefs.current[highlightPayableId]?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 50);
@@ -349,9 +350,9 @@ function BalanceSheetPageInner() {
       (item.supplier || "").toLowerCase().includes(payableNeedle)
       || (item.invoice_number || "").toLowerCase().includes(payableNeedle))
     : payables;
-  const payableLastPage = Math.max(1, Math.ceil(visiblePayables.length / 5));
+  const payableLastPage = Math.max(1, Math.ceil(visiblePayables.length / payablePageSize));
   const payablePageSafe = Math.min(Math.max(1, payablePage), payableLastPage);
-  const pagedPayables = visiblePayables.slice((payablePageSafe - 1) * 5, payablePageSafe * 5);
+  const pagedPayables = visiblePayables.slice((payablePageSafe - 1) * payablePageSize, payablePageSafe * payablePageSize);
   const dailyAccounts = useMemo(() => {
     const days = new Map<string, { date: string; debit: number; credit: number; balance: number; entries: AccountRow[] }>();
     for (const row of accounts) {
@@ -789,7 +790,7 @@ function BalanceSheetPageInner() {
                     </p>
                   )}
                 </div>
-                {visiblePayables.length > 5 && (
+                {visiblePayables.length > payablePageSize && (
                   <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
                     <button
                       type="button"

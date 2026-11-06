@@ -52,53 +52,67 @@ export default function ClothingDisplayPage() {
   const lines = state?.payload?.lines ?? [];
   const logo = mediaUrl(state?.logo_url);
   const name = state?.business_name || "Clothing";
+  const idle = !blocked && lines.length === 0;
 
   return (
-    <main className="flex min-h-screen flex-col bg-[#070b14] text-white">
-      <header className="flex items-center justify-between px-8 py-6">
-        <p className="text-sm uppercase tracking-[0.22em] text-white/45">{name}</p>
-        {state?.payload?.customer_name && lines.length > 0 && (
-          <p className="text-sm text-white/70">{state.payload.customer_name}</p>
-        )}
-      </header>
-      {blocked ? (
-        <div className="grid flex-1 place-items-center px-8 text-center">
-          <p className="max-w-md text-lg text-white/70">{blocked}</p>
-        </div>
-      ) : lines.length === 0 ? (
-        <div className="grid flex-1 place-items-center px-8">
-          {logo ? (
-            <img src={logo} alt={name} className="max-h-64 max-w-md object-contain" />
-          ) : (
+    <main className="relative flex min-h-screen flex-col overflow-hidden bg-black text-white">
+      {logo && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={logo}
+          alt=""
+          aria-hidden="true"
+          className={idle
+            ? "absolute inset-0 h-full w-full object-contain"
+            : "pointer-events-none absolute inset-0 m-auto h-[94%] w-[min(98%,64rem)] object-contain opacity-20"}
+        />
+      )}
+      {idle ? (
+        logo ? null : (
+          <div className="grid flex-1 place-items-center px-8">
             <p className="text-center text-5xl font-semibold tracking-tight sm:text-7xl">{name}</p>
-          )}
-        </div>
+          </div>
+        )
       ) : (
-        <div className="grid min-w-0 flex-1 gap-8 px-8 pb-10 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
-          <ul className="min-w-0 space-y-4">
-            {lines.map((line, index) => (
-              <li key={`${line.name}-${index}`} className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
-                <div className="min-w-0">
-                  <p className="text-xl font-medium">{line.name}</p>
-                  <p className="mt-1 text-sm text-white/45">{line.detail} · {line.quantity} × {money(line.unit_price)}</p>
-                </div>
-                <p className="shrink-0 text-xl font-semibold">{money(line.line_total)}</p>
-              </li>
-            ))}
-          </ul>
-          <aside className="h-fit min-w-0 overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-6">
-            <dl className="space-y-2 text-sm text-white/60">
-              <div className="flex justify-between gap-3"><dt>Subtotal</dt><dd className="shrink-0">{money(state?.payload?.subtotal || 0)}</dd></div>
-              {Number(state?.payload?.discount || 0) > 0 && (
-                <div className="flex justify-between gap-3 text-emerald-300"><dt>Discount</dt><dd className="shrink-0">-{money(state?.payload?.discount || 0)}</dd></div>
-              )}
-              {Number(state?.payload?.tax || 0) > 0 && (
-                <div className="flex justify-between gap-3"><dt>Tax</dt><dd className="shrink-0">{money(state?.payload?.tax || 0)}</dd></div>
-              )}
-            </dl>
-            <p className="mt-6 text-xs uppercase tracking-[0.18em] text-white/40">Total</p>
-            <p className="mt-1 text-3xl font-semibold leading-tight break-words sm:text-4xl">{money(state?.payload?.total || 0)}</p>
-          </aside>
+        <div className="relative z-10 flex min-h-screen flex-col">
+          <header className="flex items-center justify-between px-8 py-6">
+            <p className="text-sm uppercase tracking-[0.22em] text-white/45">{name}</p>
+            {state?.payload?.customer_name && lines.length > 0 && (
+              <p className="text-sm text-white/70">{state.payload.customer_name}</p>
+            )}
+          </header>
+          {blocked ? (
+            <div className="grid flex-1 place-items-center px-8 text-center">
+              <p className="max-w-md text-lg text-white/70">{blocked}</p>
+            </div>
+          ) : (
+            <div className="grid min-w-0 flex-1 gap-8 px-8 pb-10 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
+              <ul className="min-w-0 space-y-4">
+                {lines.map((line, index) => (
+                  <li key={`${line.name}-${index}`} className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
+                    <div className="min-w-0">
+                      <p className="text-xl font-medium">{line.name}</p>
+                      <p className="mt-1 text-sm text-white/45">{line.detail} · {line.quantity} × {money(line.unit_price)}</p>
+                    </div>
+                    <p className="shrink-0 text-xl font-semibold">{money(line.line_total)}</p>
+                  </li>
+                ))}
+              </ul>
+              <aside className="h-fit min-w-0 overflow-hidden rounded-3xl border border-white/10 bg-black/35 p-6 backdrop-blur-sm">
+                <dl className="space-y-2 text-sm text-white/60">
+                  <div className="flex justify-between gap-3"><dt>Subtotal</dt><dd className="shrink-0">{money(state?.payload?.subtotal || 0)}</dd></div>
+                  {Number(state?.payload?.discount || 0) > 0 && (
+                    <div className="flex justify-between gap-3 text-emerald-300"><dt>Discount</dt><dd className="shrink-0">-{money(state?.payload?.discount || 0)}</dd></div>
+                  )}
+                  {Number(state?.payload?.tax || 0) > 0 && (
+                    <div className="flex justify-between gap-3"><dt>Tax</dt><dd className="shrink-0">{money(state?.payload?.tax || 0)}</dd></div>
+                  )}
+                </dl>
+                <p className="mt-6 text-xs uppercase tracking-[0.18em] text-white/40">Total</p>
+                <p className="mt-1 text-3xl font-semibold leading-tight break-words sm:text-4xl">{money(state?.payload?.total || 0)}</p>
+              </aside>
+            </div>
+          )}
         </div>
       )}
     </main>
