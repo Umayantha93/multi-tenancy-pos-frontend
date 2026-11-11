@@ -4,7 +4,6 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LayoutGrid, Monitor, PackageSearch, Plus, ScanBarcode, Search, ShoppingCart, Trash2, X } from "lucide-react";
-import { halfQty } from "@/components/half-toggle";
 import { api, currentBranch, currentFeatures, currentUser, mediaUrl, money, storeSession, type SessionPayload, type User } from "@/lib/api";
 
 type Product = {
@@ -55,6 +54,17 @@ const METHODS = [
 
 function round2(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+const SIZE_ORDER = ["XS", "S", "M", "L", "XL", "XXL", "28", "30", "32", "34", "36", "38", "40", "42", "EU 39", "EU 40", "EU 41", "EU 42", "EU 43", "One"];
+
+function styleKey(product: { name: string; color: string | null; category: string | null }) {
+  return `${product.name}||${product.color || ""}||${product.category || ""}`;
+}
+
+function sizeRank(size: string) {
+  const at = SIZE_ORDER.indexOf(size);
+  return at < 0 ? 1000 : at;
 }
 
 function tone(category: string | null) {
@@ -142,7 +152,7 @@ export default function ClothingFloorPage() {
 
   function loadFloor() {
     Promise.all([
-      api<{ data: Product[] }>("/products?active_only=1&per_page=500"),
+      api<{ data: Product[] }>("/products?active_only=1&per_page=500", { cache: "no-store" }),
       api<{ data: Customer[] }>("/customers?per_page=100"),
       api<Insights>("/clothing/insights"),
     ]).then(([catalog, people, figures]) => {
@@ -170,7 +180,7 @@ export default function ClothingFloorPage() {
       if (category !== "All" && category !== "Sale" && product.category !== category) continue;
       const haystack = [product.name, product.sku, product.barcode, product.category, product.color, product.size].filter(Boolean).join(" ").toLowerCase();
       if (query && !haystack.includes(query)) continue;
-      const key = `${product.name}||${product.color || ""}`;
+      const key = styleKey(product);
       const list = groups.get(key) ?? [];
       list.push(product);
       groups.set(key, list);
@@ -182,7 +192,7 @@ export default function ClothingFloorPage() {
       color: variants[0].color,
       badge: variants.find((row) => row.badge)?.badge ?? null,
       image: variants.find((row) => row.image_urls?.[0])?.image_urls?.[0] ?? null,
-      variants: [...variants].sort((a, b) => (a.size || "").localeCompare(b.size || "")),
+      variants: [...variants].sort((a, b) => sizeRank(a.size || "") - sizeRank(b.size || "")),
     }));
   }, [products, search, category]);
 
@@ -222,8 +232,7 @@ export default function ClothingFloorPage() {
   }, [snapshot, displayOn, allowed]);
 
   function shownStock(product: Product) {
-    const qty = Number(product.stock_qty) || 0;
-    return user?.tenant?.half_view ? halfQty(qty) : qty;
+    return Math.max(0, Number(product.stock_qty) || 0);
   }
 
   function add(product: Product) {
@@ -250,12 +259,20 @@ export default function ClothingFloorPage() {
     event.preventDefault();
     const code = scan.trim().toLowerCase();
     if (!code) return;
-    const hit = products.find((product) => product.barcode?.toLowerCase() === code || product.sku?.toLowerCase() === code);
-    if (!hit) {
+    const matches = products.filter((product) => product.barcode?.toLowerCase() === code || product.sku?.toLowerCase() === code);
+    if (matches.length === 0) {
       setError("No garment matches that code.");
       return;
     }
+    const key = styleKey(matches[0]);
+    const picked = matches.find((product) => String(product.id) === sizePick[key]);
+    const hit = picked || matches.find((product) => shownStock(product) > 0) || matches[0];
+    if (shownStock(hit) < 1) {
+      setError(`${hit.size || "That size"} is out of stock.`);
+      return;
+    }
     setError("");
+    setSizePick((picks) => ({ ...picks, [key]: String(hit.id) }));
     add(hit);
     setScan("");
   }
@@ -328,6 +345,10 @@ export default function ClothingFloorPage() {
         }),
       });
       const balance = round2(Number(sale.change || 0));
+      setProducts((rows) => rows.map((product) => {
+        const sold = cart.find((line) => line.id === product.id);
+        return sold ? { ...product, stock_qty: Math.max(0, Number(product.stock_qty) - sold.quantity) } : product;
+      }));
       setCart([]);
       setPercent(0);
       setTendered("");
@@ -443,8 +464,8 @@ export default function ClothingFloorPage() {
           {error && <p className="mt-3 rounded-lg bg-rose-500/15 px-3 py-2 text-sm text-rose-200">{error}</p>}
           <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
             {cards.map((card) => {
-              const selectedSize = sizePick[card.key] || card.variants[0]?.size || "";
-              const variant = card.variants.find((row) => (row.size || "") === selectedSize) || card.variants[0];
+              const picked = card.variants.find((row) => String(row.id) === sizePick[card.key]);
+              const variant = picked || card.variants.find((row) => shownStock(row) > 0) || card.variants[0];
               const qty = shownStock(variant);
               return (
                 <article key={card.key} className="overflow-hidden rounded-xl border border-white/10 bg-[#101624]">
@@ -457,16 +478,20 @@ export default function ClothingFloorPage() {
                     <p className="truncate text-xs font-semibold">{card.name}</p>
                     <p className="mt-0.5 text-[11px] text-white/40">{[card.category, card.color].filter(Boolean).join(" · ")}</p>
                     <div className="mt-2 flex flex-wrap gap-1">
-                      {card.variants.map((row) => (
-                        <button
-                          key={row.id}
-                          type="button"
-                          onClick={() => setSizePick((picks) => ({ ...picks, [card.key]: row.size || "" }))}
-                          className={`rounded-md px-1.5 py-0.5 text-[10px] ${(row.size || "") === (variant.size || "") ? "bg-white text-black" : "bg-white/10 text-white/70"}`}
-                        >
-                          {row.size || "One"}
-                        </button>
-                      ))}
+                      {card.variants.map((row) => {
+                        const rowQty = shownStock(row);
+                        const selected = row.id === variant.id;
+                        return (
+                          <button
+                            key={row.id}
+                            type="button"
+                            onClick={() => setSizePick((picks) => ({ ...picks, [card.key]: String(row.id) }))}
+                            className={`rounded-md px-1.5 py-0.5 text-[10px] ${selected ? "bg-white text-black" : rowQty < 1 ? "bg-white/5 text-white/30" : "bg-white/10 text-white/70"}`}
+                          >
+                            {row.size || "One"}
+                          </button>
+                        );
+                      })}
                     </div>
                     <div className="mt-3 flex items-center justify-between">
                       <strong className="text-sm">{money(variant.price)}</strong>

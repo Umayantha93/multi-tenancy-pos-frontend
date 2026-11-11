@@ -75,7 +75,7 @@ export default function ProfilePage() {
       setHalfView(Boolean(updated.half_view));
       const token = localStorage.getItem("garage_token");
       if (token) storeSession(token, nextUser, currentFeatures());
-      setNotice(next ? "Half is on. Stock counts show half, and bill numbers stay in order." : "Half is off. Stock counts and bill numbers are back to normal.");
+      setNotice(next ? "Half is on. Office stock value shows half, and piece counts stay exact." : "Half is off. Office stock value is back to the full amount.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save Half.");
     } finally {
@@ -183,7 +183,7 @@ export default function ProfilePage() {
               <div className="flex items-center justify-between gap-4 border border-[#d7d3c8] bg-[#fbfaf6] p-4">
                 <div>
                   <p className="text-xs font-bold uppercase">Half</p>
-                  <p className="mt-1 text-sm text-[#6f746e]">When Half is on, catalog and floor stock show half the quantity. The full amount stays stored. Bill numbers cannot be changed and stay in order.</p>
+                  <p className="mt-1 text-sm text-[#6f746e]">When Half is on, the stock value on the office totals shows half. Piece counts stay exact, so selling 3 removes 3. Bill numbers cannot be changed and stay in order.</p>
                 </div>
                 <HalfToggle on={halfView} onChange={(next) => void saveHalf(next)} tone="light" />
                 {savingHalf ? <span className="text-xs text-[#6f746e]">Saving...</span> : null}
