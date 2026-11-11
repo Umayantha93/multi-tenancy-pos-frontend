@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LayoutGrid, Monitor, PackageSearch, Plus, ScanBarcode, Search, ShoppingCart, Trash2, X } from "lucide-react";
 import { api, currentBranch, currentFeatures, currentUser, mediaUrl, money, storeSession, type SessionPayload, type User } from "@/lib/api";
+import { useNewSalePurple, writeHalfView } from "@/components/half-toggle";
 
 type Product = {
   id: number;
@@ -110,6 +111,10 @@ export default function ClothingFloorPage() {
   const [now, setNow] = useState<Date | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const branch = ready ? currentBranch() : null;
+  const salePurple = useNewSalePurple();
+  const pageBg = salePurple ? "bg-[#7c3aed]" : "bg-[#070b14]";
+  const accent = salePurple ? "bg-[#12315c]" : "bg-violet-600";
+  const accentSoft = salePurple ? "bg-[#12315c] text-white" : "border border-violet-400 bg-violet-600/20";
 
   useEffect(() => {
     if (!localStorage.getItem("garage_token")) {
@@ -118,6 +123,9 @@ export default function ClothingFloorPage() {
     }
     const cached = currentUser();
     setUser(cached);
+    if (cached?.tenant?.business_type === "clothing") {
+      writeHalfView(Boolean(cached.tenant.half_view));
+    }
     setAllowed(cached?.tenant?.business_type === "clothing");
     setDisplayOn(currentFeatures().includes("customer_display"));
     setReady(true);
@@ -131,6 +139,9 @@ export default function ClothingFloorPage() {
           });
         }
         setUser(result.user);
+        if (result.user.tenant?.business_type === "clothing") {
+          writeHalfView(Boolean(result.user.tenant.half_view));
+        }
         setAllowed(result.user.tenant?.business_type === "clothing");
         setDisplayOn(result.features.includes("customer_display"));
       })
@@ -199,14 +210,9 @@ export default function ClothingFloorPage() {
   const subtotal = round2(cart.reduce((sum, line) => sum + line.price * line.quantity, 0));
   const discount = round2(subtotal * discountPercent / 100);
   const taxable = round2(Math.max(0, subtotal - discount));
-  const vatRate = user?.tenant?.vat_registered ? Number(user.tenant.vat_rate || 0) : 0;
   const ssclRate = user?.tenant?.sscl_registered ? Number(user.tenant.sscl_rate || 0) : 0;
-  const tax = round2(taxable * ((vatRate + ssclRate) / 100));
+  const tax = round2(taxable * (ssclRate / 100));
   const total = round2(taxable + tax);
-  const taxLabel = [
-    vatRate > 0 ? `VAT ${vatRate}%` : "",
-    ssclRate > 0 ? `SSCL ${ssclRate}%` : "",
-  ].filter(Boolean).join(" + ") || "Tax";
 
   const snapshot = useMemo(() => ({
     lines: cart.map((line) => ({
@@ -375,9 +381,9 @@ export default function ClothingFloorPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#070b14] text-white">
+    <main className={`min-h-screen text-white ${pageBg}`}>
       <header className="flex flex-wrap items-center gap-2 border-b border-white/10 px-4 py-3">
-        <Link href="/dashboard" className="mr-1 grid size-9 place-items-center rounded-xl bg-violet-600" title="Office">
+        <Link href="/dashboard" className={`mr-1 grid size-9 place-items-center rounded-xl ${accent}`} title="Office">
           <LayoutGrid size={16} />
         </Link>
         <div className="mr-2 min-w-0">
@@ -455,7 +461,7 @@ export default function ClothingFloorPage() {
                 key={item}
                 type="button"
                 onClick={() => setCategory(item)}
-                className={`rounded-full px-3 py-1 text-xs ${category === item ? "bg-violet-600" : "bg-white/5 text-white/70"}`}
+                className={`rounded-full px-3 py-1 text-xs ${category === item ? accent : "bg-white/5 text-white/70"}`}
               >
                 {item}
               </button>
@@ -499,7 +505,7 @@ export default function ClothingFloorPage() {
                         type="button"
                         disabled={qty < 1}
                         onClick={() => add(variant)}
-                        className="grid size-8 place-items-center rounded-full bg-violet-600 disabled:opacity-30"
+                        className={`grid size-8 place-items-center rounded-full disabled:opacity-30 ${accent}`}
                         aria-label={`Add ${card.name}`}
                       >
                         <Plus size={16} />
@@ -577,7 +583,7 @@ export default function ClothingFloorPage() {
                 key={value}
                 type="button"
                 onClick={() => setPercent(value)}
-                className={`h-9 rounded-lg text-xs ${percent === value ? "bg-violet-600" : "bg-white/5 text-white/70"}`}
+                className={`h-9 rounded-lg text-xs ${percent === value ? accent : "bg-white/5 text-white/70"}`}
               >
                 {value === 0 ? "None" : `${value}%`}
               </button>
@@ -588,7 +594,7 @@ export default function ClothingFloorPage() {
           <dl className="mt-4 space-y-1 text-sm text-white/60">
             <div className="flex justify-between"><dt>Subtotal ({cart.reduce((sum, line) => sum + line.quantity, 0)} items)</dt><dd>{money(subtotal)}</dd></div>
             {discount > 0 && <div className="flex justify-between text-emerald-300"><dt>Discount</dt><dd>-{money(discount)}</dd></div>}
-            {(vatRate > 0 || ssclRate > 0) && <div className="flex justify-between"><dt>{taxLabel}</dt><dd>{money(tax)}</dd></div>}
+            {ssclRate > 0 && <div className="flex justify-between"><dt>SSCL {ssclRate}%</dt><dd>{money(tax)}</dd></div>}
             <div className="flex items-end justify-between pt-2 text-white">
               <dt className="text-xs uppercase tracking-wide text-white/50">Grand total</dt>
               <dd className="text-2xl font-semibold">{money(total)}</dd>
@@ -604,7 +610,7 @@ export default function ClothingFloorPage() {
                   setMethod(item.id);
                   if (item.id !== "cash") setTendered("");
                 }}
-                className={`h-12 rounded-xl text-xs ${method === item.id ? "border border-violet-400 bg-violet-600/20" : "bg-white/5 text-white/70"}`}
+                className={`h-12 rounded-xl text-xs ${method === item.id ? accentSoft : "bg-white/5 text-white/70"}`}
               >
                 {item.label}
               </button>
@@ -710,12 +716,12 @@ export default function ClothingFloorPage() {
               <input name="phone" required placeholder="0771234567" className="mt-1 h-11 w-full rounded-xl border border-white/10 bg-[#070b14] px-3 text-sm text-white" />
             </label>
             <label className="mt-4 flex items-center gap-2 text-sm">
-              <input name="is_vip" type="checkbox" className="size-4 accent-violet-500" />
+              <input name="is_vip" type="checkbox" className={`size-4 ${salePurple ? "accent-[#12315c]" : "accent-violet-500"}`} />
               Register as VIP member (automatic 10% discount)
             </label>
             <div className="mt-5 flex justify-end gap-2">
               <button type="button" onClick={() => setCustomerOpen(false)} className="h-10 rounded-xl bg-white/10 px-4 text-sm">Cancel</button>
-              <button className="h-10 rounded-xl bg-violet-600 px-4 text-sm font-semibold">Save & select</button>
+              <button className={`h-10 rounded-xl px-4 text-sm font-semibold ${accent}`}>Save & select</button>
             </div>
           </form>
         </div>

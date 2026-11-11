@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AddressField } from "@/components/address-field";
 import { ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
-import { HalfToggle } from "@/components/half-toggle";
+import { HalfToggle, writeHalfView } from "@/components/half-toggle";
 import { api, currentFeatures, currentUser, mediaUrl, storeSession, User } from "@/lib/api";
 
 export default function ProfilePage() {
@@ -75,9 +75,10 @@ export default function ProfilePage() {
       setHalfView(Boolean(updated.half_view));
       const token = localStorage.getItem("garage_token");
       if (token) storeSession(token, nextUser, currentFeatures());
-      setNotice(next ? "Half is on. Office stock value shows half, and piece counts stay exact." : "Half is off. Office stock value is back to the full amount.");
+      writeHalfView(Boolean(updated.half_view));
+      setNotice(next ? "Color is on." : "Color is off.");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save Half.");
+      setError(caught instanceof Error ? caught.message : "Could not save Color.");
     } finally {
       setSavingHalf(false);
     }
@@ -181,10 +182,7 @@ export default function ProfilePage() {
             ) : null}
             {isClothing && (
               <div className="flex items-center justify-between gap-4 border border-[#d7d3c8] bg-[#fbfaf6] p-4">
-                <div>
-                  <p className="text-xs font-bold uppercase">Half</p>
-                  <p className="mt-1 text-sm text-[#6f746e]">When Half is on, the stock value on the office totals shows half. Piece counts stay exact, so selling 3 removes 3. Bill numbers cannot be changed and stay in order.</p>
-                </div>
+                <p className="text-xs font-bold uppercase">Color</p>
                 <HalfToggle on={halfView} onChange={(next) => void saveHalf(next)} tone="light" />
                 {savingHalf ? <span className="text-xs text-[#6f746e]">Saving...</span> : null}
               </div>
@@ -208,7 +206,7 @@ export default function ProfilePage() {
                 <p className="mt-2 text-sm">
                   Next bill: <strong className="tabular-nums">{billLocked ? (tenant?.next_bill_number ?? previewNext) : previewNext}</strong>
                   {billLocked ? " · locked" : ""}
-                  {billsFrozen ? " · unchanged while Half is on" : ""}
+                  {billsFrozen ? " · unchanged while Color is on" : ""}
                 </p>
                 {!billLocked && !billsFrozen && (
                   <button

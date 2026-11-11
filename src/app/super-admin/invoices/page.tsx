@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useEffect, useState } from "react";
-import { ArrowRight, Search } from "lucide-react";
+import { FormEvent, Suspense, useCallback, useEffect, useState } from "react";
+import { ArrowRight, Search, X } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
-import { ErrorMessage, PageState, Panel, inputClass } from "@/components/ui";
+import { ErrorMessage, ListPager, LIST_PAGE_SIZE, PageState, Panel, inputClass } from "@/components/ui";
 import { api, formatDate, money, Tenant } from "@/lib/api";
 import { billStatusClass, billStatusLabel } from "@/lib/bill-stamp";
 
@@ -22,7 +22,7 @@ type BillRow = {
   customer: { name: string; phone: string } | null;
   vehicle: { number_plate: string } | null;
 };
-type BillPage = { data: BillRow[]; total: number };
+type BillPage = { data: BillRow[]; total: number; current_page: number; last_page: number };
 
 function statusClass(status: string) {
   return billStatusClass(status);
@@ -37,8 +37,13 @@ function InvoicesPageInner() {
   const [bills, setBills] = useState<BillPage | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const rangeInvalid = Boolean(dateFrom && dateTo && dateFrom > dateTo);
 
   useEffect(() => {
     api<TenantPage>("/super-admin/tenants?per_page=100&status=")
@@ -50,27 +55,51 @@ function InvoicesPageInner() {
     setTenantId(tenantParam);
   }, [tenantParam]);
 
-  useEffect(() => {
+  const loadBills = useCallback((pageNum: number) => {
     if (!tenantId) {
       setBills(null);
       return;
     }
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      setError("The start date must be on or before the end date.");
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError("");
-    const timer = setTimeout(() => {
-      const params = new URLSearchParams({ per_page: "50" });
-      if (search) params.set("search", search);
-      if (status) params.set("status", status);
-      api<BillPage>(`/super-admin/tenants/${tenantId}/bills?${params}`)
-        .then(setBills)
-        .catch((caught) => setError(caught.message))
-        .finally(() => setLoading(false));
-    }, 250);
+    const params = new URLSearchParams({
+      per_page: String(LIST_PAGE_SIZE),
+      page: String(Math.max(1, pageNum)),
+    });
+    if (search) params.set("search", search);
+    if (status) params.set("status", status);
+    if (dateFrom) params.set("date_from", dateFrom);
+    if (dateTo) params.set("date_to", dateTo);
+    api<BillPage>(`/super-admin/tenants/${tenantId}/bills?${params}`)
+      .then((result) => {
+        setBills(result);
+        setPage(result.current_page || pageNum);
+        setLastPage(Math.max(1, result.last_page || 1));
+      })
+      .catch((caught) => setError(caught.message))
+      .finally(() => setLoading(false));
+  }, [tenantId, search, status, dateFrom, dateTo]);
+
+  useEffect(() => {
+    if (!tenantId) {
+      setBills(null);
+      setPage(1);
+      setLastPage(1);
+      return;
+    }
+    setLoading(true);
+    const timer = setTimeout(() => loadBills(1), 250);
     return () => clearTimeout(timer);
-  }, [tenantId, search, status]);
+  }, [loadBills, tenantId]);
 
   function selectTenant(id: string) {
     setTenantId(id);
+    setBills(null);
     const next = new URLSearchParams();
     if (id) next.set("tenant", id);
     router.replace(id ? `/super-admin/invoices?${next}` : "/super-admin/invoices");
@@ -84,8 +113,8 @@ function InvoicesPageInner() {
 
   return (
     <PlatformShell title="Tenants invoices" eyebrow="Platform control">
-      <form onSubmit={submit} className="mb-5 grid gap-3 lg:grid-cols-[1.4fr_1fr_180px]">
-        <label>
+      <form onSubmit={submit} className="mb-5 flex flex-wrap items-end gap-3">
+        <label className="block min-w-56 flex-1">
           <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">Tenant</span>
           <select
             value={tenantId}
@@ -100,23 +129,25 @@ function InvoicesPageInner() {
             ))}
           </select>
         </label>
-        <label className="relative">
+        <label className="block min-w-56 max-w-md flex-1">
           <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">Search bills</span>
-          <Search size={17} className="absolute left-3 top-9 text-[#6f746e]" />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Bill number, customer, plate"
-            className={`${inputClass} pl-10`}
-            disabled={!tenantId}
-          />
+          <span className="relative block">
+            <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6f746e]" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Bill number, customer, plate"
+              className={`${inputClass} pl-8`}
+              disabled={!tenantId}
+            />
+          </span>
         </label>
-        <label>
+        <label className="block">
           <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">Status</span>
           <select
             value={status}
             onChange={(event) => setStatus(event.target.value)}
-            className={inputClass}
+            className={`${inputClass} w-auto min-w-40`}
             disabled={!tenantId}
           >
             <option value="">All</option>
@@ -126,6 +157,38 @@ function InvoicesPageInner() {
             <option value="closed">Closed</option>
           </select>
         </label>
+        <label className="block">
+          <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">From</span>
+          <input
+            type="date"
+            value={dateFrom}
+            max={dateTo || undefined}
+            onChange={(event) => setDateFrom(event.target.value)}
+            className={`${inputClass} w-auto min-w-40`}
+            disabled={!tenantId}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">To</span>
+          <input
+            type="date"
+            value={dateTo}
+            min={dateFrom || undefined}
+            onChange={(event) => setDateTo(event.target.value)}
+            className={`${inputClass} w-auto min-w-40`}
+            disabled={!tenantId}
+          />
+        </label>
+        {(dateFrom || dateTo) && (
+          <button
+            type="button"
+            onClick={() => { setDateFrom(""); setDateTo(""); }}
+            className="inline-flex h-8 items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-[11px] font-semibold text-[#6f746e] hover:border-[#167c73] hover:text-[#167c73]"
+          >
+            <X size={16} />
+            Clear dates
+          </button>
+        )}
       </form>
 
       {error && <ErrorMessage message={error} />}
@@ -184,9 +247,12 @@ function InvoicesPageInner() {
               </tbody>
             </table>
             {bills && bills.data.length === 0 && (
-              <p className="p-8 text-center text-sm text-[#6f746e]">No invoices for this tenant.</p>
+              <p className="p-8 text-center text-sm text-[#6f746e]">
+                {dateFrom || dateTo ? "No invoices in this date range." : "No invoices for this tenant."}
+              </p>
             )}
           </div>
+          <ListPager page={page} lastPage={lastPage} disabled={loading || rangeInvalid} onPage={loadBills} />
         </Panel>
       )}
     </PlatformShell>
