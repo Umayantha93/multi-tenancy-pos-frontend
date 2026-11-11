@@ -5,8 +5,7 @@ import Link from "next/link";
 import { Boxes, Download, PackagePlus, Pencil, Plus, Upload, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, SuccessMessage, buttonClass, inputClass } from "@/components/ui";
-import { halfQty } from "@/components/half-toggle";
-import { API_URL, api, currentUser, mediaUrl, money } from "@/lib/api";
+import { API_URL, api, mediaUrl, money } from "@/lib/api";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 
 type Product = {
@@ -36,6 +35,12 @@ const SIZE_RUNS = {
   footwear: ["EU 39", "EU 40", "EU 41", "EU 42", "EU 43"],
   one: ["One"],
 } as const;
+const SIZE_TYPES = [
+  { id: "apparel", label: "Letter sizes", hint: "S, M, L, XL" },
+  { id: "jeans", label: "Number sizes", hint: "28, 30, 32" },
+  { id: "footwear", label: "Shoe sizes", hint: "EU 39–43" },
+  { id: "one", label: "One size", hint: "No split" },
+] as const;
 type CatalogCategory = { id: number | null; name: string; subcategories: Array<{ id: number | null; name: string }> };
 type Supplier = { id: number; name: string };
 
@@ -44,7 +49,7 @@ export default function CatalogPage() {
   const clothing = profile.type === "clothing";
   const [insights, setInsights] = useState<Insights | null>(null);
   const [sizeStock, setSizeStock] = useState<SizeStock | null>(null);
-  const [sizeScale, setSizeScale] = useState<keyof typeof SIZE_RUNS>("apparel");
+  const [sizeScale, setSizeScale] = useState<keyof typeof SIZE_RUNS | "">("");
   const [sizeQty, setSizeQty] = useState<Record<string, string>>({});
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<CatalogCategory[]>([]);
@@ -60,7 +65,8 @@ export default function CatalogPage() {
   const [importPayment, setImportPayment] = useState("paid");
   const [importDue, setImportDue] = useState("");
   const [importSupplierId, setImportSupplierId] = useState("");
-  const [half, setHalf] = useState(false);
+  const [restockStyle, setRestockStyle] = useState<Product[]>([]);
+  const [restockQty, setRestockQty] = useState<Record<number, string>>({});
 
   function load() {
     setLoading(true);
@@ -74,10 +80,6 @@ export default function CatalogPage() {
   }
 
   useEffect(load, []);
-
-  useEffect(() => {
-    setHalf(Boolean(currentUser()?.tenant?.half_view));
-  }, []);
 
   useEffect(() => {
     if (!clothing) return;
@@ -96,6 +98,8 @@ export default function CatalogPage() {
     setSelected(null);
     setCategoryDraft("");
     setSubcategoryDraft("");
+    setSizeScale("");
+    setSizeQty({});
     setMode("add");
     setError("");
   }
@@ -117,6 +121,11 @@ export default function CatalogPage() {
     data.set("category", categoryDraft);
     data.set("subcategory", subcategoryDraft);
     if (clothing && mode === "add") {
+      if (!sizeScale) {
+        setError("Choose a size type first: letter sizes or number sizes.");
+        setSaving(false);
+        return;
+      }
       data.delete("size");
       data.delete("stock_qty");
       data.set("size_scale", sizeScale);
@@ -142,23 +151,43 @@ export default function CatalogPage() {
     }
   }
 
+  function openRestock(rows: Product[]) {
+    setRestockStyle(rows);
+    setRestockQty({});
+    setSelected(rows[0] ?? null);
+    setMode("restock");
+    setError("");
+  }
+
   async function restock(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selected) return;
+    if (!selected && restockStyle.length === 0) return;
     setSaving(true);
     setError("");
     const data = Object.fromEntries(new FormData(event.currentTarget));
+    const unitCost = data.unit_cost === "" ? null : Number(data.unit_cost);
+    const payment = {
+      payment_status: data.payment_status,
+      due_date: data.payment_status === "credit" ? data.due_date : null,
+      supplier_id: data.supplier_id || null,
+    };
     try {
-      await api(`/products/${selected.id}/restock`, {
-        method: "POST",
-        body: JSON.stringify({
-          quantity: Number(data.quantity),
-          unit_cost: data.unit_cost === "" ? null : Number(data.unit_cost),
-          payment_status: data.payment_status,
-          due_date: data.payment_status === "credit" ? data.due_date : null,
-          supplier_id: data.supplier_id || null,
-        }),
-      });
+      if (clothing && restockStyle.length > 0) {
+        const items = restockStyle
+          .map((row) => ({ product_id: row.id, quantity: Number(restockQty[row.id] || 0), unit_cost: unitCost }))
+          .filter((row) => row.quantity > 0);
+        if (items.length === 0) {
+          setError("Enter a quantity for at least one size.");
+          setSaving(false);
+          return;
+        }
+        await api("/products/restock/bulk", { method: "POST", body: JSON.stringify({ items, ...payment }) });
+      } else if (selected) {
+        await api(`/products/${selected.id}/restock`, {
+          method: "POST",
+          body: JSON.stringify({ quantity: Number(data.quantity), unit_cost: unitCost, ...payment }),
+        });
+      }
       setNotice("Stock added.");
       setMode(null);
       load();
@@ -259,9 +288,9 @@ export default function CatalogPage() {
 
       {clothing && sizeStock && (
         <div className="mb-5 grid gap-3 lg:grid-cols-2">
-          <SizeBoard title="Apparel sizes" hint="XS, S, M, L, XL, XXL on hand" rows={sizeStock.apparel} />
-          <SizeBoard title="Jeans sizes" hint="Waist 28, 30, 32, 34, 36, 38, 40, 42 on hand" rows={sizeStock.jeans} />
-          {sizeStock.footwear.some((row) => row.qty > 0) && <SizeBoard title="Footwear sizes" hint="Pairs on hand" rows={sizeStock.footwear} />}
+          <SizeBoard title="Letter sizes" hint="S, M, L, XL on hand" rows={sizeStock.apparel} />
+          <SizeBoard title="Number sizes" hint="28, 30, 32, 34, 36, 38, 40, 42 on hand" rows={sizeStock.jeans} />
+          {sizeStock.footwear.some((row) => row.qty > 0) && <SizeBoard title="Shoe sizes" hint="Pairs on hand" rows={sizeStock.footwear} />}
           {sizeStock.other.length > 0 && <SizeBoard title="Other sizes" hint="Sizes outside the standard runs" rows={sizeStock.other} />}
         </div>
       )}
@@ -290,7 +319,7 @@ export default function CatalogPage() {
                   <p className="mt-2 text-xs text-[#6f746e]">{product.color || product.sku || "—"}</p>
                   <div className="mt-2 flex flex-wrap gap-1">
                     {style.products.map((row) => {
-                      const qty = half ? halfQty(row.stock_qty) : Number(row.stock_qty);
+                      const qty = Number(row.stock_qty);
                       return (
                         <button key={row.id} type="button" onClick={() => openEdit(row)} className={`px-1.5 py-0.5 text-[10px] font-bold ${qty < 10 ? "bg-[#b84837]/10 text-[#b84837]" : "bg-[#167c73]/10 text-[#167c73]"}`}>
                           {row.size || "One"} {qty}
@@ -300,14 +329,14 @@ export default function CatalogPage() {
                   </div>
                   <div className="mt-2 flex items-center justify-between">
                     <p className="font-display text-lg font-semibold">{money(product.price)}</p>
-                    <span className="text-[10px] font-bold uppercase text-[#6f746e]">{style.products.reduce((sum, row) => sum + (half ? halfQty(row.stock_qty) : Number(row.stock_qty)), 0)} total</span>
+                    <span className="text-[10px] font-bold uppercase text-[#6f746e]">{style.products.reduce((sum, row) => sum + Number(row.stock_qty), 0)} total</span>
                   </div>
                 </div>
                 <div className="mt-auto flex border-t border-[#d7d3c8]">
                   <button type="button" onClick={() => openEdit(product)} className="flex flex-1 items-center justify-center gap-1.5 py-2 text-[10px] font-bold uppercase hover:bg-[#eeece5]">
                     <Pencil size={12} /> Edit
                   </button>
-                  <button type="button" onClick={() => { setSelected(product); setMode("restock"); }} className="flex flex-1 items-center justify-center gap-1.5 border-l border-[#d7d3c8] py-2 text-[10px] font-bold uppercase text-[#167c73] hover:bg-[#eeece5]">
+                  <button type="button" onClick={() => openRestock(style.products)} className="flex flex-1 items-center justify-center gap-1.5 border-l border-[#d7d3c8] py-2 text-[10px] font-bold uppercase text-[#167c73] hover:bg-[#eeece5]">
                     <PackagePlus size={12} /> Restock
                   </button>
                 </div>
@@ -333,6 +362,7 @@ export default function CatalogPage() {
               </label>
               <label className="text-xs font-bold uppercase">Barcode
                 <input name="barcode" defaultValue={selected?.barcode ?? ""} className={`${inputClass} mt-2`} />
+                {clothing && <span className="mt-1 block text-[10px] font-medium normal-case text-[#6f746e]">One code for every size of this item.</span>}
               </label>
               <label className="text-xs font-bold uppercase">Category
                 <select value={categoryDraft} onChange={(event) => { setCategoryDraft(event.target.value); setSubcategoryDraft(""); }} className={`${inputClass} mt-2`}>
@@ -348,29 +378,40 @@ export default function CatalogPage() {
               </label>
               {clothing && mode === "add" ? (
                 <div className="sm:col-span-2">
-                  <label className="text-xs font-bold uppercase">Size run
-                    <select value={sizeScale} onChange={(event) => setSizeScale(event.target.value as keyof typeof SIZE_RUNS)} className={`${inputClass} mt-2`}>
-                      <option value="apparel">Apparel — XS, S, M, L, XL, XXL</option>
-                      <option value="jeans">Jeans — 28, 30, 32, 34, 36, 38, 40, 42</option>
-                      <option value="footwear">Footwear — EU 39 to 43</option>
-                      <option value="one">One size</option>
-                    </select>
-                  </label>
-                  <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-8">
-                    {SIZE_RUNS[sizeScale].map((size) => (
-                      <label key={size} className="text-[10px] font-bold uppercase">
-                        {size}
-                        <input
-                          type="number"
-                          min="0"
-                          value={sizeQty[size] ?? ""}
-                          onChange={(event) => setSizeQty((current) => ({ ...current, [size]: event.target.value }))}
-                          placeholder="0"
-                          className={`${inputClass} mt-1 px-2`}
-                        />
-                      </label>
+                  <p className="text-xs font-bold uppercase">Size type</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {SIZE_TYPES.map((type) => (
+                      <button
+                        key={type.id}
+                        type="button"
+                        onClick={() => { setSizeScale(type.id); setSizeQty({}); }}
+                        className={`border px-2 py-2 text-left ${sizeScale === type.id ? "border-[#167c73] bg-[#167c73] text-white" : "border-[#c9c5b9] bg-white"}`}
+                      >
+                        <span className="block text-[11px] font-bold uppercase">{type.label}</span>
+                        <span className={`mt-0.5 block text-[10px] ${sizeScale === type.id ? "text-white/80" : "text-[#6f746e]"}`}>{type.hint}</span>
+                      </button>
                     ))}
                   </div>
+                  {sizeScale && (
+                    <>
+                      <p className="mt-3 text-[10px] font-medium normal-case text-[#6f746e]">How many pieces of each size. Leave a size blank if you do not have it.</p>
+                      <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-8">
+                        {SIZE_RUNS[sizeScale].map((size) => (
+                          <label key={size} className="text-[10px] font-bold uppercase">
+                            {size}
+                            <input
+                              type="number"
+                              min="0"
+                              value={sizeQty[size] ?? ""}
+                              onChange={(event) => setSizeQty((current) => ({ ...current, [size]: event.target.value }))}
+                              placeholder="0"
+                              className={`${inputClass} mt-1 px-2`}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
               ) : (
               <label className="text-xs font-bold uppercase">Size
@@ -410,15 +451,34 @@ export default function CatalogPage() {
         </div>
       )}
 
-      {mode === "restock" && selected && (
+      {mode === "restock" && (selected || restockStyle.length > 0) && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4">
           <form onSubmit={restock} className="w-full max-w-md bg-[#f3f0e8] p-5">
             <div className="flex items-center justify-between">
-              <h2 className="font-display text-2xl font-semibold uppercase">Restock {selected.name}</h2>
+              <h2 className="font-display text-2xl font-semibold uppercase">Restock {selected?.name}</h2>
               <button type="button" onClick={() => setMode(null)} aria-label="Close"><X /></button>
             </div>
             <div className="mt-4 grid gap-3">
-              <input name="quantity" required type="number" min="1" placeholder="Quantity" className={inputClass} />
+              {clothing && restockStyle.length > 0 ? (
+                <div className="grid grid-cols-4 gap-2">
+                  {restockStyle.map((row) => (
+                    <label key={row.id} className="text-[10px] font-bold uppercase">
+                      {row.size || "One"}
+                      <span className="mt-0.5 block font-medium normal-case text-[#6f746e]">{row.stock_qty} on hand</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={restockQty[row.id] ?? ""}
+                        onChange={(event) => setRestockQty((current) => ({ ...current, [row.id]: event.target.value }))}
+                        placeholder="0"
+                        className={`${inputClass} mt-1 px-2`}
+                      />
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <input name="quantity" required type="number" min="1" placeholder="Quantity" className={inputClass} />
+              )}
               <input name="unit_cost" type="number" min="0" step="0.01" placeholder="Unit cost" className={inputClass} />
               <select name="payment_status" defaultValue="paid" className={inputClass}>
                 <option value="paid">Paid now</option>
