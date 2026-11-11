@@ -1,10 +1,10 @@
 "use client";
 
-import { FormEvent, Suspense, useEffect, useState } from "react";
+import { FormEvent, Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Boxes, Pencil, Search, X } from "lucide-react";
 import { PlatformShell } from "@/components/platform-shell";
-import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
+import { ErrorMessage, ListPager, LIST_PAGE_SIZE, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
 import { api, money, Tenant } from "@/lib/api";
 
 type TenantRow = Tenant & { owner_email?: string | null };
@@ -33,7 +33,7 @@ type ProductRow = {
   cost_price?: string | null;
 };
 
-type Page<T> = { data: T[]; total: number };
+type Page<T> = { data: T[]; total: number; current_page: number; last_page: number };
 
 type Kind = "parts" | "products";
 
@@ -47,6 +47,8 @@ function InventoryPageInner() {
   const [search, setSearch] = useState("");
   const [parts, setParts] = useState<Page<PartRow> | null>(null);
   const [products, setProducts] = useState<Page<ProductRow> | null>(null);
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
@@ -63,7 +65,7 @@ function InventoryPageInner() {
     setTenantId(tenantParam);
   }, [tenantParam]);
 
-  useEffect(() => {
+  const loadInventory = useCallback((pageNum: number) => {
     if (!tenantId) {
       setParts(null);
       setProducts(null);
@@ -71,31 +73,48 @@ function InventoryPageInner() {
     }
     setLoading(true);
     setError("");
-    const timer = setTimeout(() => {
-      const params = new URLSearchParams({ per_page: "50" });
-      if (search) params.set("search", search);
-      const path = kind === "parts"
-        ? `/super-admin/tenants/${tenantId}/inventory/parts?${params}`
-        : `/super-admin/tenants/${tenantId}/inventory/products?${params}`;
-      api<Page<PartRow & ProductRow>>(path)
-        .then((page) => {
-          if (kind === "parts") {
-            setParts(page as Page<PartRow>);
-            setProducts(null);
-          } else {
-            setProducts(page as Page<ProductRow>);
-            setParts(null);
-          }
-        })
-        .catch((caught) => setError(caught.message))
-        .finally(() => setLoading(false));
-    }, 250);
-    return () => clearTimeout(timer);
+    const params = new URLSearchParams({
+      per_page: String(LIST_PAGE_SIZE),
+      page: String(Math.max(1, pageNum)),
+    });
+    if (search) params.set("search", search);
+    const path = kind === "parts"
+      ? `/super-admin/tenants/${tenantId}/inventory/parts?${params}`
+      : `/super-admin/tenants/${tenantId}/inventory/products?${params}`;
+    api<Page<PartRow & ProductRow>>(path)
+      .then((result) => {
+        setPage(result.current_page || pageNum);
+        setLastPage(Math.max(1, result.last_page || 1));
+        if (kind === "parts") {
+          setParts(result as Page<PartRow>);
+          setProducts(null);
+        } else {
+          setProducts(result as Page<ProductRow>);
+          setParts(null);
+        }
+      })
+      .catch((caught) => setError(caught.message))
+      .finally(() => setLoading(false));
   }, [tenantId, search, kind]);
+
+  useEffect(() => {
+    if (!tenantId) {
+      setParts(null);
+      setProducts(null);
+      setPage(1);
+      setLastPage(1);
+      return;
+    }
+    setLoading(true);
+    const timer = setTimeout(() => loadInventory(1), 250);
+    return () => clearTimeout(timer);
+  }, [loadInventory, tenantId]);
 
   function selectTenant(id: string) {
     setTenantId(id);
     setEditing(null);
+    setParts(null);
+    setProducts(null);
     const next = new URLSearchParams();
     if (id) next.set("tenant", id);
     router.replace(id ? `/super-admin/inventory?${next}` : "/super-admin/inventory");
@@ -133,14 +152,7 @@ function InventoryPageInner() {
       });
       setNotice("Inventory updated. No expense was created.");
       setEditing(null);
-      const params = new URLSearchParams({ per_page: "50" });
-      if (search) params.set("search", search);
-      const listPath = kind === "parts"
-        ? `/super-admin/tenants/${tenantId}/inventory/parts?${params}`
-        : `/super-admin/tenants/${tenantId}/inventory/products?${params}`;
-      const page = await api<Page<PartRow & ProductRow>>(listPath);
-      if (kind === "parts") setParts(page as Page<PartRow>);
-      else setProducts(page as Page<ProductRow>);
+      loadInventory(page);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save inventory.");
     } finally {
@@ -168,22 +180,24 @@ function InventoryPageInner() {
             ))}
           </select>
         </label>
-        <label className="relative">
+        <label className="block">
           <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">Search</span>
-          <Search size={17} className="absolute left-3 top-9 text-[#6f746e]" />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={kind === "parts" ? "Name, SKU, barcode, brand" : "Name, SKU, category"}
-            className={`${inputClass} pl-10`}
-            disabled={!tenantId}
-          />
+          <span className="relative block">
+            <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6f746e]" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={kind === "parts" ? "Name, SKU, barcode, brand" : "Name, SKU, category"}
+              className={`${inputClass} pl-8`}
+              disabled={!tenantId}
+            />
+          </span>
         </label>
         <label>
           <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">Catalogue</span>
           <select
             value={kind}
-            onChange={(event) => { setKind(event.target.value as Kind); setEditing(null); }}
+            onChange={(event) => { setKind(event.target.value as Kind); setEditing(null); setParts(null); setProducts(null); }}
             className={inputClass}
             disabled={!tenantId}
           >
@@ -203,7 +217,7 @@ function InventoryPageInner() {
 
       {!tenantId ? (
         <PageState message="Select a tenant to view and correct inventory." />
-      ) : loading ? (
+      ) : loading && rows.length === 0 ? (
         <PageState message="Loading inventory..." />
       ) : (
         <Panel className="overflow-hidden p-0">
@@ -256,6 +270,7 @@ function InventoryPageInner() {
               <p className="p-8 text-center text-sm text-[#6f746e]">No {kind} for this tenant.</p>
             )}
           </div>
+          <ListPager page={page} lastPage={lastPage} disabled={loading} onPage={loadInventory} />
         </Panel>
       )}
 

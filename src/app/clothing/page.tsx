@@ -4,8 +4,8 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LayoutGrid, Monitor, PackageSearch, Plus, ScanBarcode, Search, ShoppingCart, Trash2, X } from "lucide-react";
-import { halfQty } from "@/components/half-toggle";
 import { api, currentBranch, currentFeatures, currentUser, mediaUrl, money, storeSession, type SessionPayload, type User } from "@/lib/api";
+import { useNewSalePurple, writeHalfView } from "@/components/half-toggle";
 
 type Product = {
   id: number;
@@ -57,6 +57,17 @@ function round2(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+const SIZE_ORDER = ["XS", "S", "M", "L", "XL", "XXL", "28", "30", "32", "34", "36", "38", "40", "42", "EU 39", "EU 40", "EU 41", "EU 42", "EU 43", "One"];
+
+function styleKey(product: { name: string; color: string | null; category: string | null }) {
+  return `${product.name}||${product.color || ""}||${product.category || ""}`;
+}
+
+function sizeRank(size: string) {
+  const at = SIZE_ORDER.indexOf(size);
+  return at < 0 ? 1000 : at;
+}
+
 function tone(category: string | null) {
   if (category === "Women") return "from-[#4a2a40] to-[#1a1018]";
   if (category === "Kids") return "from-[#1f3d32] to-[#101814]";
@@ -100,6 +111,10 @@ export default function ClothingFloorPage() {
   const [now, setNow] = useState<Date | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const branch = ready ? currentBranch() : null;
+  const salePurple = useNewSalePurple();
+  const pageBg = salePurple ? "bg-[#7c3aed]" : "bg-[#070b14]";
+  const accent = salePurple ? "bg-[#12315c]" : "bg-violet-600";
+  const accentSoft = salePurple ? "bg-[#12315c] text-white" : "border border-violet-400 bg-violet-600/20";
 
   useEffect(() => {
     if (!localStorage.getItem("garage_token")) {
@@ -108,6 +123,9 @@ export default function ClothingFloorPage() {
     }
     const cached = currentUser();
     setUser(cached);
+    if (cached?.tenant?.business_type === "clothing") {
+      writeHalfView(Boolean(cached.tenant.half_view));
+    }
     setAllowed(cached?.tenant?.business_type === "clothing");
     setDisplayOn(currentFeatures().includes("customer_display"));
     setReady(true);
@@ -121,6 +139,9 @@ export default function ClothingFloorPage() {
           });
         }
         setUser(result.user);
+        if (result.user.tenant?.business_type === "clothing") {
+          writeHalfView(Boolean(result.user.tenant.half_view));
+        }
         setAllowed(result.user.tenant?.business_type === "clothing");
         setDisplayOn(result.features.includes("customer_display"));
       })
@@ -142,7 +163,7 @@ export default function ClothingFloorPage() {
 
   function loadFloor() {
     Promise.all([
-      api<{ data: Product[] }>("/products?active_only=1&per_page=500"),
+      api<{ data: Product[] }>("/products?active_only=1&per_page=500", { cache: "no-store" }),
       api<{ data: Customer[] }>("/customers?per_page=100"),
       api<Insights>("/clothing/insights"),
     ]).then(([catalog, people, figures]) => {
@@ -170,7 +191,7 @@ export default function ClothingFloorPage() {
       if (category !== "All" && category !== "Sale" && product.category !== category) continue;
       const haystack = [product.name, product.sku, product.barcode, product.category, product.color, product.size].filter(Boolean).join(" ").toLowerCase();
       if (query && !haystack.includes(query)) continue;
-      const key = `${product.name}||${product.color || ""}`;
+      const key = styleKey(product);
       const list = groups.get(key) ?? [];
       list.push(product);
       groups.set(key, list);
@@ -182,21 +203,16 @@ export default function ClothingFloorPage() {
       color: variants[0].color,
       badge: variants.find((row) => row.badge)?.badge ?? null,
       image: variants.find((row) => row.image_urls?.[0])?.image_urls?.[0] ?? null,
-      variants: [...variants].sort((a, b) => (a.size || "").localeCompare(b.size || "")),
+      variants: [...variants].sort((a, b) => sizeRank(a.size || "") - sizeRank(b.size || "")),
     }));
   }, [products, search, category]);
 
   const subtotal = round2(cart.reduce((sum, line) => sum + line.price * line.quantity, 0));
   const discount = round2(subtotal * discountPercent / 100);
   const taxable = round2(Math.max(0, subtotal - discount));
-  const vatRate = user?.tenant?.vat_registered ? Number(user.tenant.vat_rate || 0) : 0;
   const ssclRate = user?.tenant?.sscl_registered ? Number(user.tenant.sscl_rate || 0) : 0;
-  const tax = round2(taxable * ((vatRate + ssclRate) / 100));
+  const tax = round2(taxable * (ssclRate / 100));
   const total = round2(taxable + tax);
-  const taxLabel = [
-    vatRate > 0 ? `VAT ${vatRate}%` : "",
-    ssclRate > 0 ? `SSCL ${ssclRate}%` : "",
-  ].filter(Boolean).join(" + ") || "Tax";
 
   const snapshot = useMemo(() => ({
     lines: cart.map((line) => ({
@@ -222,8 +238,7 @@ export default function ClothingFloorPage() {
   }, [snapshot, displayOn, allowed]);
 
   function shownStock(product: Product) {
-    const qty = Number(product.stock_qty) || 0;
-    return user?.tenant?.half_view ? halfQty(qty) : qty;
+    return Math.max(0, Number(product.stock_qty) || 0);
   }
 
   function add(product: Product) {
@@ -250,12 +265,20 @@ export default function ClothingFloorPage() {
     event.preventDefault();
     const code = scan.trim().toLowerCase();
     if (!code) return;
-    const hit = products.find((product) => product.barcode?.toLowerCase() === code || product.sku?.toLowerCase() === code);
-    if (!hit) {
+    const matches = products.filter((product) => product.barcode?.toLowerCase() === code || product.sku?.toLowerCase() === code);
+    if (matches.length === 0) {
       setError("No garment matches that code.");
       return;
     }
+    const key = styleKey(matches[0]);
+    const picked = matches.find((product) => String(product.id) === sizePick[key]);
+    const hit = picked || matches.find((product) => shownStock(product) > 0) || matches[0];
+    if (shownStock(hit) < 1) {
+      setError(`${hit.size || "That size"} is out of stock.`);
+      return;
+    }
     setError("");
+    setSizePick((picks) => ({ ...picks, [key]: String(hit.id) }));
     add(hit);
     setScan("");
   }
@@ -328,6 +351,10 @@ export default function ClothingFloorPage() {
         }),
       });
       const balance = round2(Number(sale.change || 0));
+      setProducts((rows) => rows.map((product) => {
+        const sold = cart.find((line) => line.id === product.id);
+        return sold ? { ...product, stock_qty: Math.max(0, Number(product.stock_qty) - sold.quantity) } : product;
+      }));
       setCart([]);
       setPercent(0);
       setTendered("");
@@ -354,9 +381,9 @@ export default function ClothingFloorPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#070b14] text-white">
+    <main className={`min-h-screen text-white ${pageBg}`}>
       <header className="flex flex-wrap items-center gap-2 border-b border-white/10 px-4 py-3">
-        <Link href="/dashboard" className="mr-1 grid size-9 place-items-center rounded-xl bg-violet-600" title="Office">
+        <Link href="/dashboard" className={`mr-1 grid size-9 place-items-center rounded-xl ${accent}`} title="Office">
           <LayoutGrid size={16} />
         </Link>
         <div className="mr-2 min-w-0">
@@ -434,7 +461,7 @@ export default function ClothingFloorPage() {
                 key={item}
                 type="button"
                 onClick={() => setCategory(item)}
-                className={`rounded-full px-3 py-1 text-xs ${category === item ? "bg-violet-600" : "bg-white/5 text-white/70"}`}
+                className={`rounded-full px-3 py-1 text-xs ${category === item ? accent : "bg-white/5 text-white/70"}`}
               >
                 {item}
               </button>
@@ -443,8 +470,8 @@ export default function ClothingFloorPage() {
           {error && <p className="mt-3 rounded-lg bg-rose-500/15 px-3 py-2 text-sm text-rose-200">{error}</p>}
           <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
             {cards.map((card) => {
-              const selectedSize = sizePick[card.key] || card.variants[0]?.size || "";
-              const variant = card.variants.find((row) => (row.size || "") === selectedSize) || card.variants[0];
+              const picked = card.variants.find((row) => String(row.id) === sizePick[card.key]);
+              const variant = picked || card.variants.find((row) => shownStock(row) > 0) || card.variants[0];
               const qty = shownStock(variant);
               return (
                 <article key={card.key} className="overflow-hidden rounded-xl border border-white/10 bg-[#101624]">
@@ -457,16 +484,20 @@ export default function ClothingFloorPage() {
                     <p className="truncate text-xs font-semibold">{card.name}</p>
                     <p className="mt-0.5 text-[11px] text-white/40">{[card.category, card.color].filter(Boolean).join(" · ")}</p>
                     <div className="mt-2 flex flex-wrap gap-1">
-                      {card.variants.map((row) => (
-                        <button
-                          key={row.id}
-                          type="button"
-                          onClick={() => setSizePick((picks) => ({ ...picks, [card.key]: row.size || "" }))}
-                          className={`rounded-md px-1.5 py-0.5 text-[10px] ${(row.size || "") === (variant.size || "") ? "bg-white text-black" : "bg-white/10 text-white/70"}`}
-                        >
-                          {row.size || "One"}
-                        </button>
-                      ))}
+                      {card.variants.map((row) => {
+                        const rowQty = shownStock(row);
+                        const selected = row.id === variant.id;
+                        return (
+                          <button
+                            key={row.id}
+                            type="button"
+                            onClick={() => setSizePick((picks) => ({ ...picks, [card.key]: String(row.id) }))}
+                            className={`rounded-md px-1.5 py-0.5 text-[10px] ${selected ? "bg-white text-black" : rowQty < 1 ? "bg-white/5 text-white/30" : "bg-white/10 text-white/70"}`}
+                          >
+                            {row.size || "One"}
+                          </button>
+                        );
+                      })}
                     </div>
                     <div className="mt-3 flex items-center justify-between">
                       <strong className="text-sm">{money(variant.price)}</strong>
@@ -474,7 +505,7 @@ export default function ClothingFloorPage() {
                         type="button"
                         disabled={qty < 1}
                         onClick={() => add(variant)}
-                        className="grid size-8 place-items-center rounded-full bg-violet-600 disabled:opacity-30"
+                        className={`grid size-8 place-items-center rounded-full disabled:opacity-30 ${accent}`}
                         aria-label={`Add ${card.name}`}
                       >
                         <Plus size={16} />
@@ -552,7 +583,7 @@ export default function ClothingFloorPage() {
                 key={value}
                 type="button"
                 onClick={() => setPercent(value)}
-                className={`h-9 rounded-lg text-xs ${percent === value ? "bg-violet-600" : "bg-white/5 text-white/70"}`}
+                className={`h-9 rounded-lg text-xs ${percent === value ? accent : "bg-white/5 text-white/70"}`}
               >
                 {value === 0 ? "None" : `${value}%`}
               </button>
@@ -563,7 +594,7 @@ export default function ClothingFloorPage() {
           <dl className="mt-4 space-y-1 text-sm text-white/60">
             <div className="flex justify-between"><dt>Subtotal ({cart.reduce((sum, line) => sum + line.quantity, 0)} items)</dt><dd>{money(subtotal)}</dd></div>
             {discount > 0 && <div className="flex justify-between text-emerald-300"><dt>Discount</dt><dd>-{money(discount)}</dd></div>}
-            {(vatRate > 0 || ssclRate > 0) && <div className="flex justify-between"><dt>{taxLabel}</dt><dd>{money(tax)}</dd></div>}
+            {ssclRate > 0 && <div className="flex justify-between"><dt>SSCL {ssclRate}%</dt><dd>{money(tax)}</dd></div>}
             <div className="flex items-end justify-between pt-2 text-white">
               <dt className="text-xs uppercase tracking-wide text-white/50">Grand total</dt>
               <dd className="text-2xl font-semibold">{money(total)}</dd>
@@ -579,7 +610,7 @@ export default function ClothingFloorPage() {
                   setMethod(item.id);
                   if (item.id !== "cash") setTendered("");
                 }}
-                className={`h-12 rounded-xl text-xs ${method === item.id ? "border border-violet-400 bg-violet-600/20" : "bg-white/5 text-white/70"}`}
+                className={`h-12 rounded-xl text-xs ${method === item.id ? accentSoft : "bg-white/5 text-white/70"}`}
               >
                 {item.label}
               </button>
@@ -685,12 +716,12 @@ export default function ClothingFloorPage() {
               <input name="phone" required placeholder="0771234567" className="mt-1 h-11 w-full rounded-xl border border-white/10 bg-[#070b14] px-3 text-sm text-white" />
             </label>
             <label className="mt-4 flex items-center gap-2 text-sm">
-              <input name="is_vip" type="checkbox" className="size-4 accent-violet-500" />
+              <input name="is_vip" type="checkbox" className={`size-4 ${salePurple ? "accent-[#12315c]" : "accent-violet-500"}`} />
               Register as VIP member (automatic 10% discount)
             </label>
             <div className="mt-5 flex justify-end gap-2">
               <button type="button" onClick={() => setCustomerOpen(false)} className="h-10 rounded-xl bg-white/10 px-4 text-sm">Cancel</button>
-              <button className="h-10 rounded-xl bg-violet-600 px-4 text-sm font-semibold">Save & select</button>
+              <button className={`h-10 rounded-xl px-4 text-sm font-semibold ${accent}`}>Save & select</button>
             </div>
           </form>
         </div>

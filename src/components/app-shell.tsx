@@ -10,6 +10,7 @@ import { groupNavigation } from "@/lib/feature-modules";
 import { BranchChip } from "@/components/branch-chip";
 import { JobAlertBell } from "@/components/job-alert-bell";
 import { LanguageToggle } from "@/components/language-toggle";
+import { writeHalfView } from "@/components/half-toggle";
 import { useLocale, useT } from "@/lib/locale";
 
 let cachedUser: User | null = null;
@@ -87,6 +88,9 @@ export function AppShell({ children, title, eyebrow, action }: { children: React
         });
         cachedUser = result.user;
         cachedFeatures = result.features;
+        if (result.user.tenant?.business_type === "clothing") {
+          writeHalfView(Boolean(result.user.tenant.half_view));
+        }
         setUser(result.user);
         setFeatures(result.features);
         if (result.user.locale === "si" || result.user.locale === "en") {
