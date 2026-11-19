@@ -1,23 +1,30 @@
 import type { Metadata } from "next";
-import { Barlow_Condensed, DM_Sans, Noto_Sans_Sinhala } from "next/font/google";
+import localFont from "next/font/local";
 import { LocaleProvider } from "@/lib/locale";
 import "./globals.css";
 
-const bodyFont = DM_Sans({
+const bodyFont = localFont({
+  src: "../fonts/DMSans-latin.woff2",
   variable: "--font-body",
-  subsets: ["latin"],
+  weight: "100 1000",
+  display: "swap",
 });
 
-const displayFont = Barlow_Condensed({
+const displayFont = localFont({
+  src: [
+    { path: "../fonts/BarlowCondensed-Medium.woff2", weight: "500", style: "normal" },
+    { path: "../fonts/BarlowCondensed-SemiBold.woff2", weight: "600", style: "normal" },
+    { path: "../fonts/BarlowCondensed-Bold.woff2", weight: "700", style: "normal" },
+  ],
   variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
+  display: "swap",
 });
 
-const sinhalaFont = Noto_Sans_Sinhala({
+const sinhalaFont = localFont({
+  src: "../fonts/NotoSansSinhala-sinhala.woff2",
   variable: "--font-sinhala",
-  subsets: ["sinhala"],
-  weight: ["400", "500", "600", "700"],
+  weight: "400 700",
+  display: "swap",
 });
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://iubits.cc";
