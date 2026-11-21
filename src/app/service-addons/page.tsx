@@ -17,6 +17,7 @@ type PaintPackage = {
 const noopSubscribe = () => () => {};
 
 export default function ServiceAddonsPage() {
+  const [tab, setTab] = useState<"service" | "paint">("service");
   const businessType = useSyncExternalStore(
     noopSubscribe,
     () => currentUser()?.tenant?.business_type ?? "",
@@ -27,18 +28,43 @@ export default function ServiceAddonsPage() {
     return <AppShell title="Service addons"><PageState message="Loading..." /></AppShell>;
   }
   if (businessType === "garage") {
-    return allowsServiceJobs("garage", currentFeatures())
-      ? <GarageServiceList />
-      : (
+    const service = allowsServiceJobs("garage", currentFeatures());
+    const paint = currentFeatures().includes("admit_paint");
+    if (!service && !paint) {
+      return (
         <AppShell title="Service addons">
           <PageState message="Service jobs are off for this shop. Super-admin can enable them under Admit vehicle." />
         </AppShell>
       );
+    }
+    if (service && !paint) return <GarageServiceList />;
+    if (!service && paint) return <PaintPackagesPage />;
+    return (
+      <AppShell title="Service addons" eyebrow="Mechanical services and paint packages">
+        <div className="mb-5 inline-flex overflow-hidden border border-[#20221f] bg-white p-0.5" role="group" aria-label="Catalog">
+          {([
+            ["service", "Service"],
+            ["paint", "Paint packages"],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setTab(value)}
+              className={`h-9 px-4 text-[11px] font-bold uppercase ${tab === value ? "bg-[#20221f] text-white" : "text-[#20221f]"}`}
+              aria-pressed={tab === value}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {tab === "service" ? <GarageServiceList embedded /> : <PaintPackagesPage embedded catalog="paint" />}
+      </AppShell>
+    );
   }
   return <PaintPackagesPage />;
 }
 
-function PaintPackagesPage() {
+function PaintPackagesPage({ embedded = false, catalog = "paint" }: { embedded?: boolean; catalog?: "paint" | "garage" }) {
   const canEdit = useSyncExternalStore(noopSubscribe, () => currentFeatures().includes("billing"), () => false);
   const [packages, setPackages] = useState<PaintPackage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,11 +72,11 @@ function PaintPackagesPage() {
   const [error, setError] = useState("");
 
   const load = useCallback(() => {
-    return api<PaintPackage[]>("/service-addons")
+    return api<PaintPackage[]>(`/service-addons?catalog=${catalog}`)
       .then(setPackages)
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load paint packages."))
       .finally(() => setLoading(false));
-  }, []);
+  }, [catalog]);
 
   useEffect(() => {
     load();
@@ -65,7 +91,7 @@ function PaintPackagesPage() {
     try {
       await api("/service-addons", {
         method: "POST",
-        body: JSON.stringify({ name: data.get("name"), price: Number(data.get("price")) }),
+        body: JSON.stringify({ name: data.get("name"), price: Number(data.get("price")), catalog }),
       });
       form.reset();
       await load();
@@ -97,8 +123,8 @@ function PaintPackagesPage() {
     }
   }
 
-  return (
-    <AppShell title="Paint packages" eyebrow="Buttons on paint-package jobs">
+  const body = (
+    <>
       {!canEdit && <p className="mb-5 text-sm text-[#6f746e]">Job card access is required to change these buttons.</p>}
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
       <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
@@ -124,8 +150,10 @@ function PaintPackagesPage() {
           )}
         </Panel>
       </div>
-    </AppShell>
+    </>
   );
+  if (embedded) return body;
+  return <AppShell title="Paint packages" eyebrow="Buttons on paint-package jobs">{body}</AppShell>;
 }
 
 function PackageRow({

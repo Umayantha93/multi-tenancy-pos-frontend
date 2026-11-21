@@ -54,6 +54,7 @@ export type FeatureKey =
   | "admit_repair"
   | "admit_service"
   | "admit_combined"
+  | "admit_paint"
   | "admit_photos"
   | "job_board"
   | "job_bookings"
