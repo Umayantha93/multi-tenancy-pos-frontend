@@ -16,6 +16,7 @@ const FALLBACK_GROUP: Record<string, string> = {
   admit_repair: "Service Intake",
   admit_service: "Service Intake",
   admit_combined: "Service Intake",
+  admit_paint: "Service Intake",
   admit_photos: "Service Intake",
   job_board: "Service Intake",
   job_bookings: "Service Intake",
@@ -66,6 +67,7 @@ export const FEATURE_PARENTS: Record<string, string> = {
   admit_repair: "admit_vehicle",
   admit_service: "admit_vehicle",
   admit_combined: "admit_vehicle",
+  admit_paint: "admit_vehicle",
   admit_photos: "admit_vehicle",
   job_board: "admit_vehicle",
   owner_bill_sms: "admit_vehicle",
@@ -219,9 +221,9 @@ export function togglePlanFeature(
     .map(([child]) => child);
 
   if (turningOff) {
-    if (options.garageAdmit && (key === "admit_repair" || key === "admit_service")) {
-      const other = key === "admit_repair" ? "admit_service" : "admit_repair";
-      if (!enabled.includes(other) && enabled.includes("admit_vehicle")) {
+    if (options.garageAdmit && (key === "admit_repair" || key === "admit_service" || key === "admit_paint")) {
+      const remaining = ["admit_repair", "admit_service", "admit_paint"].filter((item) => item !== key && enabled.includes(item));
+      if (remaining.length === 0 && enabled.includes("admit_vehicle")) {
         return enabled as FeatureKey[];
       }
     }

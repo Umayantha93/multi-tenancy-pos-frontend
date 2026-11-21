@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, Fragment, type MouseEvent as ReactMouseEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ChevronDown, CreditCard, Lock, MessageCircle, MessageSquare, Percent, Plus, Printer, RotateCcw, ShieldCheck, Trash2, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
@@ -73,6 +74,7 @@ type Bill = {
   admission_date?: string | null;
   created_at?: string | null;
   job_kind?: string | null;
+  paint_mode?: string | null;
   service_vehicle_class_id?: number | null;
   service_vehicle_class?: { id: number; name: string } | null;
   hide_amounts?: boolean;
@@ -364,8 +366,11 @@ export default function BillDetailPage() {
     ? tenant.contact_phones.map((p) => p.number)
     : [tenant?.contact_phone || tenant?.owner_phone].filter(Boolean)) as string[];
   const profile = profileFor(tenant?.business_type);
-  const isPaint = profile.type === "paint";
+  const isPaintShop = profile.type === "paint";
   const isGarage = profile.type === "garage";
+  const isGaragePaintJob = isGarage && bill?.job_kind === "paint";
+  const isPaint = isPaintShop || isGaragePaintJob;
+  const isPaintPackage = isPaintShop ? bill?.job_kind === "service" : isGaragePaintJob && bill?.paint_mode === "package";
   const isGarageInstant = isGarage && bill?.job_kind === "parts_sale";
   const isStore = usesStoreCounter(profile.type);
   const itemTypes = profile.billItemTypes.filter((option) => {
@@ -383,7 +388,7 @@ export default function BillDetailPage() {
   });
   const selectedType = itemTypes.find((option) => option.value === type) ?? itemTypes[0];
   const activeType = type || selectedType?.value || "labor";
-  const isServiceJob = usesServiceAddonWorkspace(profile.type) && bill?.job_kind === "service";
+  const isServiceJob = isPaintPackage || (!isGaragePaintJob && usesServiceAddonWorkspace(profile.type) && bill?.job_kind === "service");
   const isCombinedJob = isGarage && bill?.job_kind === "both";
   const serviceWorkspace = isServiceJob || (isCombinedJob && combinedSection === "service");
   const showsServiceFields = isServiceJob || isCombinedJob;
@@ -421,13 +426,15 @@ export default function BillDetailPage() {
   const laborAmount = selectedLabor
     ? Number(selectedLabor.hourly_rate) * Number(laborHours || 0)
     : 0;
-  const isPanelComposer = isPaint && isLaborType && bill?.job_kind !== "service" && bill?.job_kind !== "parts_sale";
+  const isPanelComposer = isPaint && isLaborType && !isPaintPackage && bill?.job_kind !== "parts_sale";
   const composerLaborAmount = composerLabor.reduce((sum, row) => sum + Number(row.hours || 0) * row.rate, 0);
   const composerMaterialAmount = composerMaterials.reduce((sum, row) => sum + Number(row.qty || 0) * row.unitPrice, 0);
   const panelTotal = composerLaborAmount + composerMaterialAmount;
   const jobKindLabel =
     bill?.job_kind === "both"
       ? t("admit.both")
+      : bill?.job_kind === "paint"
+        ? (bill.paint_mode === "package" ? t("admit.paint_package") : t("admit.panel_work"))
       : bill?.job_kind === "service"
       ? (isPaint ? t("bills.package") : t("bills.service"))
       : bill?.job_kind === "parts_sale"
@@ -758,12 +765,15 @@ export default function BillDetailPage() {
 
   useEffect(() => {
     if (!usesLaborCatalog(profile.type) && !usesServiceAddonWorkspace(profile.type)) return;
-    if (profile.type === "garage") {
+    if (profile.type === "garage" && !bill) return;
+    const paintCatalog = profile.type === "paint" || bill?.job_kind === "paint";
+    const catalog = paintCatalog ? "paint" : "garage";
+    if (profile.type === "garage" && !paintCatalog) {
       api<VehicleClassRow[]>("/service-vehicle-classes")
         .then((rows) => setVehicleClasses(rows.filter((row) => row.active !== false)))
         .catch(() => undefined);
     }
-    api<ServiceAddon[]>("/service-addons")
+    api<ServiceAddon[]>(`/service-addons?catalog=${catalog}`)
       .then((result) => setAddons(result.filter((addon) => addon.active !== false)))
       .catch(() => undefined);
     if (profile.type === "garage" || profile.type === "paint") {
@@ -771,10 +781,10 @@ export default function BillDetailPage() {
         .then((result) => setDiscountTypes(result.filter((row) => row.active !== false)))
         .catch(() => undefined);
     }
-    api<LaborCategory[]>("/labor-catalog")
+    api<LaborCategory[]>(`/labor-catalog?catalog=${catalog}`)
       .then((result) => setLaborCategories(result))
       .catch(() => undefined);
-  }, [profile.type]);
+  }, [profile.type, bill?.job_kind]);
 
   async function selectServiceClass(nextId: string) {
     if (!id || isLocked || !nextId) return;
@@ -3191,7 +3201,10 @@ export default function BillDetailPage() {
                   </>
                 ) : isPanelComposer ? (
                   <>
-                    <p className="text-[11px] text-[#6f746e]">{t("bill.panel_hint")}</p>
+                    <p className="text-[11px] text-[#6f746e]">
+                      {t("bill.panel_hint")}{" "}
+                      <Link href="/parts?unit=ml" className="font-bold uppercase text-[#20221f]">{t("bill.add_colour")}</Link>
+                    </p>
                     <label className="block text-xs font-bold uppercase">
                       Panel
                       <select

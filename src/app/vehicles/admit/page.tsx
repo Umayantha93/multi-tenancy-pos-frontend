@@ -10,7 +10,7 @@ import { compressPhoto } from "@/components/job-photos";
 import { buttonClass, ErrorMessage, inputClass, Panel } from "@/components/ui";
 import { api, currentFeatures } from "@/lib/api";
 import { useBusinessProfile } from "@/lib/use-business-profile";
-import { allowsCombinedJobs, allowsRepairJobs, allowsServiceJobs } from "@/lib/business-profiles";
+import { allowsCombinedJobs, allowsPaintJobs, allowsRepairJobs, allowsServiceJobs } from "@/lib/business-profiles";
 import { useT } from "@/lib/locale";
 
 type VehicleMatch = {
@@ -43,10 +43,12 @@ type CustomerDetail = CustomerMatch & {
   }>;
 };
 
-type JobKind = "repair" | "service" | "both";
+type JobKind = "repair" | "service" | "both" | "paint";
+type PaintMode = "panel" | "package";
 type EmployeeOption = { id: number; name: string; position?: string | null };
 
 const JOB_KIND_STORAGE_KEY = "garage_admit_job_kind";
+const PAINT_MODE_STORAGE_KEY = "garage_admit_paint_mode";
 
 function todayIsoDate() {
   const now = new Date();
@@ -58,7 +60,12 @@ function todayIsoDate() {
 function readStoredJobKind(): JobKind | null {
   if (typeof window === "undefined") return null;
   const stored = localStorage.getItem(JOB_KIND_STORAGE_KEY);
-  return stored === "repair" || stored === "service" || stored === "both" ? stored : null;
+  return stored === "repair" || stored === "service" || stored === "both" || stored === "paint" ? stored : null;
+}
+
+function readStoredPaintMode(): PaintMode {
+  if (typeof window === "undefined") return "panel";
+  return localStorage.getItem(PAINT_MODE_STORAGE_KEY) === "package" ? "package" : "panel";
 }
 
 export default function AdmitVehiclePage() {
@@ -101,9 +108,11 @@ export default function AdmitVehiclePage() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [suggestionField, setSuggestionField] = useState<"name" | "phone" | null>(null);
   const [jobKind, setJobKind] = useState<JobKind>("repair");
+  const [paintMode, setPaintMode] = useState<PaintMode>("panel");
   const [admissionDate, setAdmissionDate] = useState(todayIsoDate);
   const [canRepair, setCanRepair] = useState(true);
   const [canService, setCanService] = useState(true);
+  const [canPaint, setCanPaint] = useState(false);
   const [canCombined, setCanCombined] = useState(false);
   const [canAdmitPhotos, setCanAdmitPhotos] = useState(false);
   const [admitPhotos, setAdmitPhotos] = useState<File[]>([]);
@@ -124,28 +133,47 @@ export default function AdmitVehiclePage() {
     }
   }
 
+  function choosePaintMode(next: PaintMode) {
+    setPaintMode(next);
+    try {
+      localStorage.setItem(PAINT_MODE_STORAGE_KEY, next);
+    } catch {
+      /* ignore */
+    }
+  }
+
   useEffect(() => {
     const features = currentFeatures();
     setCanAssignEmployees(features.includes("admit_vehicle") || features.includes("employees_management") || features.includes("attendance"));
     const repair = allowsRepairJobs(profile.type, features);
     const service = allowsServiceJobs(profile.type, features);
+    const paint = allowsPaintJobs(profile.type, features);
     const combined = allowsCombinedJobs(profile.type, features);
     setCanRepair(repair);
     setCanService(service);
+    setCanPaint(paint);
     setCanCombined(combined);
     setCanAdmitPhotos(features.includes("admit_photos"));
-    if (repair && !service) {
+    setPaintMode(readStoredPaintMode());
+    if (repair && !service && !paint) {
       chooseJobKind("repair");
       return;
     }
-    if (service && !repair) {
+    if (service && !repair && !paint) {
       chooseJobKind("service");
+      return;
+    }
+    if (paint && !repair && !service) {
+      chooseJobKind("paint");
       return;
     }
     const stored = readStoredJobKind();
     if (stored === "both" && combined) chooseJobKind("both");
+    else if (stored === "paint" && paint) chooseJobKind("paint");
     else if (stored === "repair" && repair) chooseJobKind("repair");
     else if (stored === "service" && service) chooseJobKind("service");
+    else if (!repair && paint) chooseJobKind("paint");
+    else if (!repair && service) chooseJobKind("service");
   }, [profile.type]);
 
   useEffect(() => {
@@ -296,6 +324,7 @@ export default function AdmitVehiclePage() {
         body: JSON.stringify({
           vehicle_id: vehicleId,
           job_kind: jobKind,
+          paint_mode: jobKind === "paint" ? paintMode : undefined,
           admission_date: admissionDate,
           employee_ids: employeeIds,
         }),
@@ -320,6 +349,7 @@ export default function AdmitVehiclePage() {
       customer_phone: customerPhone,
       customer_address: customerAddress,
       job_kind: jobKind,
+      paint_mode: jobKind === "paint" ? paintMode : undefined,
       admission_date: admissionDate,
       employee_ids: employeeIds,
     };
@@ -408,10 +438,10 @@ export default function AdmitVehiclePage() {
             <div className="min-w-0 flex-1">
               <h2 className="font-display text-2xl font-semibold uppercase">{t("admit.job_type")}</h2>
               <p className="mt-1 text-sm text-[#6f746e]">
-                {isPaint
+                {isPaint || jobKind === "paint"
                   ? t("admit.job_type_hint_paint")
                   : isGarage && !(canRepair && canService)
-                    ? (canService ? "Every new admission is a service job." : "Every new admission is a repair job.")
+                    ? (canService ? "Every new admission is a service job." : canPaint ? "Every new admission is a paint job." : "Every new admission is a repair job.")
                     : t("admit.job_type_hint")}
               </p>
             </div>
@@ -426,27 +456,60 @@ export default function AdmitVehiclePage() {
               />
             </label>
           </div>
-          {(!isGarage || (canRepair && canService)) ? (
+          {(() => {
+            const jobKindOptions: Array<[JobKind, string]> = [
+              ...(isPaint || canRepair ? [["repair", isPaint ? t("admit.panel_work") : t("admit.repair")] as [JobKind, string]] : []),
+              ...(isPaint || canService ? [["service", isPaint ? t("admit.paint_package") : t("admit.service")] as [JobKind, string]] : []),
+              ...(canCombined ? [["both", t("admit.both")] as [JobKind, string]] : []),
+              ...(canPaint ? [["paint", t("admit.paint")] as [JobKind, string]] : []),
+            ];
+            return jobKindOptions.length > 1 ? (
+              <div
+                className="mt-4 inline-flex max-w-xl overflow-hidden border border-[#20221f] bg-white p-0.5"
+                role="group"
+                aria-label={t("admit.job_type")}
+              >
+                {jobKindOptions.map(([value, label]) => {
+                  const selected = jobKind === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => chooseJobKind(value)}
+                      className={`h-9 min-w-28 flex-1 px-4 text-[11px] font-bold uppercase transition ${
+                        selected
+                          ? "bg-[#20221f] text-white"
+                          : "bg-transparent text-[#20221f] hover:bg-[#f7f5ef]"
+                      }`}
+                      aria-pressed={selected}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-4 text-sm font-semibold">{jobKindOptions[0]?.[1] ?? t("admit.repair")}</p>
+            );
+          })()}
+          {canPaint && jobKind === "paint" && (
             <div
-              className="mt-4 inline-flex max-w-md overflow-hidden border border-[#20221f] bg-white p-0.5"
+              className="mt-3 inline-flex overflow-hidden border border-[#20221f] bg-white p-0.5"
               role="group"
-              aria-label={t("admit.job_type")}
+              aria-label={t("admit.job_type_hint_paint")}
             >
               {([
-                ["repair", isPaint ? t("admit.panel_work") : t("admit.repair")],
-                ["service", isPaint ? t("admit.paint_package") : t("admit.service")],
-                ...(canCombined ? [["both", t("admit.both")] as const] : []),
+                ["panel", t("admit.panel_work")],
+                ["package", t("admit.paint_package")],
               ] as const).map(([value, label]) => {
-                const selected = jobKind === value;
+                const selected = paintMode === value;
                 return (
                   <button
                     key={value}
                     type="button"
-                    onClick={() => chooseJobKind(value)}
-                    className={`h-9 min-w-28 flex-1 px-4 text-[11px] font-bold uppercase transition ${
-                      selected
-                        ? "bg-[#20221f] text-white"
-                        : "bg-transparent text-[#20221f] hover:bg-[#f7f5ef]"
+                    onClick={() => choosePaintMode(value)}
+                    className={`h-9 min-w-32 px-4 text-[11px] font-bold uppercase transition ${
+                      selected ? "bg-[#20221f] text-white" : "bg-transparent text-[#20221f] hover:bg-[#f7f5ef]"
                     }`}
                     aria-pressed={selected}
                   >
@@ -455,8 +518,6 @@ export default function AdmitVehiclePage() {
                 );
               })}
             </div>
-          ) : (
-            <p className="mt-4 text-sm font-semibold">{canService ? t("admit.service") : t("admit.repair")}</p>
           )}
           {canAdmitPhotos && (
             <div className="mt-5">
@@ -710,6 +771,7 @@ export default function AdmitVehiclePage() {
                 </div>
               )}
               <input type="hidden" name="job_kind" value={jobKind} />
+              {jobKind === "paint" && <input type="hidden" name="paint_mode" value={paintMode} />}
             </div>
             <div className="flex justify-end border-t border-[#d7d3c8] p-5">
               <button disabled={saving} className={buttonClass}>

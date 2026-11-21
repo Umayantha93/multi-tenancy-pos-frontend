@@ -1,6 +1,6 @@
 "use client";
 
-import { KeyboardEvent, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { KeyboardEvent, ReactNode, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ConfirmModal, ErrorMessage, PageState, Panel } from "@/components/ui";
@@ -14,7 +14,7 @@ type PendingDelete = { kind: "category" | "service"; item: Named } | null;
 const noopSubscribe = () => () => {};
 const errorText = (caught: unknown, fallback: string) => (caught instanceof Error ? caught.message : fallback);
 
-export function GarageServiceList() {
+export function GarageServiceList({ embedded = false }: { embedded?: boolean } = {}) {
   const canEdit = useSyncExternalStore(noopSubscribe, () => currentFeatures().includes("billing"), () => false);
   const [categories, setCategories] = useState<Named[]>([]);
   const [addons, setAddons] = useState<Addon[]>([]);
@@ -116,8 +116,12 @@ export function GarageServiceList() {
 
   const blueprintRows = fullService ? [fullService, ...services] : services;
 
-  return (
-    <AppShell title="Service addons" eyebrow="One service blueprint for every vehicle type">
+  const frame = embedded
+    ? (children: ReactNode) => <>{children}</>
+    : (children: ReactNode) => <AppShell title="Service addons" eyebrow="One service blueprint for every vehicle type">{children}</AppShell>;
+
+  return frame(
+    <>
       {!canEdit && <p className="mb-4 text-sm text-[#6f746e]">Job card access is required to change these lists.</p>}
       {error && <div className="mb-4"><ErrorMessage message={error} /></div>}
 
@@ -236,7 +240,7 @@ export function GarageServiceList() {
         onConfirm={() => void confirmDelete()}
         onCancel={() => setPendingDelete(null)}
       />
-    </AppShell>
+    </>,
   );
 }
 
