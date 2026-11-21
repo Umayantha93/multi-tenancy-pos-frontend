@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Boxes, Download, Loader2, PackagePlus, Pencil, Plus, Search, TableProperties, Trash2, Upload, X } from "lucide-react";
 import Link from "next/link";
@@ -57,6 +57,14 @@ type ImportResult = {
 };
 
 export default function PartsPage() {
+  return (
+    <Suspense fallback={<AppShell title="Inventory"><PageState message="Loading inventory..." /></AppShell>}>
+      <PartsPageInner />
+    </Suspense>
+  );
+}
+
+function PartsPageInner() {
   const [parts, setParts] = useState<Part[]>([]);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
