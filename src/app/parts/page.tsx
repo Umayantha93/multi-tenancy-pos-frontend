@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Boxes, Download, Loader2, PackagePlus, Pencil, Plus, Search, TableProperties, Trash2, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
@@ -56,6 +57,14 @@ type ImportResult = {
 };
 
 export default function PartsPage() {
+  return (
+    <Suspense fallback={<AppShell title="Inventory"><PageState message="Loading inventory..." /></AppShell>}>
+      <PartsPageInner />
+    </Suspense>
+  );
+}
+
+function PartsPageInner() {
   const [parts, setParts] = useState<Part[]>([]);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -86,6 +95,7 @@ export default function PartsPage() {
   const importInputRef = useRef<HTMLInputElement>(null);
   const loadSeq = useRef(0);
   const profile = useBusinessProfile();
+  const preferMillilitres = useSearchParams().get("unit") === "ml";
   const isPaint = profile.type === "paint";
   const isStore = usesStoreCounter(profile.type);
   const isGarage = profile.type === "garage";
@@ -160,7 +170,7 @@ export default function PartsPage() {
 
   function openAdd() {
     setSelected(null);
-    setStockUnit(isPaint ? "ml" : "qty");
+    setStockUnit(preferMillilitres || isPaint ? "ml" : "qty");
     setCategoryDraft("");
     setSubcategoryDraft("");
     setMode("add");

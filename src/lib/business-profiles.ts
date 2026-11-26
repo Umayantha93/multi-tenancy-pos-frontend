@@ -162,6 +162,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
       { key: "admit_repair", name: "Repair jobs", group: "Service Intake" },
       { key: "admit_service", name: "Service jobs", group: "Service Intake" },
       { key: "admit_combined", name: "Repair and service", group: "Service Intake" },
+      { key: "admit_paint", name: "Paint jobs", group: "Service Intake" },
       { key: "admit_photos", name: "Admit photos", group: "Service Intake" },
       { key: "job_board", name: "Job status board", group: "Service Intake" },
       { key: "owner_bill_sms", name: "Owner bill SMS", group: "Service Intake" },
@@ -719,7 +720,7 @@ export function optionalFeaturesFor(type?: string | null): FeatureKey[] {
     return [
       "owner_bill_sms", "service_ops_report", "job_photos", "job_videos", "job_commissions",
       "free_service", "show_bill_technicians", "line_discounts", "line_vat",
-      "admit_combined", "admit_photos",
+      "admit_combined", "admit_paint", "admit_photos",
       "job_board", "job_bookings", "service_reminders",
       "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp", "station_consumables",
       "expense_job_split", "finance_report_export", "owe_in_register", "job_progress",
@@ -730,6 +731,10 @@ export function optionalFeaturesFor(type?: string | null): FeatureKey[] {
   if (type === "device_repair") return ["job_bookings", "purchase_orders", "part_fitment", "serial_inventory", "cash_up", "bill_whatsapp", "line_discounts", "line_vat"];
   if (type === "clothing") return ["customer_display", "cash_up", "bill_whatsapp", "line_discounts", "line_vat"];
   return ["cash_up", "bill_whatsapp", "line_discounts", "line_vat"];
+}
+
+export function allowsPaintJobs(type?: string | null, features: string[] = []): boolean {
+  return type === "garage" && features.includes("admit_paint");
 }
 
 export function allowsServiceJobs(type?: string | null, features: string[] = []): boolean {

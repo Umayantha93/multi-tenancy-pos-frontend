@@ -34,11 +34,15 @@ export default function LaborCatalogPage() {
   const [openId, setOpenId] = useState<number | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const isPaint = useBusinessProfile().type === "paint";
+  const profile = useBusinessProfile();
+  const isPaint = profile.type === "paint";
+  const paintJobs = profile.type === "garage" && currentFeatures().includes("admit_paint");
+  const [catalog, setCatalog] = useState<"garage" | "paint">(isPaint ? "paint" : "garage");
+  const catalogKey = isPaint ? "paint" : catalog;
 
-  function load() {
+  function load(nextCatalog = catalogKey) {
     setLoading(true);
-    api<LaborCategory[]>("/labor-catalog")
+    api<LaborCategory[]>(`/labor-catalog?catalog=${nextCatalog}`)
       .then((result) => {
         setCategories(result);
         setOpenId((current) => current ?? result[0]?.id ?? null);
@@ -48,8 +52,8 @@ export default function LaborCatalogPage() {
   }
 
   useEffect(() => {
-    load();
-  }, []);
+    load(catalogKey);
+  }, [catalogKey]);
 
   async function createCategory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -61,7 +65,7 @@ export default function LaborCatalogPage() {
     try {
       const created = await api<LaborCategory>("/labor-categories", {
         method: "POST",
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, catalog: catalogKey }),
       });
       form.reset();
       setOpenId(created.id);
@@ -135,7 +139,7 @@ export default function LaborCatalogPage() {
   }
 
   return (
-    <AppShell title={isPaint ? "Paint labor" : "Repair addons"} eyebrow={isPaint ? "Hourly catalog for panel-work jobs" : "Labor catalog for repair job cards"}>
+    <AppShell title={catalogKey === "paint" ? "Paint labor" : "Repair addons"} eyebrow={catalogKey === "paint" ? "Hourly catalog for panel-work jobs" : "Labor catalog for repair job cards"}>
       <ConfirmModal
         open={Boolean(pendingDelete)}
         title={pendingDelete?.kind === "category" ? "Delete category" : "Delete labor item"}
@@ -153,18 +157,36 @@ export default function LaborCatalogPage() {
       {!canEdit && (
         <p className="mb-5 text-sm text-[#6f746e]">Job card access is required to change repair addons.</p>
       )}
+      {paintJobs && (
+        <div className="mb-5 inline-flex overflow-hidden border border-[#20221f] bg-white p-0.5" role="group" aria-label="Labor catalog">
+          {([
+            ["garage", "Repair labor"],
+            ["paint", "Paint labor"],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => { setCatalog(value); setOpenId(null); }}
+              className={`h-9 px-4 text-[11px] font-bold uppercase ${catalog === value ? "bg-[#20221f] text-white" : "text-[#20221f]"}`}
+              aria-pressed={catalog === value}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       {error && <div className="mb-5"><ErrorMessage message={error} /></div>}
 
       {canEdit && (
         <Panel className="mb-5 p-5">
           <h2 className="font-display text-2xl font-semibold uppercase">Add category</h2>
           <p className="mt-1 text-sm text-[#6f746e]">
-            {isPaint
+            {catalogKey === "paint"
               ? "Group paint labor (Prep, Paint, Finish…). Staff search these on panel jobs."
               : "Group labor jobs (Brakes, Engine, Electrical…). Staff search these on repair bills."}
           </p>
           <form onSubmit={createCategory} className="mt-4 flex max-w-xl items-stretch gap-2">
-            <input name="name" required placeholder={isPaint ? "e.g. Prep" : "e.g. Brakes"} className={inputClass} />
+            <input name="name" required placeholder={catalogKey === "paint" ? "e.g. Prep" : "e.g. Brakes"} className={inputClass} />
             <button className={`${buttonClass} shrink-0`}><Plus size={14} /> Add</button>
           </form>
         </Panel>
@@ -234,7 +256,7 @@ export default function LaborCatalogPage() {
                     </div>
                     {canEdit && (
                       <form onSubmit={(event) => createItem(event, category.id)} className="mt-4 grid gap-2 sm:grid-cols-[1.4fr_0.8fr_0.6fr_auto]">
-                        <input name="name" required placeholder={isPaint ? "New paint labor" : "New labor item"} className={inputClass} />
+                        <input name="name" required placeholder={catalogKey === "paint" ? "New paint labor" : "New labor item"} className={inputClass} />
                         <input name="hourly_rate" required type="number" min="0" step="0.01" placeholder="Hourly rate" defaultValue="3000" className={inputClass} />
                         <input name="standard_hours" required type="number" min="0.01" step="0.01" placeholder="Hours" defaultValue="1" className={inputClass} />
                         <button className={buttonClass}><Plus size={14} /> Add item</button>

@@ -29,6 +29,7 @@ type Bill = {
   admission_date: string;
   status: string;
   job_kind?: string | null;
+  paint_mode?: string | null;
   subtotal: string;
   balance_due: string;
   amount_refunded?: string | number;
@@ -45,6 +46,7 @@ type Bill = {
 
 function billJobKindClass(bill: Bill, type: string): string {
   if (usesStoreCounter(type)) return "bg-[#eeece5] text-[#6f746e]";
+  if (bill.job_kind === "paint") return "bg-[#167c73] text-white";
   if (bill.job_kind === "service") return "bg-[#4c51bf] text-white";
   if (bill.job_kind === "parts_sale") return "bg-[#2f855a] text-white";
   return "bg-[#c2581c] text-white";
@@ -55,6 +57,7 @@ function billJobKindLabel(bill: Bill, type: string, t: ReturnType<typeof useT>):
   if (usesStoreCounter(type)) {
     return bill.bill_number.startsWith("QCK-") ? t("bills.quick") : t("bills.sale");
   }
+  if (bill.job_kind === "paint") return bill.paint_mode === "package" ? t("bills.package") : t("bills.panel");
   if (bill.job_kind === "service") return type === "paint" ? t("bills.package") : t("bills.service");
   if (bill.job_kind === "parts_sale") return type === "paint" ? t("bills.counter") : t("bills.instant");
   if (bill.job_kind === "repair" || !bill.job_kind) return type === "paint" ? t("bills.panel") : t("bills.repair");
