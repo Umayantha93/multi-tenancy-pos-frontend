@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 180" role="img" aria-label="IUBits POS">
+  <defs>
+    <linearGradient id="iubits-v2-gold" x1="83" y1="22" x2="83" y2="158" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f8e7a2"/>
+      <stop offset="0.42" stop-color="#f0c43c"/>
+      <stop offset="1" stop-color="#b8860f"/>
+    </linearGradient>
+    <linearGradient id="iubits-v2-letter" x1="83" y1="64" x2="83" y2="116" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffe7a0"/>
+      <stop offset="1" stop-color="#e2b43a"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(24 22) scale(0.536)">
+    <path fill="url(#iubits-v2-gold)" d="M110 8C118 8 168 22 182 30L196 46V124C196 174 158 212 110 246C62 212 24 174 24 124V46L38 30C52 22 102 8 110 8Z"/>
+    <path fill="#14120f" d="M110 32C116 32 152 44 164 52L176 64V120C176 158 148 188 110 214C72 188 44 158 44 120V64L56 52C68 44 104 32 110 32Z"/>
+    <path fill="url(#iubits-v2-letter)" fill-rule="evenodd" d="M53 131.35L53 76.65L64.45 76.65L64.45 131.35ZM90.84 132.12Q79.55 132.12 73.55 126.61Q67.56 121.1 67.56 110.85L67.56 76.65L79.01 76.65L79.01 109.96Q79.01 116.44 82.09 119.8Q85.18 123.16 91.16 123.16Q97.29 123.16 100.59 119.64Q103.89 116.13 103.89 109.57L103.89 76.65L115.34 76.65L115.34 110.27Q115.34 120.67 108.91 126.4Q102.49 132.12 90.84 132.12ZM167 115.74Q167 123.19 161.41 127.27Q155.82 131.35 145.88 131.35L118.52 131.35L118.52 76.65L143.56 76.65Q153.57 76.65 158.71 80.13Q163.86 83.6 163.86 90.4Q163.86 95.05 161.27 98.26Q158.69 101.46 153.41 102.58Q160.05 103.36 163.53 106.76Q167 110.15 167 115.74ZM152.33 91.95Q152.33 88.26 149.98 86.71Q147.63 85.16 143.01 85.16L129.97 85.16L129.97 98.7L143.09 98.7Q147.94 98.7 150.13 97.01Q152.33 95.32 152.33 91.95ZM155.51 114.85Q155.51 107.16 144.49 107.16L129.97 107.16L129.97 122.84L144.91 122.84Q150.43 122.84 152.97 120.85Q155.51 118.85 155.51 114.85Z"/>
+  </g>
+  <text x="168" y="108" fill="#ffffff" font-family="Ubuntu Sans, Arial, Helvetica, sans-serif" font-size="64" font-weight="800">IUBits</text>
+  <text x="392" y="108" fill="#e2b43a" font-family="Ubuntu Sans, Arial, Helvetica, sans-serif" font-size="64" font-weight="800">POS</text>
+</svg>

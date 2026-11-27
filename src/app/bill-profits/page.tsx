@@ -165,7 +165,7 @@ export default function BillProfitsPage() {
   useEffect(() => { load(1); }, [load]);
   useEffect(() => {
     const type = currentUser()?.tenant?.business_type;
-    setIsGarage(type === "garage" || type === "tyre" || type === "device_repair" || type === "paint");
+    setIsGarage(type === "garage" || type === "tyre" || type === "device_repair" || type === "ac_service" || type === "paint");
     setIsPaint(type === "paint");
     setIsStore(type === "store" || type === "mobile_shop");
     setHasRepair(currentFeatures().includes("repair_bills"));

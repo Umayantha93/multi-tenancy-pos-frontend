@@ -56,6 +56,7 @@ export type FeatureKey =
   | "admit_combined"
   | "admit_paint"
   | "admit_photos"
+  | "admit_appliance"
   | "job_board"
   | "job_bookings"
   | "service_reminders"
@@ -100,7 +101,7 @@ export type FeatureKey =
   | "line_discounts"
   | "line_vat";
 
-export type BusinessType = "garage" | "tyre" | "device_repair" | "paint" | "photography" | "clothing" | "salon" | "cottage" | "store" | "mobile_shop";
+export type BusinessType = "garage" | "tyre" | "device_repair" | "ac_service" | "paint" | "photography" | "clothing" | "salon" | "cottage" | "store" | "mobile_shop";
 
 export type PhoneEntry = { label?: string; number: string };
 

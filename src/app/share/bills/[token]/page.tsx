@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Download } from "lucide-react";
 import { API_URL, formatDate, mediaUrl, money, PhoneEntry, Tenant } from "@/lib/api";
-import { billLinePresentation, sortBillItems } from "@/lib/business-profiles";
+import { applianceTypeLabel, billLinePresentation, sortBillItems } from "@/lib/business-profiles";
 import { warrantyLabel } from "@/lib/warranty";
 import { billNetTotal, billStamp, billStampDateLabel, garageBillPdfTitle, latestPaymentAt } from "@/lib/bill-stamp";
 import { BillStatusSeal } from "@/components/bill-status-seal";
@@ -38,7 +38,8 @@ type SharedBill = {
   additional_note_color?: string | null;
   notes?: string | null;
   customer: { name: string; phone: string; address?: string | null } | null;
-  vehicle: { number_plate: string; make?: string | null; model?: string | null; chassis_number?: string | null } | null;
+  service_place?: "workshop" | "on_site" | null;
+  vehicle: { number_plate: string; make?: string | null; model?: string | null; chassis_number?: string | null; asset_kind?: string | null; appliance_type?: string | null; appliance_type_name?: string | null; fault_description?: string | null } | null;
   items: Array<{
     id: number;
     type: string;
@@ -270,15 +271,27 @@ export default function SharedBillPage() {
           </div>
           {bill.vehicle && (
             <div>
-              <p className="text-[10px] font-bold uppercase text-[#6f746e]">{t("common.vehicle")}</p>
-              <p className="mt-1 font-semibold">{bill.vehicle.number_plate}</p>
+              <p className="text-[10px] font-bold uppercase text-[#6f746e]">{bill.vehicle.asset_kind === "appliance" ? t("admit.appliance") : t("common.vehicle")}</p>
+              <p className="mt-1 font-semibold">
+                {bill.vehicle.asset_kind === "appliance"
+                  ? `${applianceTypeLabel(bill.vehicle.appliance_type, bill.vehicle.appliance_type_name)} · ${bill.vehicle.number_plate}`
+                  : bill.vehicle.number_plate}
+              </p>
               <p className="text-sm text-[#6f746e]">
                 {[bill.vehicle.make, bill.vehicle.model].filter(Boolean).join(" ") || "—"}
               </p>
+              {bill.vehicle.asset_kind === "appliance" ? (
+                <p className="mt-2 text-sm">
+                  <span className="text-[10px] font-bold uppercase text-[#6f746e]">{t("admit.service_place")} </span>
+                  {bill.service_place === "on_site" ? t("admit.on_site") : t("admit.workshop")}
+                  {bill.vehicle.fault_description ? ` · ${bill.vehicle.fault_description}` : ""}
+                </p>
+              ) : (
               <p className="mt-2 text-sm">
                 <span className="text-[10px] font-bold uppercase text-[#6f746e]">{t("bill.mileage")} </span>
                 {bill.mileage != null && bill.mileage !== "" ? t("common.km", { count: Number(bill.mileage).toLocaleString() }) : "—"}
               </p>
+              )}
               {bill.next_service_mileage != null && bill.next_service_mileage !== "" && (
                 <p className="mt-1 text-sm">
                   <span className="text-[10px] font-bold uppercase text-[#6f746e]">{t("bill.next_service")} </span>
