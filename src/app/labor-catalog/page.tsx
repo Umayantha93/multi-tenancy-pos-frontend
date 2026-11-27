@@ -36,9 +36,10 @@ export default function LaborCatalogPage() {
   const [deleting, setDeleting] = useState(false);
   const profile = useBusinessProfile();
   const isPaint = profile.type === "paint";
+  const isAc = profile.type === "ac_service";
   const paintJobs = profile.type === "garage" && currentFeatures().includes("admit_paint");
-  const [catalog, setCatalog] = useState<"garage" | "paint">(isPaint ? "paint" : "garage");
-  const catalogKey = isPaint ? "paint" : catalog;
+  const [catalog, setCatalog] = useState<"garage" | "paint" | "ac">(isPaint ? "paint" : isAc ? "ac" : "garage");
+  const catalogKey = isPaint ? "paint" : isAc ? "ac" : catalog;
 
   function load(nextCatalog = catalogKey) {
     setLoading(true);
@@ -139,7 +140,7 @@ export default function LaborCatalogPage() {
   }
 
   return (
-    <AppShell title={catalogKey === "paint" ? "Paint labor" : "Repair addons"} eyebrow={catalogKey === "paint" ? "Hourly catalog for panel-work jobs" : "Labor catalog for repair job cards"}>
+    <AppShell title={catalogKey === "paint" ? "Paint labor" : catalogKey === "ac" ? "A/C labor" : "Repair addons"} eyebrow={catalogKey === "paint" ? "Hourly catalog for panel-work jobs" : catalogKey === "ac" ? "Gas, leak, and unit repair labor" : "Labor catalog for repair job cards"}>
       <ConfirmModal
         open={Boolean(pendingDelete)}
         title={pendingDelete?.kind === "category" ? "Delete category" : "Delete labor item"}

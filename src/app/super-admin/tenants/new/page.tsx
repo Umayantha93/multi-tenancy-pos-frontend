@@ -297,7 +297,7 @@ export default function NewTenantPage() {
               features={profile.moduleCatalog}
               enabled={features}
               optional={optionalFeaturesFor(businessType)}
-              garageAdmit={businessType === "garage"}
+              garageAdmit={businessType === "garage" || businessType === "ac_service"}
               columns={1}
               onChange={setFeatures}
               renderExtra={(feature) => feature.key === "job_commissions" ? (

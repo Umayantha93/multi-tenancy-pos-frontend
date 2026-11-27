@@ -6,7 +6,7 @@ import { ArrowRight, Banknote, Boxes, CircleGauge, ClipboardPlus, ReceiptText, S
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel } from "@/components/ui";
 import { api, currentFeatures, currentUser, money } from "@/lib/api";
-import { profileFor, usesCounterHome, usesStoreCounter } from "@/lib/business-profiles";
+import { jobSubjectLine, profileFor, usesCounterHome, usesStoreCounter } from "@/lib/business-profiles";
 import { billStatusClass, billStatusLabel } from "@/lib/bill-stamp";
 import { ShopFilter } from "@/components/branch-chip";
 
@@ -15,11 +15,13 @@ type Dashboard = {
   business_type?: string;
   today_income: number | null;
   open_bills: number | null;
+  open_vehicle_jobs?: number | null;
+  open_appliance_jobs?: number | null;
   low_stock_parts: number | null;
   monthly_income: number | null;
   monthly_expenses: number | null;
   monthly_profit: number | null;
-  recent_bills: Array<{ id: number; bill_number: string; status: string; balance_due: string; notes?: string | null; customer: { name: string }; vehicle?: { number_plate: string } | null }>;
+  recent_bills: Array<{ id: number; bill_number: string; status: string; balance_due: string; notes?: string | null; customer: { name: string }; vehicle?: { number_plate: string; asset_kind?: string | null; appliance_type?: string | null } | null }>;
   upcoming_bookings?: Array<{ id: number; scheduled_at: string; status: string; customer: { name: string }; package?: { name: string } | null }>;
   upcoming_job_bookings?: Array<{ id: number; starts_at: string; number_plate?: string | null; customer?: { name: string } | null; bay?: { name: string } | null }>;
   active_stays?: Array<{ id: number; check_in: string; check_out: string; status: string; customer: { name: string }; room: { name: string } }>;
@@ -51,7 +53,9 @@ export default function DashboardPage() {
   const counterHome = usesCounterHome(profile.type, features);
   const metrics = data && !counterHome ? [
     can("billing") && ["Today's receipts", money(data.today_income ?? 0), Banknote, "#167c73"],
-    can("billing") && [profile.openBillsLabel, String(data.open_bills ?? 0), ReceiptText, "#20221f"],
+    can("billing") && data.open_vehicle_jobs != null && data.open_appliance_jobs != null && ["Open vehicle jobs", String(data.open_vehicle_jobs), ReceiptText, "#20221f"],
+    can("billing") && data.open_vehicle_jobs != null && data.open_appliance_jobs != null && ["Open appliance jobs", String(data.open_appliance_jobs), Wrench, "#167c73"],
+    can("billing") && data.open_vehicle_jobs == null && [profile.openBillsLabel, String(data.open_bills ?? 0), ReceiptText, "#20221f"],
     (can("parts_inventory") || can("product_catalog")) && [profile.type === "paint" ? "Low stock colours" : "Low stock items", String(data.low_stock_parts ?? 0), Boxes, "#b84837"],
     can("balance_sheet") && ["Monthly profit", money(data.monthly_profit ?? 0), TrendingUp, (data.monthly_profit ?? 0) >= 0 ? "#167c73" : "#b84837"],
   ].filter(Boolean) as Array<[string, string, typeof Banknote, string]> : [];
@@ -104,7 +108,7 @@ export default function DashboardPage() {
       </div>
       )}
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.5fr_0.75fr]">
-        {can("billing") && <Panel><div className="flex items-center justify-between border-b border-[#d7d3c8] px-5 py-4"><div><h2 className="font-display text-2xl font-semibold uppercase">{profile.recentBillsTitle}</h2><p className="text-xs text-[#6f746e]">{profile.recentBillsHint}</p></div><Link href="/bills" className="text-[#167c73]" aria-label={`View all ${profile.billingLabel}`}><ArrowRight size={20} /></Link></div><div className="overflow-x-auto"><table className="w-full min-w-[620px] text-left text-sm"><thead className="bg-[#eeece5] text-[10px] uppercase text-[#6f746e]"><tr><th className="px-5 py-3">Ref</th><th>Detail</th><th>Customer</th><th>Status</th><th className="pr-5 text-right">Due</th></tr></thead><tbody>{data.recent_bills.map((bill) => <tr key={bill.id} className="border-t border-[#e2ded4]"><td className="px-5 py-4 font-semibold">{bill.bill_number}</td><td>{usesStoreCounter(profile.type) ? (bill.notes || "—") : (bill.vehicle?.number_plate ?? "—")}</td><td>{bill.customer?.name ?? "Walk-in"}</td><td><span className={`px-2 py-1 text-[10px] font-bold uppercase ${billStatusClass(bill.status)}`}>{billStatusLabel(bill.status)}</span></td><td className="pr-5 text-right font-semibold">{money(bill.balance_due)}</td></tr>)}</tbody></table>{data.recent_bills.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No {profile.billingLabel.toLowerCase()} yet.</p>}</div></Panel>}
+        {can("billing") && <Panel><div className="flex items-center justify-between border-b border-[#d7d3c8] px-5 py-4"><div><h2 className="font-display text-2xl font-semibold uppercase">{profile.recentBillsTitle}</h2><p className="text-xs text-[#6f746e]">{profile.recentBillsHint}</p></div><Link href="/bills" className="text-[#167c73]" aria-label={`View all ${profile.billingLabel}`}><ArrowRight size={20} /></Link></div><div className="overflow-x-auto"><table className="w-full min-w-[620px] text-left text-sm"><thead className="bg-[#eeece5] text-[10px] uppercase text-[#6f746e]"><tr><th className="px-5 py-3">Ref</th><th>Detail</th><th>Customer</th><th>Status</th><th className="pr-5 text-right">Due</th></tr></thead><tbody>{data.recent_bills.map((bill) => <tr key={bill.id} className="border-t border-[#e2ded4]"><td className="px-5 py-4 font-semibold">{bill.bill_number}</td><td>{usesStoreCounter(profile.type) ? (bill.notes || "—") : jobSubjectLine(bill.vehicle)}</td><td>{bill.customer?.name ?? "Walk-in"}</td><td><span className={`px-2 py-1 text-[10px] font-bold uppercase ${billStatusClass(bill.status)}`}>{billStatusLabel(bill.status)}</span></td><td className="pr-5 text-right font-semibold">{money(bill.balance_due)}</td></tr>)}</tbody></table>{data.recent_bills.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No {profile.billingLabel.toLowerCase()} yet.</p>}</div></Panel>}
         <div className="space-y-5">
           {can("job_bookings") && (
             <Panel className="p-5">

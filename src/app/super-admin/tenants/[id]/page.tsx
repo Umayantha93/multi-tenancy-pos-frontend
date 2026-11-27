@@ -1249,13 +1249,14 @@ export default function TenantDetailPage() {
               {tenant.business_type === "store" ? " Repair and Warranties are optional modules." : ""}
               {tenant.business_type === "mobile_shop" ? " Sales, repairs, and warranties are on by default." : ""}
               {tenant.business_type === "garage" ? " Admit vehicle can be repair, service, or both. Nested ticks sit under that module." : ""}
+              {tenant.business_type === "ac_service" ? " Vehicle jobs are repairs. Appliance jobs can be repair or service, and sit under Admit vehicle." : ""}
             </p>
             <div className="mt-6">
               <FeaturePlanToggles
                 features={featureData.available}
                 enabled={enabled}
                 optional={featureData.optional ?? optionalFeaturesFor(tenant.business_type)}
-                garageAdmit={tenant.business_type === "garage"}
+                garageAdmit={tenant.business_type === "garage" || tenant.business_type === "ac_service"}
                 onChange={setEnabled}
                 renderExtra={(feature) => feature.key === "job_commissions" ? (
                   <CommissionTypeSelect
