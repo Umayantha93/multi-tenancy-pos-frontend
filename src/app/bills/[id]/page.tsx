@@ -25,6 +25,14 @@ import { billShareUrl, whatsappHref } from "@/lib/whatsapp";
 
 type Part = { id: number; name: string; price: string; pending_price?: string | null; pending_price_at_qty?: string | number | null; stock_qty: number; stock_unit?: string | null; sku?: string | null; barcode?: string | null; brand?: string; serialized?: boolean };
 
+type CustomerMatch = {
+  id: number;
+  name: string;
+  phone?: string | null;
+  address?: string | null;
+  vehicles_count?: number;
+};
+
 function partPriceLabel(part: Part): string {
   const oldLeft = Math.max(0, Number(part.stock_qty) - Number(part.pending_price_at_qty ?? 0));
   if (part.pending_price == null || oldLeft <= 0.0001) return money(part.pending_price ?? part.price);
@@ -105,7 +113,7 @@ type Bill = {
   warranty_starts_on?: string | null;
   warranty_until?: string | null;
   service_place?: "workshop" | "on_site" | null;
-  customer: { name: string; phone?: string | null; address?: string | null } | null;
+  customer: { id?: number; name: string; phone?: string | null; address?: string | null } | null;
   vehicle: { number_plate: string; chassis_number?: string | null; make?: string | null; model?: string | null; year?: number | string | null; asset_kind?: string | null; appliance_type?: string | null; appliance_type_name?: string | null; fault_description?: string | null } | null;
   employees?: Array<{
     id: number;
@@ -292,6 +300,13 @@ export default function BillDetailPage() {
   const [customerNameDraft, setCustomerNameDraft] = useState("");
   const [customerPhoneDraft, setCustomerPhoneDraft] = useState("");
   const [customerAddressDraft, setCustomerAddressDraft] = useState("");
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
+  const [selectedCustomerName, setSelectedCustomerName] = useState("");
+  const [customerContactDirty, setCustomerContactDirty] = useState(false);
+  const [customerMatches, setCustomerMatches] = useState<CustomerMatch[]>([]);
+  const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
+  const [lookingUpCustomer, setLookingUpCustomer] = useState(false);
+  const customerNameBoxRef = useRef<HTMLDivElement>(null);
   const [driverNameDraft, setDriverNameDraft] = useState("");
   const [plateDraft, setPlateDraft] = useState("");
   const [applianceTypeDraft, setApplianceTypeDraft] = useState("split_ac");
@@ -723,6 +738,11 @@ export default function BillDetailPage() {
         setCustomerNameDraft(result.customer?.name ?? "");
         setCustomerPhoneDraft(result.customer?.phone ?? "");
         setCustomerAddressDraft(result.customer?.address ?? "");
+        setSelectedCustomerId(result.customer?.id ?? null);
+        setSelectedCustomerName(result.customer?.name ?? "");
+        setCustomerContactDirty(false);
+        setShowCustomerSuggestions(false);
+        setCustomerMatches([]);
         setDriverNameDraft(result.driver_name ?? "");
         setDriverPhoneDraft(result.driver_phone ?? "");
         setPlateDraft(result.vehicle?.number_plate ?? "");
@@ -826,6 +846,50 @@ export default function BillDetailPage() {
       .then((result) => setEmployees(result.data))
       .catch(() => undefined);
   }, [canAssignEmployees]);
+
+  useEffect(() => {
+    if (!headerEditing || selectedCustomerId) {
+      setLookingUpCustomer(false);
+      return;
+    }
+    const nameQuery = customerNameDraft.trim();
+    if (nameQuery.length < 2) {
+      setCustomerMatches([]);
+      setLookingUpCustomer(false);
+      return;
+    }
+    setCustomerMatches([]);
+    setLookingUpCustomer(true);
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      api<{ data: CustomerMatch[] }>(`/customers?name=${encodeURIComponent(nameQuery)}&per_page=10`)
+        .then((result) => {
+          if (cancelled) return;
+          setCustomerMatches(result.data);
+          setShowCustomerSuggestions(true);
+        })
+        .catch(() => {
+          if (!cancelled) setCustomerMatches([]);
+        })
+        .finally(() => {
+          if (!cancelled) setLookingUpCustomer(false);
+        });
+    }, 300);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [headerEditing, customerNameDraft, selectedCustomerId]);
+
+  useEffect(() => {
+    function onPointer(event: MouseEvent) {
+      if (!customerNameBoxRef.current?.contains(event.target as Node)) {
+        setShowCustomerSuggestions(false);
+      }
+    }
+    window.addEventListener("mousedown", onPointer);
+    return () => window.removeEventListener("mousedown", onPointer);
+  }, []);
 
   const filteredParts = useMemo(() => {
     const query = partQuery.trim().toLowerCase();
@@ -1438,6 +1502,11 @@ export default function BillDetailPage() {
     setCustomerNameDraft(source.customer?.name ?? "");
     setCustomerPhoneDraft(source.customer?.phone ?? "");
     setCustomerAddressDraft(source.customer?.address ?? "");
+    setSelectedCustomerId(source.customer?.id ?? null);
+    setSelectedCustomerName(source.customer?.name ?? "");
+    setCustomerContactDirty(false);
+    setShowCustomerSuggestions(false);
+    setCustomerMatches([]);
     setDriverNameDraft(source.driver_name ?? "");
     setDriverPhoneDraft(source.driver_phone ?? "");
     setPlateDraft(source.vehicle?.number_plate ?? "");
@@ -1458,7 +1527,7 @@ export default function BillDetailPage() {
   function beginHeaderEdit(event: ReactMouseEvent<HTMLButtonElement>) {
     event.preventDefault();
     event.stopPropagation();
-    if (isLocked || !bill?.vehicle) return;
+    if (isClosed || !bill?.vehicle) return;
     skipHeaderSubmit.current = true;
     window.setTimeout(() => {
       skipHeaderSubmit.current = false;
@@ -1474,17 +1543,60 @@ export default function BillDetailPage() {
     setHeaderEditing(false);
   }
 
+  function chooseCustomer(match: CustomerMatch) {
+    setCustomerNameDraft(match.name || "");
+    setCustomerPhoneDraft(match.phone || "");
+    setCustomerAddressDraft(match.address || "");
+    setSelectedCustomerId(match.id);
+    setSelectedCustomerName(match.name || "");
+    setCustomerContactDirty(false);
+    setShowCustomerSuggestions(false);
+    setCustomerMatches([]);
+  }
+
   async function saveHeader(event?: FormEvent) {
     event?.preventDefault();
     if (skipHeaderSubmit.current) return;
-    if (!headerEditingRef.current || isLocked || !bill?.vehicle) return;
+    if (!headerEditingRef.current || isClosed || !bill?.vehicle) return;
     const plate = plateDraft.trim().toUpperCase();
+    let customerId = selectedCustomerId;
+    let phoneDraft = customerPhoneDraft;
+    let addressDraft = customerAddressDraft;
+    const typedName = customerNameDraft.trim();
+    const selectionMatches = customerId != null && typedName.toLowerCase() === selectedCustomerName.trim().toLowerCase();
+    if (!selectionMatches && typedName.toLowerCase() !== (bill.customer?.name ?? "").trim().toLowerCase()) {
+      try {
+        const result = await api<{ data: CustomerMatch[] }>(`/customers?name=${encodeURIComponent(typedName)}&per_page=10`);
+        const exact = result.data.filter((row) => row.name.trim().toLowerCase() === typedName.toLowerCase());
+        if (exact.length > 1) {
+          setError("More than one customer uses that name. Pick the customer from the list.");
+          setShowCustomerSuggestions(true);
+          return;
+        }
+        if (exact.length === 1) {
+          customerId = exact[0].id;
+          if (!customerContactDirty) {
+            phoneDraft = exact[0].phone || "";
+            addressDraft = exact[0].address || "";
+            setCustomerPhoneDraft(phoneDraft);
+            setCustomerAddressDraft(addressDraft);
+          }
+          setSelectedCustomerId(exact[0].id);
+          setSelectedCustomerName(exact[0].name || "");
+        } else {
+          customerId = null;
+        }
+      } catch {
+        customerId = null;
+      }
+    }
+    const switchingCustomer = customerId != null && customerId !== bill.customer?.id;
     const removed = (current: string | number | null | undefined, draft: string, message: string) =>
       String(current ?? "").trim() !== "" && draft.trim() === "" ? message : "";
     const blocked = [
-      removed(bill.customer?.name, customerNameDraft, "The customer name cannot be removed."),
-      removed(bill.customer?.phone, customerPhoneDraft, "The customer phone cannot be removed."),
-      removed(bill.customer?.address, customerAddressDraft, "The customer address cannot be removed."),
+      switchingCustomer ? "" : removed(bill.customer?.name, customerNameDraft, "The customer name cannot be removed."),
+      switchingCustomer ? "" : removed(bill.customer?.phone, phoneDraft, "The customer phone cannot be removed."),
+      switchingCustomer ? "" : removed(bill.customer?.address, addressDraft, "The customer address cannot be removed."),
       removed(bill.driver_name, driverNameDraft, "The driver name cannot be removed."),
       removed(bill.driver_phone, driverPhoneDraft, "The driver phone cannot be removed."),
       removed(bill.vehicle.number_plate, plate, isAppliance ? "The serial cannot be removed." : "The vehicle number cannot be removed."),
@@ -1504,9 +1616,10 @@ export default function BillDetailPage() {
     setError("");
     try {
       const payload: Record<string, number | string | null> = {
+        customer_id: customerId,
         customer_name: customerNameDraft.trim() || null,
-        customer_phone: customerPhoneDraft.trim() || null,
-        customer_address: customerAddressDraft.trim() || null,
+        customer_phone: phoneDraft.trim() || null,
+        customer_address: addressDraft.trim() || null,
         driver_name: driverNameDraft.trim() || null,
         driver_phone: driverPhoneDraft.trim() || null,
         number_plate: plate,
@@ -2100,7 +2213,7 @@ export default function BillDetailPage() {
 
       <div className="grid min-w-0 items-start gap-3 xl:grid-cols-[1.55fr_0.75fr] print:block print:space-y-2">
         <div className={`min-w-0 space-y-3 print:space-y-2 ${!isClosed && floorPane !== "work" ? "hidden" : "block"} xl:block print:block`}>
-          <Panel className="bill-letterhead overflow-hidden p-2.5 sm:p-3">
+          <Panel className={`bill-letterhead p-2.5 sm:p-3 ${headerEditing ? "overflow-visible" : "overflow-hidden"}`}>
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="bill-letterhead-brand flex min-w-0 items-start gap-2.5">
                 {logoUrl ? (
@@ -2239,14 +2352,65 @@ export default function BillDetailPage() {
                 {headerEditing && bill.vehicle && (
                   <div className="no-print grid min-w-0 flex-1 grid-cols-2 gap-x-3 gap-y-3 p-3 lg:grid-cols-4">
                     <p className="col-span-2 text-[10px] font-bold uppercase tracking-wide text-[#20221f] lg:col-span-4">{t("common.customer")}</p>
-                    <HeaderField label={t("admit.customer_name")}>
-                      <input value={customerNameDraft} onChange={(event) => setCustomerNameDraft(event.target.value)} className={headerInputClass} />
-                    </HeaderField>
+                    <div ref={customerNameBoxRef} className="relative min-w-0">
+                      <HeaderField label={t("admit.customer_name")}>
+                        <input
+                          value={customerNameDraft}
+                          onChange={(event) => {
+                            setCustomerNameDraft(event.target.value);
+                            setSelectedCustomerId(null);
+                            setSelectedCustomerName("");
+                            setShowCustomerSuggestions(true);
+                          }}
+                          onFocus={() => {
+                            if (customerMatches.length > 0) setShowCustomerSuggestions(true);
+                          }}
+                          autoComplete="off"
+                          className={headerInputClass}
+                        />
+                      </HeaderField>
+                      {lookingUpCustomer && (
+                        <p className="mt-1 text-[10px] font-normal normal-case text-[#6f746e]">{t("admit.looking_up")}</p>
+                      )}
+                      {showCustomerSuggestions && customerMatches.length > 0 && (
+                        <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-56 overflow-y-auto border border-[#d7d3c8] bg-white shadow-lg">
+                          {customerMatches.map((match) => (
+                            <button
+                              key={match.id}
+                              type="button"
+                              onClick={() => chooseCustomer(match)}
+                              className="block w-full border-b border-[#e2ded4] px-2.5 py-2 text-left last:border-b-0 hover:bg-[#f7f5ef]"
+                            >
+                              <p className="text-[12px] font-semibold normal-case text-[#20221f]">{match.name}</p>
+                              <p className="text-[11px] font-normal normal-case text-[#6f746e]">
+                                {match.phone || "—"}
+                                {match.vehicles_count != null ? ` · ${t(match.vehicles_count === 1 ? "admit.vehicles_one" : "admit.vehicles_many", { count: match.vehicles_count })}` : ""}
+                              </p>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <HeaderField label={t("admit.customer_phone")}>
-                      <input type="tel" value={customerPhoneDraft} onChange={(event) => setCustomerPhoneDraft(event.target.value)} className={headerInputClass} />
+                      <input
+                        type="tel"
+                        value={customerPhoneDraft}
+                        onChange={(event) => {
+                          setCustomerPhoneDraft(event.target.value);
+                          setCustomerContactDirty(true);
+                        }}
+                        className={headerInputClass}
+                      />
                     </HeaderField>
                     <HeaderField label={t("admit.customer_address")} className="col-span-2">
-                      <input value={customerAddressDraft} onChange={(event) => setCustomerAddressDraft(event.target.value)} className={headerInputClass} />
+                      <input
+                        value={customerAddressDraft}
+                        onChange={(event) => {
+                          setCustomerAddressDraft(event.target.value);
+                          setCustomerContactDirty(true);
+                        }}
+                        className={headerInputClass}
+                      />
                     </HeaderField>
                     <p className="col-span-2 mt-1 text-[10px] font-bold uppercase tracking-wide text-[#20221f] lg:col-span-4">{t("bill.driver")}</p>
                     <HeaderField label={t("admit.driver_name")}>
@@ -2316,7 +2480,7 @@ export default function BillDetailPage() {
                     )}
                   </div>
                 )}
-                {bill.vehicle && !isLocked && (
+                {bill.vehicle && !isClosed && (
                   <div className="no-print flex shrink-0 flex-col justify-start gap-1 border-l border-[#e8e4da] px-2 pt-3">
                     {headerEditing ? (
                       <>
