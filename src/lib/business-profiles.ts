@@ -26,6 +26,7 @@ import {
   Wrench,
   LayoutGrid,
   Bell,
+  AirVent,
   Banknote,
   Wallet,
   type LucideIcon,
@@ -189,6 +190,74 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
     navigation: [
       { href: "/dashboard", label: "Overview", icon: Gauge },
       { href: "/vehicles/admit", label: "Admit vehicle", icon: ClipboardList, feature: "admit_vehicle" },
+      bayCalendarNav,
+      jobBoardNav,
+      { href: "/bills", label: "Job cards", icon: ReceiptText, feature: "billing" },
+      remindersNav,
+      warrantiesNav,
+      { href: "/parts-pos", label: "Instant bill", icon: ShoppingBag, feature: "billing" },
+      billProfitsNav,
+      { href: "/parts", label: "Inventory", icon: Boxes, feature: "parts_inventory" },
+      { href: "/station-use", label: "Station use", icon: Droplets, feature: "station_consumables", owner: true },
+      suppliersNav,
+      ...sharedNavTail,
+    ],
+    billItemTypes: [
+      { value: "labor", label: "Labor", kind: "charge", allowQty: true },
+      { value: "part", label: "Inventory", kind: "stock" },
+      { value: "discount", label: "Discount", kind: "discount" },
+    ],
+  },
+  ac_service: {
+    type: "ac_service",
+    label: "A/C repair",
+    operationsLabel: "A/C operations",
+    billingLabel: "Job cards",
+    billingSingular: "Job card",
+    openBillsLabel: "Open job cards",
+    recentBillsTitle: "Latest job cards",
+    recentBillsHint: "Vehicle air-conditioning and appliance repairs",
+    primaryCta: { href: "/vehicles/admit", label: "Admit vehicle", feature: "admit_vehicle" },
+    quickActions: [
+      { href: "/vehicles/admit", label: "Admit vehicle", feature: "admit_vehicle" },
+      { href: "/appliances/admit", label: "Admit appliance", feature: "admit_appliance" },
+      { href: "/parts-pos", label: "Instant bill", feature: "billing" },
+      { href: "/parts", label: "Find inventory", feature: "parts_inventory" },
+      { href: "/balance-sheet", label: "View finance", feature: "balance_sheet" },
+    ],
+    defaultFeatures: [
+      "admit_vehicle", "admit_repair", "admit_service", "admit_appliance", "parts_inventory", "suppliers", "customers", "billing", "bill_sms", "bill_profits", "warranties",
+      "employees_management", "attendance", "payroll", "balance_sheet", "reports",
+    ],
+    moduleCatalog: [
+      { key: "admit_vehicle", name: "Admit vehicle", group: "Service Intake" },
+      { key: "admit_repair", name: "Repair jobs", group: "Service Intake" },
+      { key: "admit_service", name: "Service jobs", group: "Service Intake" },
+      { key: "admit_appliance", name: "Admit appliance", group: "Service Intake" },
+      { key: "job_board", name: "Job status board", group: "Service Intake" },
+      { key: "job_photos", name: "Job photos", group: "Service Intake" },
+      { key: "job_progress", name: "Job progress", group: "Service Intake" },
+      { key: "job_videos", name: "Job videos", group: "Service Intake" },
+      { key: "job_bookings", name: "Bay calendar", group: "Service Intake" },
+      { key: "warranties", name: "Warranties", group: "Service Intake" },
+      { key: "parts_inventory", name: "Inventory", group: "Inventory" },
+      { key: "suppliers", name: "Suppliers", group: "Inventory" },
+      ...inventoryPlanExtras,
+      { key: "station_consumables", name: "Station consumables", group: "Inventory" },
+      ...sharedPeopleFinance.map((m) => m.key === "billing" ? { ...m, name: "Job cards" } : m),
+      { key: "service_reminders", name: "Next-service reminders", group: "Service Intake" },
+      { key: "job_commissions", name: "Job commission", group: "Service Intake" },
+      { key: "free_service", name: "Free service", group: "Service Intake" },
+      { key: "show_bill_technicians", name: "Technicians on the bill", group: "Service Intake" },
+      { key: "service_ops_report", name: "Service operations report", group: "Finance" },
+      { key: "expense_job_split", name: "Repair / service expenses", group: "Finance" },
+      { key: "finance_report_export", name: "Finance report download", group: "Finance" },
+      { key: "owe_in_register", name: "Owe-in register", group: "Finance" },
+    ],
+    navigation: [
+      { href: "/dashboard", label: "Overview", icon: Gauge },
+      { href: "/vehicles/admit", label: "Admit vehicle", icon: ClipboardList, feature: "admit_vehicle" },
+      { href: "/appliances/admit", label: "Admit appliance", icon: AirVent, feature: "admit_appliance" },
       bayCalendarNav,
       jobBoardNav,
       { href: "/bills", label: "Job cards", icon: ReceiptText, feature: "billing" },
@@ -629,6 +698,7 @@ export const BUSINESS_PROFILES: Record<BusinessType, BusinessProfile> = {
 
 export const BUSINESS_TYPE_OPTIONS: Array<{ value: BusinessType; label: string }> = [
   { value: "garage", label: "Garages" },
+  { value: "ac_service", label: "A/C repair" },
   { value: "tyre", label: "Tyre shops" },
   { value: "device_repair", label: "Device repair" },
   { value: "paint", label: "Paint shops" },
@@ -651,6 +721,7 @@ export const PLAN_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "stay-pro", label: "Stay Pro" },
   { value: "salon-pro", label: "Salon Pro" },
   { value: "repair-pro", label: "Repair Pro" },
+  { value: "ac-pro", label: "A/C Pro" },
   { value: "Growth", label: "Growth" },
   { value: "Trial", label: "Trial" },
   { value: "Custom", label: "Custom" },
@@ -681,6 +752,8 @@ function matchPlan(type: BusinessType): string {
       return "salon-pro";
     case "device_repair":
       return "repair-pro";
+    case "ac_service":
+      return "ac-pro";
     case "paint":
       return "paint-pro";
     default:
@@ -689,15 +762,15 @@ function matchPlan(type: BusinessType): string {
 }
 
 export function usesVehicleJobs(type?: string | null): boolean {
-  return type === "garage" || type === "tyre" || type === "device_repair" || type === "paint";
+  return type === "garage" || type === "tyre" || type === "device_repair" || type === "ac_service" || type === "paint";
 }
 
 export function usesLaborCatalog(type?: string | null): boolean {
-  return type === "garage" || type === "paint";
+  return type === "garage" || type === "paint" || type === "ac_service";
 }
 
 export function usesServiceAddonWorkspace(type?: string | null): boolean {
-  return type === "garage" || type === "paint";
+  return type === "garage" || type === "paint" || type === "ac_service";
 }
 
 export function usesStoreCounter(type?: string | null): boolean {
@@ -729,6 +802,15 @@ export function optionalFeaturesFor(type?: string | null): FeatureKey[] {
   if (type === "tyre") return ["job_bookings", "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp", "line_discounts", "line_vat"];
   if (type === "paint") return ["job_progress", "job_bookings", "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp", "line_discounts", "line_vat"];
   if (type === "device_repair") return ["job_bookings", "purchase_orders", "part_fitment", "serial_inventory", "cash_up", "bill_whatsapp", "line_discounts", "line_vat"];
+  if (type === "ac_service") {
+    return [
+      "job_photos", "job_videos", "job_commissions",
+      "free_service", "show_bill_technicians", "line_discounts", "line_vat",
+      "job_board", "job_bookings", "service_reminders", "station_consumables",
+      "service_ops_report", "expense_job_split", "finance_report_export", "owe_in_register", "job_progress",
+      "purchase_orders", "part_fitment", "cash_up", "bill_whatsapp",
+    ];
+  }
   if (type === "clothing") return ["customer_display", "cash_up", "bill_whatsapp", "line_discounts", "line_vat"];
   return ["cash_up", "bill_whatsapp", "line_discounts", "line_vat"];
 }
@@ -738,7 +820,7 @@ export function allowsPaintJobs(type?: string | null, features: string[] = []): 
 }
 
 export function allowsServiceJobs(type?: string | null, features: string[] = []): boolean {
-  if (type !== "garage") return type === "paint" || type === "tyre" || type === "device_repair";
+  if (type !== "garage" && type !== "ac_service") return type === "paint" || type === "tyre" || type === "device_repair";
   const hasLocks = features.includes("admit_repair") || features.includes("admit_service");
   if (!hasLocks) return true;
   return features.includes("admit_service");
@@ -752,10 +834,38 @@ export function allowsCombinedJobs(type?: string | null, features: string[] = []
 }
 
 export function allowsRepairJobs(type?: string | null, features: string[] = []): boolean {
-  if (type !== "garage") return true;
+  if (type !== "garage" && type !== "ac_service") return true;
   const hasLocks = features.includes("admit_repair") || features.includes("admit_service");
   if (!hasLocks) return true;
   return features.includes("admit_repair");
+}
+
+export const APPLIANCE_TYPE_LABELS: Record<string, string> = {
+  split_ac: "Split AC",
+  window_ac: "Window AC",
+  cassette: "Cassette AC",
+  fridge: "Fridge",
+  freezer: "Freezer",
+  other: "Other",
+};
+
+export function applianceTypeLabel(type?: string | null, name?: string | null): string {
+  if (type && APPLIANCE_TYPE_LABELS[type]) return APPLIANCE_TYPE_LABELS[type];
+  if (name) return name;
+  return "Appliance";
+}
+
+export function jobSubjectLine(vehicle?: {
+  number_plate?: string | null;
+  asset_kind?: string | null;
+  appliance_type?: string | null;
+  appliance_type_name?: string | null;
+} | null): string {
+  if (!vehicle?.number_plate) return "—";
+  if (vehicle.asset_kind === "appliance") {
+    return `${applianceTypeLabel(vehicle.appliance_type, vehicle.appliance_type_name)} · ${vehicle.number_plate}`;
+  }
+  return vehicle.number_plate;
 }
 
 export function profileFor(type?: string | null): BusinessProfile {

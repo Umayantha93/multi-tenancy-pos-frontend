@@ -9,7 +9,7 @@ import { EmployeePicker } from "@/components/employee-picker";
 import { LaborCatalogPicker, type LaborCategory } from "@/components/labor-catalog-picker";
 import { buttonClass, ConfirmModal, ErrorMessage, inputClass, PageState, Panel } from "@/components/ui";
 import { api, formatDate, isMultiBranch, mediaUrl, money, SessionPayload, storeSession, Tenant } from "@/lib/api";
-import { billItemLabel, billLinePresentation, PAINT_PANEL_NAMES, profileFor, sortBillItems, usesLaborCatalog, usesServiceAddonWorkspace, usesStoreCounter, usesVehicleJobs } from "@/lib/business-profiles";
+import { APPLIANCE_TYPE_LABELS, applianceTypeLabel, billItemLabel, billLinePresentation, jobSubjectLine, PAINT_PANEL_NAMES, profileFor, sortBillItems, usesLaborCatalog, usesServiceAddonWorkspace, usesStoreCounter, usesVehicleJobs } from "@/lib/business-profiles";
 import { warrantyLabel } from "@/lib/warranty";
 import { billNetTotal, billStamp, billStampDateLabel, billStatusLabel, garageBillPdfTitle, latestPaymentAt } from "@/lib/bill-stamp";
 import { BillStatusSeal } from "@/components/bill-status-seal";
@@ -104,8 +104,9 @@ type Bill = {
   warranty_months?: number | null;
   warranty_starts_on?: string | null;
   warranty_until?: string | null;
+  service_place?: "workshop" | "on_site" | null;
   customer: { name: string; phone?: string | null; address?: string | null } | null;
-  vehicle: { number_plate: string; chassis_number?: string | null; make?: string | null; model?: string | null; year?: number | string | null } | null;
+  vehicle: { number_plate: string; chassis_number?: string | null; make?: string | null; model?: string | null; year?: number | string | null; asset_kind?: string | null; appliance_type?: string | null; appliance_type_name?: string | null; fault_description?: string | null } | null;
   employees?: Array<{
     id: number;
     name: string;
@@ -293,6 +294,10 @@ export default function BillDetailPage() {
   const [customerAddressDraft, setCustomerAddressDraft] = useState("");
   const [driverNameDraft, setDriverNameDraft] = useState("");
   const [plateDraft, setPlateDraft] = useState("");
+  const [applianceTypeDraft, setApplianceTypeDraft] = useState("split_ac");
+  const [applianceTypes, setApplianceTypes] = useState<Array<{ key: string; name: string }>>([]);
+  const [faultDraft, setFaultDraft] = useState("");
+  const [servicePlaceDraft, setServicePlaceDraft] = useState("workshop");
   const [chassisDraft, setChassisDraft] = useState("");
   const [makeDraft, setMakeDraft] = useState("");
   const [modelDraft, setModelDraft] = useState("");
@@ -368,6 +373,8 @@ export default function BillDetailPage() {
   const profile = profileFor(tenant?.business_type);
   const isPaintShop = profile.type === "paint";
   const isGarage = profile.type === "garage";
+  const isAc = profile.type === "ac_service";
+  const isAppliance = bill?.vehicle?.asset_kind === "appliance";
   const isGaragePaintJob = isGarage && bill?.job_kind === "paint";
   const isPaint = isPaintShop || isGaragePaintJob;
   const isPaintPackage = isPaintShop ? bill?.job_kind === "service" : isGaragePaintJob && bill?.paint_mode === "package";
@@ -388,7 +395,10 @@ export default function BillDetailPage() {
   });
   const selectedType = itemTypes.find((option) => option.value === type) ?? itemTypes[0];
   const activeType = type || selectedType?.value || "labor";
-  const isServiceJob = isPaintPackage || (!isGaragePaintJob && usesServiceAddonWorkspace(profile.type) && bill?.job_kind === "service");
+  const isAcApplianceService = isAc && isAppliance && bill?.job_kind === "service";
+  const isServiceJob = isPaintPackage
+    || isAcApplianceService
+    || (!isAc && !isGaragePaintJob && usesServiceAddonWorkspace(profile.type) && bill?.job_kind === "service");
   const isCombinedJob = isGarage && bill?.job_kind === "both";
   const serviceWorkspace = isServiceJob || (isCombinedJob && combinedSection === "service");
   const showsServiceFields = isServiceJob || isCombinedJob;
@@ -404,7 +414,7 @@ export default function BillDetailPage() {
     if (combinedSection === "service") setServiceAddMode((mode) => (mode === "discount" ? "services" : mode));
   }, [combinedSection, isCombinedJob]);
   const serviceClassId = bill?.service_vehicle_class_id ? String(bill.service_vehicle_class_id) : "";
-  const needsServiceClass = !isPaint && vehicleClasses.length > 0 && !serviceClassId;
+  const needsServiceClass = !isPaint && !isAc && vehicleClasses.length > 0 && !serviceClassId;
   const addonSetting = (addon: ServiceAddon) => serviceClassId
     ? addon.vehicle_prices?.find((row) => String(row.service_vehicle_class_id) === serviceClassId) ?? null
     : null;
@@ -412,8 +422,8 @@ export default function BillDetailPage() {
     const price = addonSetting(addon)?.price;
     return price === null || price === undefined ? null : Number(price);
   };
-  const offeredAddons = isPaint ? addons : addons.filter((addon) => addonSetting(addon)?.offered !== false);
-  const canEditServicePrice = isGarage && !isPaint;
+  const offeredAddons = isPaint || isAc ? addons : addons.filter((addon) => addonSetting(addon)?.offered !== false);
+  const canEditServicePrice = (isGarage || isAc) && !isPaint;
   // Instant bills: labor = free-text custom line (not labor catalog).
   const isLaborType = activeType === "labor" && usesLaborCatalog(profile.type) && !isGarageInstant;
   const selectedLabor = useMemo(() => {
@@ -716,6 +726,9 @@ export default function BillDetailPage() {
         setDriverNameDraft(result.driver_name ?? "");
         setDriverPhoneDraft(result.driver_phone ?? "");
         setPlateDraft(result.vehicle?.number_plate ?? "");
+        setApplianceTypeDraft(result.vehicle?.appliance_type || "split_ac");
+        setFaultDraft(result.vehicle?.fault_description ?? "");
+        setServicePlaceDraft(result.service_place || "workshop");
         setChassisDraft(result.vehicle?.chassis_number ?? "");
         setMakeDraft(result.vehicle?.make ?? "");
         setModelDraft(result.vehicle?.model ?? "");
@@ -764,10 +777,17 @@ export default function BillDetailPage() {
   }, [partQuery, mixQuery, loadParts]);
 
   useEffect(() => {
+    if (profile.type !== "ac_service") return;
+    api<Array<{ key: string; name: string }>>("/appliance-types")
+      .then((rows) => setApplianceTypes(rows))
+      .catch(() => undefined);
+  }, [profile.type]);
+
+  useEffect(() => {
     if (!usesLaborCatalog(profile.type) && !usesServiceAddonWorkspace(profile.type)) return;
     if (profile.type === "garage" && !bill) return;
     const paintCatalog = profile.type === "paint" || bill?.job_kind === "paint";
-    const catalog = paintCatalog ? "paint" : "garage";
+    const catalog = profile.type === "ac_service" ? "ac" : paintCatalog ? "paint" : "garage";
     if (profile.type === "garage" && !paintCatalog) {
       api<VehicleClassRow[]>("/service-vehicle-classes")
         .then((rows) => setVehicleClasses(rows.filter((row) => row.active !== false)))
@@ -776,7 +796,7 @@ export default function BillDetailPage() {
     api<ServiceAddon[]>(`/service-addons?catalog=${catalog}`)
       .then((result) => setAddons(result.filter((addon) => addon.active !== false)))
       .catch(() => undefined);
-    if (profile.type === "garage" || profile.type === "paint") {
+    if (profile.type === "garage" || profile.type === "paint" || profile.type === "ac_service") {
       api<DiscountTypeRow[]>("/discount-types")
         .then((result) => setDiscountTypes(result.filter((row) => row.active !== false)))
         .catch(() => undefined);
@@ -1421,6 +1441,9 @@ export default function BillDetailPage() {
     setDriverNameDraft(source.driver_name ?? "");
     setDriverPhoneDraft(source.driver_phone ?? "");
     setPlateDraft(source.vehicle?.number_plate ?? "");
+    setApplianceTypeDraft(source.vehicle?.appliance_type || "split_ac");
+    setFaultDraft(source.vehicle?.fault_description ?? "");
+    setServicePlaceDraft(source.service_place || "workshop");
     setChassisDraft(source.vehicle?.chassis_number ?? "");
     setMakeDraft(source.vehicle?.make ?? "");
     setModelDraft(source.vehicle?.model ?? "");
@@ -1464,17 +1487,17 @@ export default function BillDetailPage() {
       removed(bill.customer?.address, customerAddressDraft, "The customer address cannot be removed."),
       removed(bill.driver_name, driverNameDraft, "The driver name cannot be removed."),
       removed(bill.driver_phone, driverPhoneDraft, "The driver phone cannot be removed."),
-      removed(bill.vehicle.number_plate, plate, "The vehicle number cannot be removed."),
-      removed(bill.vehicle.chassis_number, chassisDraft, "The chassis number cannot be removed."),
+      removed(bill.vehicle.number_plate, plate, isAppliance ? "The serial cannot be removed." : "The vehicle number cannot be removed."),
+      isAppliance ? "" : removed(bill.vehicle.chassis_number, chassisDraft, "The chassis number cannot be removed."),
       removed(bill.vehicle.make, makeDraft, "The make cannot be removed."),
       removed(bill.vehicle.model, modelDraft, "The model cannot be removed."),
-      removed(bill.vehicle.year, yearDraft, "The vehicle year cannot be removed."),
-      removed(bill.mileage, mileageDraft, "The mileage cannot be removed."),
+      isAppliance ? "" : removed(bill.vehicle.year, yearDraft, "The vehicle year cannot be removed."),
+      isAppliance ? "" : removed(bill.mileage, mileageDraft, "The mileage cannot be removed."),
       showsServiceFields ? removed(bill.next_service_mileage, nextServiceMileageDraft, "The next service km cannot be removed.") : "",
       showsServiceFields && canReminders ? removed(bill.next_service_due_on, nextServiceDueDraft, "The next service date cannot be removed.") : "",
     ].find(Boolean);
     if (!plate || blocked) {
-      setError(blocked || "Enter the vehicle number.");
+      setError(blocked || (isAppliance ? "Enter the serial." : "Enter the vehicle number."));
       return;
     }
     setSavingHeader(true);
@@ -1487,13 +1510,19 @@ export default function BillDetailPage() {
         driver_name: driverNameDraft.trim() || null,
         driver_phone: driverPhoneDraft.trim() || null,
         number_plate: plate,
-        chassis_number: chassisDraft.trim() || null,
         make: makeDraft.trim() || null,
         model: modelDraft.trim() || null,
-        year: yearDraft.trim() === "" ? null : Number(yearDraft),
-        mileage: mileageDraft === "" ? null : Number(mileageDraft),
       };
-      if (showsServiceFields) {
+      if (isAppliance) {
+        payload.appliance_type = applianceTypeDraft;
+        payload.fault_description = faultDraft.trim() || null;
+        payload.service_place = servicePlaceDraft;
+      } else {
+        payload.chassis_number = chassisDraft.trim() || null;
+        payload.year = yearDraft.trim() === "" ? null : Number(yearDraft);
+        payload.mileage = mileageDraft === "" ? null : Number(mileageDraft);
+      }
+      if (showsServiceFields && !isAppliance) {
         payload.next_service_mileage = nextServiceMileageDraft === "" ? null : Number(nextServiceMileageDraft);
         if (canReminders) {
           payload.next_service_due_on = nextServiceDueDraft === "" ? null : nextServiceDueDraft;
@@ -1677,7 +1706,7 @@ export default function BillDetailPage() {
   return (
     <AppShell
       title={bill.bill_number}
-      eyebrow={`${bill.vehicle?.number_plate ?? bill.customer?.name ?? t(`terms.${profile.billingSingular}`)}${showJobKind ? ` · ${jobKindLabel}` : ""} · ${billStatusLabel(bill.status, t)}`}
+      eyebrow={`${bill.vehicle ? jobSubjectLine(bill.vehicle) : (bill.customer?.name ?? t(`terms.${profile.billingSingular}`))}${showJobKind ? ` · ${jobKindLabel}` : ""} · ${billStatusLabel(bill.status, t)}`}
       action={
         <div className="no-print flex w-full min-w-0 flex-wrap items-center gap-2">
           {isGarage && Number(bill.amount_paid) <= 0 && (
@@ -2148,16 +2177,32 @@ export default function BillDetailPage() {
                   {bill.vehicle ? (
                     <>
                       <div className="min-w-0">
-                        <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{profile.type === "device_repair" ? t("admit.device") : t("common.vehicle")}</p>
-                        <p className="mt-0.5 text-[13px] font-semibold leading-tight tracking-wide">{bill.vehicle.number_plate}</p>
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{isAppliance ? t("admit.appliance") : profile.type === "device_repair" ? t("admit.device") : t("common.vehicle")}</p>
+                        <p className="mt-0.5 text-[13px] font-semibold leading-tight tracking-wide">{isAppliance ? applianceTypeLabel(bill.vehicle.appliance_type, bill.vehicle.appliance_type_name) : bill.vehicle.number_plate}</p>
                         <p className="text-[11px] leading-tight text-[#6f746e]">
-                          {[bill.vehicle.make, bill.vehicle.model, bill.vehicle.year].filter((part) => part != null && String(part).trim() !== "").join(" ") || "—"}
+                          {isAppliance
+                            ? bill.vehicle.number_plate
+                            : ([bill.vehicle.make, bill.vehicle.model, bill.vehicle.year].filter((part) => part != null && String(part).trim() !== "").join(" ") || "—")}
                         </p>
+                        {isAppliance && (
+                          <p className="text-[11px] leading-tight text-[#6f746e]">
+                            {[bill.vehicle.make, bill.vehicle.model].filter((part) => part != null && String(part).trim() !== "").join(" ") || "—"}
+                          </p>
+                        )}
                       </div>
+                      {isAppliance ? (
+                        <div className="min-w-0">
+                          <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{t("admit.service_place")}</p>
+                          <p className="mt-0.5 text-[12px] font-semibold leading-tight">{bill.service_place === "on_site" ? t("admit.on_site") : t("admit.workshop")}</p>
+                          {bill.vehicle.fault_description && <p className="text-[11px] leading-tight text-[#6f746e]">{bill.vehicle.fault_description}</p>}
+                        </div>
+                      ) : (
                       <div className="min-w-0">
                         <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{t("bill.chassis")}</p>
                         <p className="mt-0.5 break-all text-[11px] leading-tight">{bill.vehicle.chassis_number || "—"}</p>
                       </div>
+                      )}
+                      {!isAppliance && (
                       <div className="min-w-0">
                         <p className="text-[9px] font-bold uppercase tracking-wide text-[#6f746e]">{t("bill.mileage")}</p>
                         <p className="mt-0.5 text-[12px] font-semibold leading-tight">
@@ -2168,6 +2213,7 @@ export default function BillDetailPage() {
                           {showsServiceFields && bill.next_service_due_on ? ` · ${formatDate(bill.next_service_due_on)}` : ""}
                         </p>
                       </div>
+                      )}
                     </>
                   ) : (
                     <div className="bill-instant-kind sm:col-span-2">
@@ -2209,31 +2255,61 @@ export default function BillDetailPage() {
                     <HeaderField label={t("admit.driver_phone")}>
                       <input type="tel" value={driverPhoneDraft} onChange={(event) => setDriverPhoneDraft(event.target.value)} className={headerInputClass} />
                     </HeaderField>
-                    <p className="col-span-2 mt-1 text-[10px] font-bold uppercase tracking-wide text-[#20221f] lg:col-span-4">{profile.type === "device_repair" ? t("admit.device") : t("common.vehicle")}</p>
-                    <HeaderField label={profile.type === "device_repair" ? t("admit.device") : t("admit.number_plate")}>
+                    <p className="col-span-2 mt-1 text-[10px] font-bold uppercase tracking-wide text-[#20221f] lg:col-span-4">{isAppliance ? t("admit.appliance") : profile.type === "device_repair" ? t("admit.device") : t("common.vehicle")}</p>
+                    {isAppliance && (
+                      <HeaderField label={t("admit.appliance_type")}>
+                        <select value={applianceTypeDraft} onChange={(event) => setApplianceTypeDraft(event.target.value)} className={headerInputClass}>
+                          {(applianceTypes.length > 0 ? applianceTypes : Object.keys(APPLIANCE_TYPE_LABELS).map((key) => ({ key, name: APPLIANCE_TYPE_LABELS[key] }))).map((row) => (
+                            <option key={row.key} value={row.key}>
+                              {APPLIANCE_TYPE_LABELS[row.key] ? t(`admit.appliance_${row.key}`) : row.name}
+                            </option>
+                          ))}
+                        </select>
+                      </HeaderField>
+                    )}
+                    <HeaderField label={isAppliance ? t("admit.serial") : profile.type === "device_repair" ? t("admit.device") : t("admit.number_plate")}>
                       <input value={plateDraft} onChange={(event) => setPlateDraft(event.target.value.toUpperCase())} className={`${headerInputClass} font-semibold uppercase tracking-wide`} />
                     </HeaderField>
-                    <HeaderField label={t("bill.chassis")}>
-                      <input value={chassisDraft} onChange={(event) => setChassisDraft(event.target.value.toUpperCase())} className={`${headerInputClass} uppercase`} />
-                    </HeaderField>
-                    <HeaderField label={t("admit.make")}>
+                    {!isAppliance && (
+                      <HeaderField label={t("bill.chassis")}>
+                        <input value={chassisDraft} onChange={(event) => setChassisDraft(event.target.value.toUpperCase())} className={`${headerInputClass} uppercase`} />
+                      </HeaderField>
+                    )}
+                    <HeaderField label={isAppliance || profile.type === "device_repair" ? t("admit.brand") : t("admit.make")}>
                       <input value={makeDraft} onChange={(event) => setMakeDraft(event.target.value)} className={headerInputClass} />
                     </HeaderField>
                     <HeaderField label={t("admit.model")}>
                       <input value={modelDraft} onChange={(event) => setModelDraft(event.target.value)} className={headerInputClass} />
                     </HeaderField>
-                    <HeaderField label={profile.type === "device_repair" ? t("admit.year_device") : t("admit.year")}>
-                      <input type="number" min="1900" max={new Date().getFullYear() + 1} value={yearDraft} onChange={(event) => setYearDraft(event.target.value)} className={headerInputClass} />
-                    </HeaderField>
-                    <HeaderField label={t("bill.current_km")}>
-                      <input type="number" min="0" step="1" value={mileageDraft} onChange={(event) => setMileageDraft(event.target.value)} className={`${headerInputClass} tabular-nums`} />
-                    </HeaderField>
-                    {showsServiceFields && (
+                    {!isAppliance && (
+                      <HeaderField label={profile.type === "device_repair" ? t("admit.year_device") : t("admit.year")}>
+                        <input type="number" min="1900" max={new Date().getFullYear() + 1} value={yearDraft} onChange={(event) => setYearDraft(event.target.value)} className={headerInputClass} />
+                      </HeaderField>
+                    )}
+                    {!isAppliance && (
+                      <HeaderField label={t("bill.current_km")}>
+                        <input type="number" min="0" step="1" value={mileageDraft} onChange={(event) => setMileageDraft(event.target.value)} className={`${headerInputClass} tabular-nums`} />
+                      </HeaderField>
+                    )}
+                    {isAppliance && (
+                      <HeaderField label={t("admit.fault")}>
+                        <input value={faultDraft} onChange={(event) => setFaultDraft(event.target.value)} className={headerInputClass} />
+                      </HeaderField>
+                    )}
+                    {isAppliance && (
+                      <HeaderField label={t("admit.service_place")}>
+                        <select value={servicePlaceDraft} onChange={(event) => setServicePlaceDraft(event.target.value)} className={headerInputClass}>
+                          <option value="workshop">{t("admit.workshop")}</option>
+                          <option value="on_site">{t("admit.on_site")}</option>
+                        </select>
+                      </HeaderField>
+                    )}
+                    {showsServiceFields && !isAppliance && (
                       <HeaderField label={t("bill.next_km")}>
                         <input type="number" min="0" step="1" value={nextServiceMileageDraft} onChange={(event) => setNextServiceMileageDraft(event.target.value)} className={`${headerInputClass} tabular-nums`} />
                       </HeaderField>
                     )}
-                    {showsServiceFields && canReminders && (
+                    {showsServiceFields && !isAppliance && canReminders && (
                       <HeaderField label={t("bill.next_due")}>
                         <input type="date" value={nextServiceDueDraft} onChange={(event) => setNextServiceDueDraft(event.target.value)} className={headerInputClass} />
                       </HeaderField>
@@ -2780,7 +2856,7 @@ export default function BillDetailPage() {
           </Panel>
           )}
 
-          {canJobProgress && (isGarage || isPaint) && bill.job_kind !== "parts_sale" && (
+          {canJobProgress && (isGarage || isPaint || isAc) && bill.job_kind !== "parts_sale" && (
             <JobProgress
               billId={bill.id}
               readOnly={isClosed}
@@ -2794,10 +2870,10 @@ export default function BillDetailPage() {
           {canAdmitPhotos && isGarage && bill.job_kind !== "parts_sale" && (
             <JobPhotos billId={bill.id} readOnly={isClosed} kind="admit" max={5} />
           )}
-          {canJobPhotos && isGarage && bill.job_kind !== "parts_sale" && (
+          {canJobPhotos && (isGarage || isAc) && bill.job_kind !== "parts_sale" && (
             <JobPhotos billId={bill.id} readOnly={isClosed} />
           )}
-          {canJobVideos && isGarage && bill.job_kind !== "parts_sale" && (
+          {canJobVideos && (isGarage || isAc) && bill.job_kind !== "parts_sale" && (
             <JobVideos billId={bill.id} readOnly={isClosed} />
           )}
 
@@ -2836,7 +2912,7 @@ export default function BillDetailPage() {
             )}
             {isOweIn && mode === "item" ? (
               <form onSubmit={addOweInDiscount} className="space-y-3 p-5">
-                {(isGarage || isPaint) && (
+                {(isGarage || isPaint || isAc) && (
                   <label className="block text-xs font-bold uppercase">
                     {t("bill.discount_type")}
                     <select
@@ -2893,7 +2969,7 @@ export default function BillDetailPage() {
                       paint={isPaint}
                       hideDiscount={isCombinedJob}
                     />
-                    {!isPaint && vehicleClasses.length > 0 && (
+                    {!isPaint && !isAc && vehicleClasses.length > 0 && (
                       <label className="block text-xs font-bold uppercase">
                         {t("bill.vehicle_type")}
                         <select
@@ -2966,11 +3042,11 @@ export default function BillDetailPage() {
                       </form>
                     ) : (
                       <>
-                        <p className="text-xs font-bold uppercase">{isPaint ? t("bill.packages") : t("bill.services")}</p>
+                        <p className="text-xs font-bold uppercase">{isPaint ? t("bill.packages") : isAc ? t("bill.ac_services") : t("bill.services")}</p>
                         <div className="grid grid-cols-2 gap-1.5">
                           {offeredAddons.map((addon) => {
                             const busy = addingAddonId === addon.id;
-                            const shownPrice = isPaint ? Number(addon.price) : addonTypePrice(addon);
+                            const shownPrice = isPaint || isAc ? Number(addon.price) : addonTypePrice(addon);
                             return (
                               <button
                                 key={addon.id}
@@ -2994,9 +3070,11 @@ export default function BillDetailPage() {
                           })}
                         </div>
                         {offeredAddons.length === 0 ? (
-                          <p className="text-sm text-[#6f746e]">{isPaint ? t("bill.no_packages") : t("bill.no_services")}</p>
+                          <p className="text-sm text-[#6f746e]">{isPaint ? t("bill.no_packages") : isAc ? t("bill.no_ac_services") : t("bill.no_services")}</p>
                         ) : needsServiceClass ? (
                           <p className="text-xs text-[#b84837]">{t("bill.pick_vehicle_type")}</p>
+                        ) : isAc ? (
+                          <p className="text-xs text-[#6f746e]">{t("bill.ac_service_price_hint")}</p>
                         ) : !isPaint ? (
                           <p className="text-xs text-[#6f746e]">{t("bill.service_price_hint")}</p>
                         ) : null}
@@ -3426,7 +3504,7 @@ export default function BillDetailPage() {
                   </>
                 ) : isDiscountType ? (
                   <>
-                    {(isGarage || isPaint) && (
+                    {(isGarage || isPaint || isAc) && (
                       <label className="block text-xs font-bold uppercase">
                         {t("bill.discount_type")}
                         <select

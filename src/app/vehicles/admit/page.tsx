@@ -15,6 +15,7 @@ import { useT } from "@/lib/locale";
 
 type VehicleMatch = {
   id: number;
+  asset_kind?: string | null;
   number_plate: string;
   chassis_number?: string | null;
   make?: string;
@@ -35,6 +36,7 @@ type CustomerMatch = {
 type CustomerDetail = CustomerMatch & {
   vehicles: Array<{
     id: number;
+    asset_kind?: string | null;
     number_plate: string;
     make?: string | null;
     model?: string | null;
@@ -73,6 +75,7 @@ export default function AdmitVehiclePage() {
   const t = useT();
   const profile = useBusinessProfile();
   const isDevice = profile.type === "device_repair";
+  const isAc = profile.type === "ac_service";
   const isTyre = profile.type === "tyre";
   const isPaint = profile.type === "paint";
   const isGarage = profile.type === "garage";
@@ -146,7 +149,7 @@ export default function AdmitVehiclePage() {
     const features = currentFeatures();
     setCanAssignEmployees(features.includes("admit_vehicle") || features.includes("employees_management") || features.includes("attendance"));
     const repair = allowsRepairJobs(profile.type, features);
-    const service = allowsServiceJobs(profile.type, features);
+    const service = isAc ? false : allowsServiceJobs(profile.type, features);
     const paint = allowsPaintJobs(profile.type, features);
     const combined = allowsCombinedJobs(profile.type, features);
     setCanRepair(repair);
@@ -190,13 +193,14 @@ export default function AdmitVehiclePage() {
     }
     setLookingUp(true);
     const timer = setTimeout(() => {
-      api<{ data: VehicleMatch[] }>(`/vehicles?search=${encodeURIComponent(plateQuery.trim())}&per_page=20`)
+      const kind = isAc ? "&asset_kind=vehicle" : "";
+      api<{ data: VehicleMatch[] }>(`/vehicles?search=${encodeURIComponent(plateQuery.trim())}&per_page=20${kind}`)
         .then((result) => setVehicles(result.data))
         .catch(() => setVehicles([]))
         .finally(() => setLookingUp(false));
     }, 300);
     return () => clearTimeout(timer);
-  }, [plateQuery]);
+  }, [plateQuery, isAc]);
 
   useEffect(() => {
     if (selectedCustomerId) {
@@ -249,7 +253,8 @@ export default function AdmitVehiclePage() {
     setError("");
     try {
       const detail = await api<CustomerDetail>(`/customers/${match.id}`);
-      setCustomerVehicles(detail.vehicles ?? []);
+      const listed = detail.vehicles ?? [];
+      setCustomerVehicles(isAc ? listed.filter((vehicle) => vehicle.asset_kind !== "appliance") : listed);
     } catch {
       setCustomerVehicles([]);
     }
@@ -323,7 +328,7 @@ export default function AdmitVehiclePage() {
         method: "POST",
         body: JSON.stringify({
           vehicle_id: vehicleId,
-          job_kind: jobKind,
+          job_kind: isAc ? "repair" : jobKind,
           paint_mode: jobKind === "paint" ? paintMode : undefined,
           admission_date: admissionDate,
           employee_ids: employeeIds,
@@ -348,12 +353,13 @@ export default function AdmitVehiclePage() {
       customer_name: customerName,
       customer_phone: customerPhone,
       customer_address: customerAddress,
-      job_kind: jobKind,
+      job_kind: isAc ? "repair" : jobKind,
       paint_mode: jobKind === "paint" ? paintMode : undefined,
       admission_date: admissionDate,
       employee_ids: employeeIds,
     };
     if (isDevice) payload.asset_kind = "device";
+    if (isAc) payload.asset_kind = "vehicle";
     try {
       const bill = await api<{ id: number; bill_number?: string; vehicle?: { number_plate?: string | null } | null }>("/bills", { method: "POST", body: JSON.stringify(payload) });
       finishAdmit(bill, String(form.number_plate || ""), formElement);
@@ -440,9 +446,11 @@ export default function AdmitVehiclePage() {
               <p className="mt-1 text-sm text-[#6f746e]">
                 {isPaint || jobKind === "paint"
                   ? t("admit.job_type_hint_paint")
-                  : isGarage && !(canRepair && canService)
-                    ? (canService ? "Every new admission is a service job." : canPaint ? "Every new admission is a paint job." : "Every new admission is a repair job.")
-                    : t("admit.job_type_hint")}
+                  : isAc
+                    ? "Vehicle jobs are repairs. Gas, leak, and compressor work stay on the repair job."
+                    : isGarage && !(canRepair && canService)
+                      ? (canService ? "Every new admission is a service job." : canPaint ? "Every new admission is a paint job." : "Every new admission is a repair job.")
+                      : t("admit.job_type_hint")}
               </p>
             </div>
             <label className="block text-[10px] font-bold uppercase text-[#6f746e]">

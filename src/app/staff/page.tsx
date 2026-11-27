@@ -202,7 +202,7 @@ export default function StaffPage() {
               <FeaturePlanToggles
                 features={available}
                 enabled={enabled}
-                garageAdmit={currentUser()?.tenant?.business_type === "garage"}
+                garageAdmit={currentUser()?.tenant?.business_type === "garage" || currentUser()?.tenant?.business_type === "ac_service"}
                 onChange={setEnabled}
               />
             </div>

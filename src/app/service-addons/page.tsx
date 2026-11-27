@@ -27,6 +27,27 @@ export default function ServiceAddonsPage() {
   if (businessType === null) {
     return <AppShell title="Service addons"><PageState message="Loading..." /></AppShell>;
   }
+  if (businessType === "ac_service") {
+    if (!allowsServiceJobs("ac_service", currentFeatures())) {
+      return (
+        <AppShell title="Home AC services">
+          <PageState message="Appliance service is off for this shop. Super-admin can enable Service jobs under Admit vehicle." />
+        </AppShell>
+      );
+    }
+    return (
+      <PricedAddonPage
+        catalog="ac"
+        title="Home AC services"
+        eyebrow="Priced visits for home air conditioners. Vehicle jobs stay repairs."
+        addHeading="Add a service"
+        addHint="Staff tap this on an appliance service job. One price per unit."
+        namePlaceholder="e.g. Jet service"
+        emptyMessage="No home AC services yet."
+        loadError="Could not load home AC services."
+      />
+    );
+  }
   if (businessType === "garage") {
     const service = allowsServiceJobs("garage", currentFeatures());
     const paint = currentFeatures().includes("admit_paint");
@@ -38,7 +59,7 @@ export default function ServiceAddonsPage() {
       );
     }
     if (service && !paint) return <GarageServiceList />;
-    if (!service && paint) return <PaintPackagesPage />;
+    if (!service && paint) return <PricedAddonPage />;
     return (
       <AppShell title="Service addons" eyebrow="Mechanical services and paint packages">
         <div className="mb-5 inline-flex overflow-hidden border border-[#20221f] bg-white p-0.5" role="group" aria-label="Catalog">
@@ -57,14 +78,34 @@ export default function ServiceAddonsPage() {
             </button>
           ))}
         </div>
-        {tab === "service" ? <GarageServiceList embedded /> : <PaintPackagesPage embedded catalog="paint" />}
+        {tab === "service" ? <GarageServiceList embedded /> : <PricedAddonPage embedded catalog="paint" />}
       </AppShell>
     );
   }
-  return <PaintPackagesPage />;
+  return <PricedAddonPage />;
 }
 
-function PaintPackagesPage({ embedded = false, catalog = "paint" }: { embedded?: boolean; catalog?: "paint" | "garage" }) {
+function PricedAddonPage({
+  embedded = false,
+  catalog = "paint",
+  title = "Paint packages",
+  eyebrow = "Buttons on paint-package jobs",
+  addHeading = "Add a package",
+  addHint = "Staff tap it on paint-package jobs to add the priced line.",
+  namePlaceholder = "e.g. Bumper respray",
+  emptyMessage = "No paint packages yet.",
+  loadError = "Could not load paint packages.",
+}: {
+  embedded?: boolean;
+  catalog?: "paint" | "garage" | "ac";
+  title?: string;
+  eyebrow?: string;
+  addHeading?: string;
+  addHint?: string;
+  namePlaceholder?: string;
+  emptyMessage?: string;
+  loadError?: string;
+}) {
   const canEdit = useSyncExternalStore(noopSubscribe, () => currentFeatures().includes("billing"), () => false);
   const [packages, setPackages] = useState<PaintPackage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,9 +115,9 @@ function PaintPackagesPage({ embedded = false, catalog = "paint" }: { embedded?:
   const load = useCallback(() => {
     return api<PaintPackage[]>(`/service-addons?catalog=${catalog}`)
       .then(setPackages)
-      .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load paint packages."))
+      .catch((caught) => setError(caught instanceof Error ? caught.message : loadError))
       .finally(() => setLoading(false));
-  }, [catalog]);
+  }, [catalog, loadError]);
 
   useEffect(() => {
     load();
@@ -130,22 +171,22 @@ function PaintPackagesPage({ embedded = false, catalog = "paint" }: { embedded?:
       <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
         {canEdit && (
           <Panel className="p-5">
-            <h2 className="font-display text-2xl font-semibold uppercase">Add a package</h2>
-            <p className="mt-1 text-sm text-[#6f746e]">Staff tap it on paint-package jobs to add the priced line.</p>
+            <h2 className="font-display text-2xl font-semibold uppercase">{addHeading}</h2>
+            <p className="mt-1 text-sm text-[#6f746e]">{addHint}</p>
             <form onSubmit={create} className="mt-4 space-y-3">
-              <input name="name" required placeholder="e.g. Bumper respray" className={inputClass} />
+              <input name="name" required placeholder={namePlaceholder} className={inputClass} />
               <input name="price" required type="number" min="0" step="0.01" placeholder="Amount" className={inputClass} />
               <button className={buttonClass}><Plus size={16} /> Save package</button>
             </form>
           </Panel>
         )}
         <Panel className={canEdit ? "" : "xl:col-span-2"}>
-          {loading ? <PageState message="Loading paint packages..." /> : (
+          {loading ? <PageState message={`Loading ${title.toLowerCase()}...`} /> : (
             <div className="divide-y divide-[#e2ded4]">
               {packages.map((item) => (
                 <PackageRow key={item.id} item={item} canEdit={canEdit} busy={saving} onSavePrice={savePrice} onRemove={remove} />
               ))}
-              {packages.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">No paint packages yet.</p>}
+              {packages.length === 0 && <p className="p-8 text-center text-sm text-[#6f746e]">{emptyMessage}</p>}
             </div>
           )}
         </Panel>
@@ -153,7 +194,7 @@ function PaintPackagesPage({ embedded = false, catalog = "paint" }: { embedded?:
     </>
   );
   if (embedded) return body;
-  return <AppShell title="Paint packages" eyebrow="Buttons on paint-package jobs">{body}</AppShell>;
+  return <AppShell title={title} eyebrow={eyebrow}>{body}</AppShell>;
 }
 
 function PackageRow({

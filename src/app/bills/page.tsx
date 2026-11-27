@@ -6,7 +6,7 @@ import { ArrowRight, ClipboardPlus, Hammer, Percent, Search, Wrench, X, Zap } fr
 import { AppShell } from "@/components/app-shell";
 import { ErrorMessage, PageState, Panel, buttonClass, inputClass } from "@/components/ui";
 import { api, currentFeatures, formatDate, money } from "@/lib/api";
-import { allowsServiceJobs, usesLaborCatalog, usesServiceAddonWorkspace, usesStoreCounter } from "@/lib/business-profiles";
+import { allowsServiceJobs, jobSubjectLine, usesLaborCatalog, usesServiceAddonWorkspace, usesStoreCounter } from "@/lib/business-profiles";
 import { useBusinessProfile } from "@/lib/use-business-profile";
 import { billListStatus, billStatusClass, billStatusLabel, isOweInUrgent } from "@/lib/bill-stamp";
 import { BillingBranchBanner } from "@/components/branch-chip";
@@ -41,7 +41,7 @@ type Bill = {
   owe_in_due_date?: string | null;
   notes?: string | null;
   customer: { name: string; phone: string } | null;
-  vehicle: { number_plate: string; make?: string; model?: string } | null;
+  vehicle: { number_plate: string; make?: string; model?: string; asset_kind?: string | null; appliance_type?: string | null } | null;
 };
 
 function billJobKindClass(bill: Bill, type: string): string {
@@ -53,7 +53,7 @@ function billJobKindClass(bill: Bill, type: string): string {
 }
 
 function billJobKindLabel(bill: Bill, type: string, t: ReturnType<typeof useT>): string | null {
-  if (!(type === "garage" || type === "paint" || usesStoreCounter(type))) return null;
+  if (!(type === "garage" || type === "paint" || type === "ac_service" || usesStoreCounter(type))) return null;
   if (usesStoreCounter(type)) {
     return bill.bill_number.startsWith("QCK-") ? t("bills.quick") : t("bills.sale");
   }
@@ -73,6 +73,7 @@ export default function BillsPage() {
   const [closedKind, setClosedKind] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [subject, setSubject] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [quickOpen, setQuickOpen] = useState(false);
@@ -103,6 +104,7 @@ export default function BillsPage() {
     if (status === "closed" && closedKind) params.set("closed_kind", closedKind);
     if (dateFrom) params.set("date_from", dateFrom);
     if (dateTo) params.set("date_to", dateTo);
+    if (profile.type === "ac_service" && subject) params.set("subject", subject);
 
     api<BillPage>(`/bills?${params}`)
       .then((result) => {
@@ -112,7 +114,7 @@ export default function BillsPage() {
       })
       .catch((caught) => setError(caught.message))
       .finally(() => setLoading(false));
-  }, [search, status, closedKind, dateFrom, dateTo, rangeInvalid, profile.type, t]);
+  }, [search, status, closedKind, dateFrom, dateTo, subject, rangeInvalid, profile.type, t]);
 
   useEffect(() => {
     const timer = setTimeout(() => loadBills(1), 250);
@@ -173,7 +175,7 @@ export default function BillsPage() {
                 href="/service-addons"
                 className="flex h-8 items-center gap-2 border border-[#c9c5b9] bg-white px-3 text-[11px] font-semibold hover:border-[#167c73]"
               >
-                <Wrench size={14} /><span className="hidden sm:inline">{profile.type === "paint" ? t("bills.paint_packages") : t("bills.service_addons")}</span>
+                <Wrench size={14} /><span className="hidden sm:inline">{profile.type === "paint" ? t("bills.paint_packages") : profile.type === "ac_service" ? t("bills.ac_services") : t("bills.service_addons")}</span>
               </Link>
               )}
               {(profile.type === "garage" || profile.type === "paint") && (
@@ -215,6 +217,16 @@ export default function BillsPage() {
             />
           </span>
         </label>
+        {profile.type === "ac_service" && (
+          <label className="block">
+            <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">{t("admit.appliance_type")}</span>
+            <select value={subject} onChange={(event) => setSubject(event.target.value)} className={`${inputClass} w-auto min-w-40`}>
+              <option value="">{t("bills.all_subjects")}</option>
+              <option value="vehicle">{t("bills.subject_vehicle")}</option>
+              <option value="appliance">{t("bills.subject_appliance")}</option>
+            </select>
+          </label>
+        )}
         <label className="block">
           <span className="mb-1 block text-[10px] font-bold uppercase text-[#6f746e]">{t("common.status")}</span>
           <select
@@ -293,7 +305,7 @@ export default function BillsPage() {
                     <div>
                       <p className="font-semibold">{bill.bill_number}</p>
                       <p className="text-sm text-[#6f746e]">{bill.customer?.name ?? t("common.walk_in")}</p>
-                      <p className="mt-1 text-xs text-[#6f746e]">{usesStoreCounter(profile.type) ? (bill.notes || "—") : (bill.vehicle?.number_plate ?? "—")} · {formatDate(bill.admission_date)}</p>
+                      <p className="mt-1 text-xs text-[#6f746e]">{usesStoreCounter(profile.type) ? (bill.notes || "—") : jobSubjectLine(bill.vehicle)} · {formatDate(bill.admission_date)}</p>
                     </div>
                     <span className={`px-2 py-1 text-[10px] font-bold uppercase ${billStatusClass(billListStatus(bill), bill.owe_in_due_date)}`}>{billStatusLabel(billListStatus(bill), t)}</span>
                       {chequeToday && <span className="mt-1 block px-2 py-1 text-center text-[10px] font-bold uppercase text-[#735a00]">{t("bills.cheque_today")}</span>}
@@ -343,7 +355,7 @@ export default function BillsPage() {
                       ) : "—"}
                     </td>
                     <td>{bill.customer?.name ?? t("common.walk_in")}</td>
-                    <td>{usesStoreCounter(profile.type) ? (bill.notes || "—") : (bill.vehicle?.number_plate ?? "—")}</td>
+                    <td>{usesStoreCounter(profile.type) ? (bill.notes || "—") : jobSubjectLine(bill.vehicle)}</td>
                     <td>
                       {(() => {
                         const listStatus = billListStatus(bill);

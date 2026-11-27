@@ -160,7 +160,7 @@ export default function CustomerDetailPage() {
                 <dd className="font-semibold">{customer.sms_opt_in === false ? "Opted out" : "Opted in"}</dd>
               </div>
               <div className="flex justify-between border-b border-[#e2ded4] pb-3">
-                <dt className="text-[#6f746e]">{usesVehicleJobs(profile.type) && profile.type !== "device_repair" ? "Vehicles" : "Records"}</dt>
+                <dt className="text-[#6f746e]">{profile.type === "ac_service" ? "Vehicles & appliances" : usesVehicleJobs(profile.type) && profile.type !== "device_repair" ? "Vehicles" : "Records"}</dt>
                 <dd className="font-semibold">{customer.vehicles_count}</dd>
               </div>
               <div className="flex justify-between">
